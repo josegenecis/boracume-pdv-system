@@ -59,10 +59,11 @@ const isPdvCounterOrder = (order: any) => {
   return order?.order_type === 'counter' && source === 'PDV';
 };
 
-const isTableServiceOrder = (order: any) => {
+const isHiddenTableServiceOrder = (order: any) => {
   const orderType = String(order?.order_type || '').toLowerCase();
-  const source = String(order?.variations?.source || order?.source || '').toLowerCase();
-  return orderType === 'dine_in' && (Boolean(order?.table_id) || source.includes('table'));
+  const flow = String(order?.variations?.table_order_flow || '').toLowerCase();
+  const showInManager = order?.variations?.show_in_manager;
+  return orderType === 'dine_in' && (flow === 'account_only' || showInManager === false);
 };
 
 const getAutoAcceptKey = (userId?: string) => `orders_auto_accept:${userId || 'local'}`;
@@ -173,7 +174,7 @@ const Orders = () => {
           (payload) => {
             console.log('🔔 Novo pedido em tempo real:', payload);
 
-            if (isPdvCounterOrder((payload as any)?.new) || isTableServiceOrder((payload as any)?.new)) return;
+            if (isPdvCounterOrder((payload as any)?.new) || isHiddenTableServiceOrder((payload as any)?.new)) return;
 
             // Add new order to the list
             const newOrder = enrichOrder((payload as any)?.new);
@@ -194,7 +195,7 @@ const Orders = () => {
           (payload) => {
             console.log('🔄 Pedido atualizado em tempo real:', payload);
 
-            if (isPdvCounterOrder((payload as any)?.new) || isTableServiceOrder((payload as any)?.new)) {
+            if (isPdvCounterOrder((payload as any)?.new) || isHiddenTableServiceOrder((payload as any)?.new)) {
               setOrders(prev => prev.filter(order => order.id !== (payload as any)?.new?.id));
               return;
             }
@@ -324,7 +325,7 @@ const Orders = () => {
 
       // Transform the data to ensure items is always an array
       const transformedData = (data || [])
-        .filter((order) => !isPdvCounterOrder(order) && !isTableServiceOrder(order))
+        .filter((order) => !isPdvCounterOrder(order) && !isHiddenTableServiceOrder(order))
         .map((order) => enrichOrder(order));
 
       setOrders(transformedData);

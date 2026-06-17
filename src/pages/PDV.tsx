@@ -35,6 +35,12 @@ import { parseBRL } from '@/lib/currency';
 import { prefetchSimpleVariations, type Variation } from '@/hooks/useSimpleVariations';
 import type { PizzaCategoryConfig } from '@/lib/pizza-pricing';
 import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
+import {
+  fetchTableOrderFlowSettings,
+  filterItemsForTableManagerOrder,
+  getTableManagerOrderStatus,
+  shouldCreateTableManagerOrder,
+} from '@/utils/tableOrderFlow';
 
 interface Product {
   id: string;
@@ -1619,9 +1625,13 @@ const PDV = () => {
         subtotal: item.price * item.quantity,
         options,
         variations: variationLines,
-        notes: item.notes || ''
+        notes: item.notes || '',
+        send_to_kds: item.send_to_kds === true
         };
       });
+
+      const tableFlow = await fetchTableOrderFlowSettings(user?.id);
+      const managerItems = filterItemsForTableManagerOrder(orderItems, tableFlow);
 
       const { data: existingAccount } = await supabase
         .from('table_accounts')
@@ -1676,9 +1686,49 @@ const PDV = () => {
         .update({ status: 'occupied' })
         .eq('id', targetTableId);
 
+      if (shouldCreateTableManagerOrder(tableFlow) && managerItems.length > 0) {
+        const orderTotal = managerItems.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
+        const orderStatus = getTableManagerOrderStatus(tableFlow);
+        const tableNumber = tables.find((table) => table.id === targetTableId)?.table_number;
+
+        const { error: managerOrderError } = await supabase
+          .from('orders')
+          .insert({
+            customer_name: tableNumber ? `Mesa ${tableNumber}` : 'Mesa',
+            customer_phone: null,
+            customer_address: null,
+            order_type: 'dine_in',
+            delivery_zone_id: null,
+            table_id: targetTableId,
+            items: managerItems,
+            total: orderTotal,
+            discount: 0,
+            delivery_fee: 0,
+            payment_method: 'pendente',
+            change_amount: null,
+            status: orderStatus.status,
+            acceptance_status: orderStatus.acceptance_status,
+            order_number: `MESA-${tableNumber || 'PDV'}-${Date.now().toString().slice(-5)}`,
+            user_id: user?.id,
+            estimated_time: '15-30 min',
+            waiter_id: null,
+            cash_register_session_id: cashSession?.id || null,
+            variations: {
+              source: 'PDV_TABLE',
+              table_order_flow: tableFlow.mode,
+              show_in_manager: tableFlow.showInManager,
+              auto_accept: tableFlow.autoAccept,
+            },
+          });
+
+        if (managerOrderError) throw managerOrderError;
+      }
+
       toast({
         title: "Itens adicionados à mesa!",
-        description: "Os produtos foram adicionados à conta da mesa.",
+        description: managerItems.length > 0
+          ? "Os produtos foram adicionados à mesa e enviados para preparo."
+          : "Os produtos ficaram apenas na conta da mesa.",
       });
 
       setMobileCartOpen(false);

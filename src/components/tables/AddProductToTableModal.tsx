@@ -8,8 +8,13 @@ import { Plus, Minus, PackagePlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from '@/components/pdv/ProductSelectionModal';
+import {
+  fetchTableOrderFlowSettings,
+  filterItemsForTableManagerOrder,
+  getTableManagerOrderStatus,
+  shouldCreateTableManagerOrder,
+} from '@/utils/tableOrderFlow';
 
 interface Product {
   id: string;
@@ -59,7 +64,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
   const [showProductModal, setShowProductModal] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
-  const { sendToKitchen } = useKitchenIntegration();
 
   useEffect(() => {
     if (isOpen) {
@@ -198,13 +202,13 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         subtotal: item.price * item.quantity,
         options: item.options || [],
         variations: item.variations || [],
-        notes: item.notes || ''
+        notes: item.notes || '',
+        send_to_kds: item.send_to_kds === true
       }));
 
-      const itemsForKitchen = orderItems.filter(item => {
-        const product = products.find(p => p.id === item.product_id);
-        return product?.send_to_kds === true;
-      });
+      const tableFlow = await fetchTableOrderFlowSettings(user.id);
+      const itemsForKitchen = filterItemsForTableManagerOrder(orderItems, tableFlow);
+      const canCreateKitchenOrder = shouldCreateTableManagerOrder(tableFlow) && itemsForKitchen.length > 0;
 
       if (existingAccount) {
         let currentItems = [];
@@ -233,19 +237,32 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
 
         if (updateError) throw updateError;
 
-        if (itemsForKitchen.length > 0) {
-          await sendToKitchen({
-            user_id: user.id,
-            order_number: `MESA-${table.table_number}-${Date.now().toString().slice(-5)}`,
+        if (canCreateKitchenOrder) {
+          const orderStatus = getTableManagerOrderStatus(tableFlow);
+          const orderTotal = itemsForKitchen.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
+          const { error: orderError } = await supabase
+            .from('orders')
+            .insert({
+              user_id: user.id,
+              order_number: `MESA-${table.table_number}-${Date.now().toString().slice(-5)}`,
+              customer_name: customerName.trim() || `Mesa ${table.table_number}`,
+              customer_phone: customerPhone.trim() || '',
+              items: itemsForKitchen,
+              total: orderTotal,
+              payment_method: 'pendente',
+              order_type: 'dine_in',
+              table_id: table.id,
+              status: orderStatus.status,
+              acceptance_status: orderStatus.acceptance_status,
+              variations: {
+                source: 'TABLES_MODAL',
+                table_order_flow: tableFlow.mode,
+                show_in_manager: tableFlow.showInManager,
+                auto_accept: tableFlow.autoAccept,
+              },
+            });
 
-            customer_name: customerName.trim() || `Mesa ${table.table_number}`,
-
-            customer_phone: customerPhone.trim() || '',
-            items: itemsForKitchen,
-            total: getTotalValue(),
-            payment_method: 'pendente',
-            order_type: 'dine_in'
-          });
+          if (orderError) throw orderError;
         }
 
         toast({
@@ -274,20 +291,33 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
           .update({ status: 'occupied' })
           .eq('id', table.id);
 
-        if (itemsForKitchen.length > 0) {
+        if (canCreateKitchenOrder) {
           const orderNumber = `MESA-${table.table_number}-${Date.now().toString().slice(-5)}`;
-          await sendToKitchen({
-            user_id: user.id,
-            order_number: orderNumber,
+          const orderStatus = getTableManagerOrderStatus(tableFlow);
+          const orderTotal = itemsForKitchen.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
+          const { error: orderError } = await supabase
+            .from('orders')
+            .insert({
+              user_id: user.id,
+              order_number: orderNumber,
+              customer_name: customerName.trim() || `Mesa ${table.table_number}`,
+              customer_phone: customerPhone || '',
+              items: itemsForKitchen,
+              total: orderTotal,
+              payment_method: 'pendente',
+              order_type: 'dine_in',
+              table_id: table.id,
+              status: orderStatus.status,
+              acceptance_status: orderStatus.acceptance_status,
+              variations: {
+                source: 'TABLES_MODAL',
+                table_order_flow: tableFlow.mode,
+                show_in_manager: tableFlow.showInManager,
+                auto_accept: tableFlow.autoAccept,
+              },
+            });
 
-            customer_name: customerName.trim() || `Mesa ${table.table_number}`,
-
-            customer_phone: customerPhone || '',
-            items: itemsForKitchen,
-            total: getTotalValue(),
-            payment_method: 'pendente',
-            order_type: 'dine_in'
-          });
+          if (orderError) throw orderError;
         }
 
         toast({
