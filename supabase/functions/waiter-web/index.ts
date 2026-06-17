@@ -5,6 +5,7 @@ const EPSILON = 0.009
 type KitchenStatus = 'idle' | 'sent' | 'preparing' | 'ready' | 'delivered'
 type AccountStatus = 'open' | 'preparing' | 'ready' | 'check_requested' | 'partially_paid' | 'paid'
 type TableStatus = 'free' | 'occupied' | 'preparing' | 'ready' | 'check_requested' | 'partially_paid'
+type TableOrderMode = 'marked_items' | 'all_items' | 'account_only'
 
 const minutesSince = (value: string) => Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000))
 const normalizeAmount = (value: unknown) => Number(value || 0)
@@ -25,6 +26,25 @@ const calculateDistanceMeters = (fromLat?: number | null, fromLng?: number | nul
   const endLat = toRadians(Number(toLat))
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(startLat) * Math.cos(endLat) * Math.sin(dLng / 2) ** 2
   return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+async function getTableOrderFlowSettings(supabase: any, restaurantId: string) {
+  const { data, error } = await supabase
+    .from('table_order_flow_settings')
+    .select('table_order_mode, show_table_orders_in_manager, auto_accept_table_orders')
+    .eq('user_id', restaurantId)
+    .maybeSingle()
+
+  if (error && error.code !== 'PGRST116') {
+    console.warn('[waiter-web] table_order_flow_settings unavailable:', error?.message || error)
+  }
+
+  const mode = String(data?.table_order_mode || 'marked_items') as TableOrderMode
+  return {
+    mode: ['marked_items', 'all_items', 'account_only'].includes(mode) ? mode : 'marked_items',
+    showInManager: data?.show_table_orders_in_manager !== false,
+    autoAccept: data?.auto_accept_table_orders === true,
+  }
 }
 
 const extractDataUrlPayload = (dataUrl: string) => {
@@ -890,10 +910,16 @@ async function sendAccountDraftItemsToKitchen(
 
   if (productRowsError) throw productRowsError
 
+  const tableFlow = await getTableOrderFlowSettings(supabase, waiterSession.profile.restaurantId)
   const kdsProductIds = new Set(
     (productRows ?? []).filter((row: any) => row.send_to_kds === true).map((row: any) => String(row.id)),
   )
-  const kitchenRows = draftRows.data.filter((row: any) => kdsProductIds.has(String(row.product_id)))
+  const shouldCreateManagerOrder = tableFlow.mode !== 'account_only' && tableFlow.showInManager
+  const kitchenRows = !shouldCreateManagerOrder
+    ? []
+    : tableFlow.mode === 'all_items'
+      ? draftRows.data
+      : draftRows.data.filter((row: any) => kdsProductIds.has(String(row.product_id)))
 
   const optionsMap = buildOptionsMap(optionRows.data ?? [])
   const orderItems = kitchenRows.map((row: any) => {
@@ -928,10 +954,17 @@ async function sendAccountDraftItemsToKitchen(
         total,
         order_type: 'dine_in',
         payment_method: 'pendente',
-        status: 'pending',
+        status: tableFlow.autoAccept ? 'preparing' : 'pending',
+        acceptance_status: tableFlow.autoAccept ? 'accepted' : 'pending_acceptance',
         session_id: sessionId,
         account_id: accountId,
         waiter_id: waiterSession.profile.id,
+        variations: {
+          source: 'WAITER_WEB_TABLE',
+          table_order_flow: tableFlow.mode,
+          show_in_manager: tableFlow.showInManager,
+          auto_accept: tableFlow.autoAccept,
+        },
       })
       .select('id')
       .single()
@@ -964,6 +997,7 @@ async function sendAccountDraftItemsToKitchen(
     accountName: String(accountRow.name || ''),
     itemCount: draftRows.data.length,
     kitchenItemCount: kitchenRows.length,
+    tableOrderMode: tableFlow.mode,
   }
 }
 

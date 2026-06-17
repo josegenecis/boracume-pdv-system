@@ -21,6 +21,7 @@ import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings
 import PixSetup from '@/pages/PixSetup';
 import HardwareSettings from '@/components/settings/HardwareSettings';
 import SupportSettings from '@/components/settings/SupportSettings';
+import TableOrderFlowSettings from '@/components/settings/TableOrderFlowSettings';
 import Garcons from '@/pages/Garcons';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { supabase } from '@/integrations/supabase/client';
@@ -49,6 +50,7 @@ const Configuracoes: React.FC = () => {
     fiscal: 'fiscal',
     hardware: 'hardware',
     ifood: 'ifood',
+    tables: 'tables',
     users: 'team',
     notifications: 'settings',
     marketing: 'marketing',
@@ -86,6 +88,7 @@ const Configuracoes: React.FC = () => {
       'whatsapp-api',
       'fiscal',
       'hardware',
+      'tables',
       'ifood',
       'users',
       'notifications',
@@ -146,6 +149,7 @@ const Configuracoes: React.FC = () => {
               <option value="whatsapp">WhatsApp Mensagens</option>
               {subscription?.plan_id === 2 && <option value="whatsapp-api">WhatsApp Global (Admin)</option>}
               <option value="hardware">Impressoras e Balanças</option>
+              <option value="tables">Mesas e Comandas</option>
               <option value="fiscal">Fiscal / NFC-e</option>
               <option value="ifood">iFood (em breve)</option>
               <option value="users">Usuários e Equipe</option>
@@ -167,6 +171,7 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="whatsapp">{tabLabel('WhatsApp Mensagens', 'whatsapp')}</TabsTrigger>
           {subscription?.plan_id === 2 && <TabsTrigger value="whatsapp-api">WhatsApp Global (Admin)</TabsTrigger>}
           <TabsTrigger value="hardware">{tabLabel('Impressoras e Balanças', 'hardware')}</TabsTrigger>
+          <TabsTrigger value="tables">{tabLabel('Mesas e Comandas', 'tables')}</TabsTrigger>
           <TabsTrigger value="fiscal">{tabLabel('Fiscal / NFC-e', 'fiscal')}</TabsTrigger>
           <TabsTrigger value="ifood">
             {tabLabel(<IfoodLogo className="h-4 w-auto" />, 'ifood')}
@@ -271,6 +276,10 @@ const Configuracoes: React.FC = () => {
 
         <TabsContent value="hardware">
           <HardwareSettings />
+        </TabsContent>
+
+        <TabsContent value="tables">
+          <TableOrderFlowSettings />
         </TabsContent>
         
         <TabsContent value="fiscal">
