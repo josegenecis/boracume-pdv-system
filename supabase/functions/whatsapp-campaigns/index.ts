@@ -58,11 +58,23 @@ function buildPhoneCandidates(value: string | null | undefined) {
 }
 
 function parseManualPhones(value: unknown) {
-  if (Array.isArray(value)) return Array.from(new Set(value.map((item) => normalizePhone(String(item))).filter(Boolean)));
-  return Array.from(new Set(String(value || "")
-    .split(/[\n,; ]+/)
-    .map((item) => normalizePhone(item))
-    .filter(Boolean)));
+  const rawPhones = Array.isArray(value)
+    ? value.map((item) => normalizePhone(String(item))).filter(Boolean)
+    : String(value || "")
+      .split(/[\n,; ]+/)
+      .map((item) => normalizePhone(item))
+      .filter(Boolean);
+
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const phone of rawPhones) {
+    const candidates = buildPhoneCandidates(phone);
+    if (candidates.some((candidate) => seen.has(candidate))) continue;
+    candidates.forEach((candidate) => seen.add(candidate));
+    unique.push(phone);
+  }
+
+  return unique;
 }
 
 function parseAudienceFilters(body: any = {}): AudienceFilters {
@@ -304,6 +316,27 @@ function mergeAudienceByPhone(target: Map<string, any>, item: any) {
   for (const candidate of candidates) target.set(candidate, next);
 }
 
+function dedupeAudienceByPhone(audience: any[]) {
+  const sorted = [...audience].sort((a: any, b: any) => {
+    const dateA = new Date(a?.updated_at || a?.created_at || 0).getTime();
+    const dateB = new Date(b?.updated_at || b?.created_at || 0).getTime();
+    if (Boolean(b?.id) !== Boolean(a?.id)) return b?.id ? 1 : -1;
+    return dateB - dateA;
+  });
+
+  const seen = new Set<string>();
+  const unique: any[] = [];
+  for (const item of sorted) {
+    const candidates = buildPhoneCandidates(item?.customer_phone);
+    if (candidates.length === 0) continue;
+    if (candidates.some((candidate) => seen.has(candidate))) continue;
+    candidates.forEach((candidate) => seen.add(candidate));
+    unique.push({ ...item, customer_phone: normalizePhone(item.customer_phone) });
+  }
+
+  return unique;
+}
+
 async function loadEligibleAudience(serviceClient: any, userId: string, filters: AudienceFilters = parseAudienceFilters()) {
   const cutoff = new Date(Date.now() - filters.activeWindowDays * 86400000).toISOString();
   const shouldLoadFullKnownBase = filters.audienceType === "manual" || filters.audienceType === "inactive_range";
@@ -408,7 +441,7 @@ async function loadEligibleAudience(serviceClient: any, userId: string, filters:
     });
   }
 
-  let eligible = Array.from(new Set(Array.from(audienceByPhone.values())))
+  let eligible = dedupeAudienceByPhone(Array.from(new Set(Array.from(audienceByPhone.values()))))
     .filter((item: any) => item.customer_phone)
     .filter((item: any) => !buildPhoneCandidates(item.customer_phone).some((candidate) => optoutSet.has(normalizePhone(candidate))));
 
@@ -434,6 +467,7 @@ async function loadEligibleAudience(serviceClient: any, userId: string, filters:
 
   eligible = await attachCustomerNames(serviceClient, userId, eligible);
   eligible = await attachLastOrder(serviceClient, userId, eligible);
+  eligible = dedupeAudienceByPhone(eligible);
 
   return eligible.slice(0, MAX_CREATE_TARGETS);
 }
@@ -500,7 +534,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     return { error: "Informe o intervalo de dias sem pedido." };
   }
 
-  const audience = await loadEligibleAudience(serviceClient, userId, audienceFilters);
+  const audience = dedupeAudienceByPhone(await loadEligibleAudience(serviceClient, userId, audienceFilters));
   if (audience.length === 0) return { error: "Nenhum cliente elegível encontrado para este funil. Tente outro período ou informe um WhatsApp conhecido na lista manual." };
   if (immediateManualTest && audience.length > 5) {
     return { error: "O teste imediato é permitido somente para até 5 WhatsApps na lista manual." };
