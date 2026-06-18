@@ -114,6 +114,7 @@ export default function WhatsAppCampaignManager() {
   const [pendingPromoImageFile, setPendingPromoImageFile] = useState<File | null>(null);
   const [audienceType, setAudienceType] = useState<'active' | 'manual' | 'inactive_range'>('active');
   const [manualPhones, setManualPhones] = useState('');
+  const [activeWindowDays, setActiveWindowDays] = useState(30);
   const [inactiveMinDays, setInactiveMinDays] = useState(15);
   const [inactiveMaxDays, setInactiveMaxDays] = useState(0);
   const [immediateManualTest, setImmediateManualTest] = useState(true);
@@ -135,7 +136,7 @@ export default function WhatsAppCampaignManager() {
     }, 450);
 
     return () => window.clearTimeout(timer);
-  }, [user?.id, audienceType, manualPhones, inactiveMinDays, inactiveMaxDays]);
+  }, [user?.id, audienceType, manualPhones, activeWindowDays, inactiveMinDays, inactiveMaxDays]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -206,6 +207,7 @@ export default function WhatsAppCampaignManager() {
     action,
     audienceType,
     manualPhones,
+    activeWindowDays,
     inactiveMinDays: audienceType === 'inactive_range' ? inactiveMinDays : null,
     inactiveMaxDays: audienceType === 'inactive_range' && inactiveMaxDays > 0 ? inactiveMaxDays : null,
     immediateManualTest: audienceType === 'manual' ? immediateManualTest : false,
@@ -261,7 +263,7 @@ export default function WhatsAppCampaignManager() {
 
       toast({
         title: 'Campanha criada',
-        description: `${(data as any)?.targetCount || 0} conversas ativas entraram na fila segura.`,
+        description: `${(data as any)?.targetCount || 0} cliente(s) conhecido(s) entraram na fila segura.`,
       });
       setTitle('');
       setRiskAccepted(false);
@@ -444,7 +446,7 @@ export default function WhatsAppCampaignManager() {
           </div>
           <h2 className="mt-3 text-2xl font-black text-emerald-950 sm:text-3xl">Ofertas com imagem, funil e controle</h2>
           <p className="mt-1 max-w-3xl text-sm text-emerald-900/75">
-            Crie campanhas para clientes com conversa ativa, teste em números específicos e acompanhe o envio sem disparos frios.
+            Crie campanhas para clientes conhecidos, teste em números específicos e acompanhe o envio sem disparos frios.
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center">
@@ -467,7 +469,7 @@ export default function WhatsAppCampaignManager() {
         <AlertTriangle className="h-4 w-4" />
         <AlertTitle>Envio com risco controlado, não disparo em massa</AlertTitle>
         <AlertDescription>
-          O WhatsApp pode bloquear ou limitar o número se perceber comportamento de spam. Esta ferramenta só envia para conversas ativas já existentes, aplica intervalo aleatório e evita reenviar oferta para o mesmo telefone por 7 dias.
+          O WhatsApp pode bloquear ou limitar o número se perceber comportamento de spam. Esta ferramenta só envia para clientes já conhecidos pelo restaurante, aplica intervalo aleatório e evita reenviar oferta para o mesmo telefone por 7 dias.
         </AlertDescription>
       </Alert>
 
@@ -517,7 +519,7 @@ export default function WhatsAppCampaignManager() {
                     <SelectContent>
                       <SelectItem value="manual">Lista manual para teste</SelectItem>
                       <SelectItem value="inactive_range">Sem pedido por dias</SelectItem>
-                      <SelectItem value="active">Todas conversas elegíveis</SelectItem>
+                      <SelectItem value="active">Clientes recentes</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -533,7 +535,7 @@ export default function WhatsAppCampaignManager() {
                       placeholder="Um por linha, ou separado por vírgula. Ex.: 85999990000"
                     />
                     <div className="text-xs text-muted-foreground">
-                      O sistema só mantém números que já têm conversa ativa com o restaurante. A busca aceita com/sem 55 e com/sem nono dígito.
+                      O sistema só mantém números já conhecidos por conversa, pedido ou cadastro. A busca aceita com/sem 55 e com/sem nono dígito.
                     </div>
                     <div className="rounded-md border border-lime-200 bg-white p-3 shadow-sm">
                       <div className="flex items-start gap-3">
@@ -550,33 +552,68 @@ export default function WhatsAppCampaignManager() {
                     </div>
                   </div>
                 ) : audienceType === 'inactive_range' ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="wa-inactive-min">Sem pedir há pelo menos</Label>
-                      <Input
-                        id="wa-inactive-min"
-                        type="number"
-                        min={0}
-                        value={inactiveMinDays}
-                        onChange={(event) => setInactiveMinDays(Number(event.target.value || 0))}
-                      />
-                      <div className="text-xs text-muted-foreground">dias</div>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {[15, 30, 60, 90].map((days) => (
+                        <Button
+                          key={days}
+                          type="button"
+                          variant={inactiveMinDays === days && inactiveMaxDays === 0 ? 'default' : 'outline'}
+                          size="sm"
+                          className={inactiveMinDays === days && inactiveMaxDays === 0 ? 'bg-emerald-700 hover:bg-emerald-800' : ''}
+                          onClick={() => {
+                            setInactiveMinDays(days);
+                            setInactiveMaxDays(0);
+                          }}
+                        >
+                          +{days} dias sem pedir
+                        </Button>
+                      ))}
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="wa-inactive-max">E no máximo</Label>
-                      <Input
-                        id="wa-inactive-max"
-                        type="number"
-                        min={0}
-                        value={inactiveMaxDays}
-                        onChange={(event) => setInactiveMaxDays(Number(event.target.value || 0))}
-                      />
-                      <div className="text-xs text-muted-foreground">0 deixa sem limite máximo</div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="wa-inactive-min">Sem pedir há pelo menos</Label>
+                        <Input
+                          id="wa-inactive-min"
+                          type="number"
+                          min={0}
+                          value={inactiveMinDays}
+                          onChange={(event) => setInactiveMinDays(Number(event.target.value || 0))}
+                        />
+                        <div className="text-xs text-muted-foreground">dias</div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="wa-inactive-max">E no máximo</Label>
+                        <Input
+                          id="wa-inactive-max"
+                          type="number"
+                          min={0}
+                          value={inactiveMaxDays}
+                          onChange={(event) => setInactiveMaxDays(Number(event.target.value || 0))}
+                        />
+                        <div className="text-xs text-muted-foreground">0 deixa sem limite máximo</div>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-md border border-emerald-100 bg-white p-3 text-sm text-muted-foreground shadow-sm">
-                    Usa todas as conversas elegíveis: conversa ativa, cliente respondeu antes, sem opt-out e sem oferta nos últimos 7 dias.
+                  <div className="space-y-3 rounded-md border border-emerald-100 bg-white p-3 text-sm text-muted-foreground shadow-sm">
+                    <div className="flex flex-wrap gap-2">
+                      {[7, 15, 30, 60].map((days) => (
+                        <Button
+                          key={days}
+                          type="button"
+                          variant={activeWindowDays === days ? 'default' : 'outline'}
+                          size="sm"
+                          className={activeWindowDays === days ? 'bg-emerald-700 hover:bg-emerald-800' : ''}
+                          onClick={() => setActiveWindowDays(days)}
+                        >
+                          Últimos {days} dias
+                        </Button>
+                      ))}
+                    </div>
+                    <div>
+                      Usa clientes conhecidos nos últimos {activeWindowDays} dias por conversa, pedido ou cadastro, sem opt-out e sem oferta nos últimos 7 dias.
+                    </div>
                   </div>
                 )}
               </div>
@@ -721,7 +758,7 @@ export default function WhatsAppCampaignManager() {
                   className="mt-0.5"
                 />
                 <Label htmlFor="wa-risk" className="cursor-pointer leading-relaxed">
-                  Confirmo que entendi o risco de bloqueio do número e que as ofertas serão enviadas somente para clientes com conversa ativa no WhatsApp.
+                  Confirmo que entendi o risco de bloqueio do número e que as ofertas serão enviadas somente para clientes já conhecidos pelo restaurante.
                 </Label>
               </div>
             </div>
@@ -753,14 +790,14 @@ export default function WhatsAppCampaignManager() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border bg-emerald-50 p-4">
-              <div className="text-sm text-emerald-800">Conversas ativas elegíveis</div>
+              <div className="text-sm text-emerald-800">Clientes elegíveis</div>
               <div className="mt-1 text-4xl font-bold text-emerald-950">{audience?.count ?? '-'}</div>
               <div className="mt-2 text-xs text-emerald-800">
-                Com mensagem recebida do cliente, atividade nos últimos {audience?.activeWindowDays || 30} dias, sem opt-out e sem oferta nos últimos {audience?.cooldownDays || 7} dias.
+                Conhecidos por conversa, pedido ou cadastro nos últimos {audience?.activeWindowDays || 30} dias, sem opt-out e sem oferta nos últimos {audience?.cooldownDays || 7} dias.
               </div>
               {audience?.manual && (
                 <div className="mt-3 rounded-md bg-white/70 p-2 text-xs text-emerald-900">
-                  Lista manual: {audience.manual.matched} liberado(s) de {audience.manual.requested}. {audience.manual.blocked} fora por não ter conversa ativa/elegível.
+                  Lista manual: {audience.manual.matched} liberado(s) de {audience.manual.requested}. {audience.manual.blocked} fora por não ser cliente conhecido/elegível.
                 </div>
               )}
             </div>
@@ -791,7 +828,7 @@ export default function WhatsAppCampaignManager() {
               </div>
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                Lista fria/importada não é aceita nesta versão.
+                Lista fria/importada continua bloqueada nesta versão.
               </div>
             </div>
           </CardContent>

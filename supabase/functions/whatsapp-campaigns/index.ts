@@ -18,6 +18,7 @@ type AudienceFilters = {
   manualPhones: string[];
   inactiveMinDays: number | null;
   inactiveMaxDays: number | null;
+  activeWindowDays: number;
   allowRecentManualResend: boolean;
 };
 
@@ -70,11 +71,14 @@ function parseAudienceFilters(body: any = {}): AudienceFilters {
   const maxRaw = body.inactiveMaxDays ?? body.inactive_max_days;
   const min = minRaw === "" || minRaw === null || minRaw === undefined ? null : Math.max(0, Number(minRaw));
   const max = maxRaw === "" || maxRaw === null || maxRaw === undefined ? null : Math.max(0, Number(maxRaw));
+  const requestedWindow = Number(body.activeWindowDays ?? body.active_window_days ?? ACTIVE_WINDOW_DAYS);
+  const activeWindowDays = [7, 15, 30, 60].includes(requestedWindow) ? requestedWindow : ACTIVE_WINDOW_DAYS;
   return {
     audienceType: ["active", "manual", "inactive_range"].includes(audienceType) ? audienceType : "active",
     manualPhones: parseManualPhones(body.manualPhones ?? body.manual_phones),
     inactiveMinDays: Number.isFinite(min as number) ? min : null,
     inactiveMaxDays: Number.isFinite(max as number) ? max : null,
+    activeWindowDays,
     allowRecentManualResend: Boolean(body.allowRecentManualResend || body.immediateManualTest || body.immediate_manual_test),
   };
 }
@@ -88,11 +92,11 @@ function isOptOutText(value: string) {
   return /^(sair|parar|cancelar|cancelar ofertas|remover|nao quero|nao receber|sem ofertas)\b/.test(text);
 }
 
-function isConversationActive(row: any) {
+function isConversationActive(row: any, windowDays = ACTIVE_WINDOW_DAYS) {
   const status = String(row?.status || "").trim().toLowerCase();
   if (["closed", "archived", "blocked", "opted_out", "cancelled"].includes(status)) return false;
   const updatedAt = new Date(row?.updated_at || row?.created_at || 0).getTime();
-  return Number.isFinite(updatedAt) && updatedAt >= Date.now() - ACTIVE_WINDOW_DAYS * 86400000;
+  return Number.isFinite(updatedAt) && updatedAt >= Date.now() - windowDays * 86400000;
 }
 
 function fillTemplate(template: string, payload: { customerName?: string; menuLink?: string; productName?: string; productPrice?: string }) {
@@ -276,28 +280,56 @@ async function attachCustomerNames(serviceClient: any, userId: string, audience:
   });
 }
 
+function mergeAudienceByPhone(target: Map<string, any>, item: any) {
+  const phone = normalizePhone(item?.customer_phone || item?.phone);
+  if (!phone) return;
+
+  const candidates = buildPhoneCandidates(phone);
+  const key = candidates.find((candidate) => target.has(candidate)) || phone;
+  const current = target.get(key);
+  const incomingDate = new Date(item?.updated_at || item?.created_at || item?.lastActivity || 0).getTime();
+  const currentDate = current ? new Date(current?.updated_at || current?.created_at || current?.lastActivity || 0).getTime() : 0;
+  const next = {
+    ...(current || {}),
+    ...item,
+    id: current?.id || item?.id || null,
+    customer_phone: phone,
+    customer_name: cleanCustomerName(current?.customer_name) || cleanCustomerName(item?.customer_name || item?.name) || "",
+    updated_at: incomingDate >= currentDate
+      ? (item?.updated_at || item?.created_at || item?.lastActivity || current?.updated_at)
+      : current?.updated_at,
+  };
+
+  target.set(key, next);
+  for (const candidate of candidates) target.set(candidate, next);
+}
+
 async function loadEligibleAudience(serviceClient: any, userId: string, filters: AudienceFilters = parseAudienceFilters()) {
-  const cutoff = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 86400000).toISOString();
+  const cutoff = new Date(Date.now() - filters.activeWindowDays * 86400000).toISOString();
+  const shouldLoadFullKnownBase = filters.audienceType === "manual" || filters.audienceType === "inactive_range";
+  const audienceByPhone = new Map<string, any>();
+
   const { data: conversations, error } = await serviceClient
     .from("whatsapp_conversations")
     .select("id, customer_phone, customer_name, status, updated_at, created_at")
     .eq("user_id", userId)
-    .gte("updated_at", cutoff)
+    .gte("updated_at", shouldLoadFullKnownBase ? new Date(Date.now() - 365 * 86400000).toISOString() : cutoff)
     .order("updated_at", { ascending: false })
-    .limit(500);
+    .limit(1500);
 
   if (error) throw new Error(error.message);
 
-  const active = (conversations || []).filter(isConversationActive);
+  const active = (conversations || []).filter((item: any) => shouldLoadFullKnownBase || isConversationActive(item, filters.activeWindowDays));
   const conversationIds = active.map((item: any) => item.id).filter(Boolean);
-  if (conversationIds.length === 0) return [];
 
   const [{ data: customerMessages }, { data: optouts }, { data: recentSent }] = await Promise.all([
-    serviceClient
-      .from("whatsapp_messages")
-      .select("conversation_id")
-      .in("conversation_id", conversationIds)
-      .eq("sender", "customer"),
+    conversationIds.length > 0
+      ? serviceClient
+        .from("whatsapp_messages")
+        .select("conversation_id")
+        .in("conversation_id", conversationIds)
+        .eq("sender", "customer")
+      : Promise.resolve({ data: [] }),
     serviceClient
       .from("whatsapp_marketing_optouts")
       .select("customer_phone")
@@ -314,14 +346,75 @@ async function loadEligibleAudience(serviceClient: any, userId: string, filters:
   const optoutSet = new Set((optouts || []).map((item: any) => normalizePhone(item.customer_phone)));
   const recentSet = new Set((recentSent || []).map((item: any) => normalizePhone(item.customer_phone)));
 
-  let eligible = active
-    .map((item: any) => ({ ...item, customer_phone: normalizePhone(item.customer_phone) }))
-    .filter((item: any) => item.customer_phone && inboundSet.has(item.id))
-    .filter((item: any) => !optoutSet.has(item.customer_phone));
+  for (const item of active || []) {
+    if (!shouldLoadFullKnownBase && !inboundSet.has(item.id)) continue;
+    mergeAudienceByPhone(audienceByPhone, {
+      id: item.id,
+      customer_phone: item.customer_phone,
+      customer_name: item.customer_name,
+      updated_at: item.updated_at,
+      created_at: item.created_at,
+      source: "conversation",
+    });
+  }
+
+  const ordersQuery = serviceClient
+    .from("orders")
+    .select("customer_phone, customer_name, created_at, updated_at, status")
+    .eq("user_id", userId)
+    .not("customer_phone", "is", null)
+    .not("status", "eq", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(5000);
+
+  const customersQuery = serviceClient
+    .from("customers")
+    .select("name, phone, updated_at, created_at")
+    .eq("user_id", userId)
+    .not("phone", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(5000);
+
+  if (!shouldLoadFullKnownBase) {
+    ordersQuery.gte("created_at", cutoff);
+    customersQuery.gte("updated_at", cutoff);
+  }
+
+  const [{ data: orders, error: ordersError }, { data: customers, error: customersError }] = await Promise.all([
+    ordersQuery,
+    customersQuery,
+  ]);
+
+  if (ordersError) console.warn("[whatsapp-campaigns] orders audience warning:", ordersError.message);
+  if (customersError) console.warn("[whatsapp-campaigns] customers audience warning:", customersError.message);
+
+  for (const order of orders || []) {
+    mergeAudienceByPhone(audienceByPhone, {
+      customer_phone: order.customer_phone,
+      customer_name: order.customer_name,
+      updated_at: order.updated_at || order.created_at,
+      created_at: order.created_at,
+      source: "order",
+    });
+  }
+
+  for (const customer of customers || []) {
+    mergeAudienceByPhone(audienceByPhone, {
+      customer_phone: customer.phone,
+      customer_name: customer.name,
+      updated_at: customer.updated_at || customer.created_at,
+      created_at: customer.created_at,
+      source: "customer",
+    });
+  }
+
+  let eligible = Array.from(new Set(Array.from(audienceByPhone.values())))
+    .filter((item: any) => item.customer_phone)
+    .filter((item: any) => !buildPhoneCandidates(item.customer_phone).some((candidate) => optoutSet.has(normalizePhone(candidate))));
 
   const bypassRecentCooldown = filters.audienceType === "manual" && filters.allowRecentManualResend;
   if (!bypassRecentCooldown) {
-    eligible = eligible.filter((item: any) => !recentSet.has(item.customer_phone));
+    eligible = eligible.filter((item: any) => !buildPhoneCandidates(item.customer_phone).some((candidate) => recentSet.has(normalizePhone(candidate))));
   }
 
   if (filters.audienceType === "manual") {
@@ -340,6 +433,7 @@ async function loadEligibleAudience(serviceClient: any, userId: string, filters:
   }
 
   eligible = await attachCustomerNames(serviceClient, userId, eligible);
+  eligible = await attachLastOrder(serviceClient, userId, eligible);
 
   return eligible.slice(0, MAX_CREATE_TARGETS);
 }
@@ -352,7 +446,7 @@ async function previewAudience(serviceClient: any, userId: string, filters: Audi
     : null;
   return {
     count: audience.length,
-    activeWindowDays: ACTIVE_WINDOW_DAYS,
+    activeWindowDays: filters.activeWindowDays,
     cooldownDays: MARKETING_COOLDOWN_DAYS,
     filters,
     manual: filters.audienceType === "manual"
@@ -407,7 +501,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
   }
 
   const audience = await loadEligibleAudience(serviceClient, userId, audienceFilters);
-  if (audience.length === 0) return { error: "Nenhuma conversa ativa elegível encontrada." };
+  if (audience.length === 0) return { error: "Nenhum cliente elegível encontrado para este funil. Tente outro período ou informe um WhatsApp conhecido na lista manual." };
   if (immediateManualTest && audience.length > 5) {
     return { error: "O teste imediato é permitido somente para até 5 WhatsApps na lista manual." };
   }
@@ -437,7 +531,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
       promo_image_url: promoImageUrl,
       metadata: {
         safety: {
-          activeWindowDays: ACTIVE_WINDOW_DAYS,
+          activeWindowDays: audienceFilters.activeWindowDays,
           cooldownDays: MARKETING_COOLDOWN_DAYS,
           maxCreateTargets: MAX_CREATE_TARGETS,
         },
@@ -470,7 +564,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     return {
       campaign_id: campaign.id,
       user_id: userId,
-      conversation_id: item.id,
+      conversation_id: item.id || null,
       customer_phone: item.customer_phone,
       customer_name: customerName || null,
       message_text: personalized,
@@ -491,7 +585,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     campaign_id: campaign.id,
     event_type: "campaign_created",
     severity: "warning",
-    description: "Campanha criada apenas com conversas ativas, cooldown e opt-out obrigatório.",
+    description: "Campanha criada com clientes conhecidos, cooldown e opt-out obrigatório.",
     metadata: { targetCount: audience.length, minDelaySeconds, maxDelaySeconds, dailyLimit, audienceFilters, immediateManualTest },
   });
 
@@ -732,19 +826,21 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
       continue;
     }
 
-    await serviceClient.from("whatsapp_messages").insert({
-      conversation_id: recipient.conversation_id,
-      content: outboundText,
-      sender: "agent",
-      message_type: mediaUrl ? "marketing_offer_image" : "marketing_offer",
-      delivered: true,
-    });
+    if (recipient.conversation_id) {
+      await serviceClient.from("whatsapp_messages").insert({
+        conversation_id: recipient.conversation_id,
+        content: outboundText,
+        sender: "agent",
+        message_type: mediaUrl ? "marketing_offer_image" : "marketing_offer",
+        delivered: true,
+      });
 
-    await serviceClient
-      .from("whatsapp_conversations")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", recipient.conversation_id)
-      .eq("user_id", userId);
+      await serviceClient
+        .from("whatsapp_conversations")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", recipient.conversation_id)
+        .eq("user_id", userId);
+    }
 
     await serviceClient
       .from("whatsapp_marketing_recipients")
