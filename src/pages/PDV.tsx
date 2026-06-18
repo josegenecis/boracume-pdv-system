@@ -208,6 +208,7 @@ const PDV = () => {
   const [tefData, setTefData] = useState<{ nsu: string; auth: string; brand: string; acquirer: string; installments: string } | null>(null);
   const [cardProcessingMode, setCardProcessingMode] = useState<'maquininha' | 'tef'>('maquininha');
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [tableLaunchOpen, setTableLaunchOpen] = useState(false);
   const [tableLaunchId, setTableLaunchId] = useState('');
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
@@ -1760,6 +1761,20 @@ const PDV = () => {
     setTableLaunchOpen(true);
   };
 
+  const openCheckout = () => {
+    if (cart.length === 0) {
+      toast({
+        title: "Pedido vazio",
+        description: "Adicione produtos ao pedido antes de fechar a venda.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setMobileCartOpen(false);
+    setCheckoutOpen(true);
+  };
+
   const handleFinalizeSale = async () => {
     console.log('Finalizando venda...');
     
@@ -2021,6 +2036,7 @@ const PDV = () => {
           })
           setPixAmount(getFinalTotal())
           toast({ title: 'Aguardando pagamento', description: 'Escaneie o QR Code para concluir a venda.' })
+          setCheckoutOpen(false);
           return
         }
 
@@ -2085,6 +2101,7 @@ const PDV = () => {
         description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
       });
       setMobileCartOpen(false);
+      setCheckoutOpen(false);
       resetCurrentSale(getNextSaleOrderType());
     } catch (error: any) {
       console.error('Erro ao finalizar venda:', error);
@@ -2647,7 +2664,7 @@ const PDV = () => {
             <div className="bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0 z-30">
               <div className="p-2 space-y-2">
                 {/* Compact Form */}
-                <div className="space-y-1.5">
+                <div className="hidden">
                    <div className="flex gap-2">
                       <Input
                         placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : (orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome *")}
@@ -2757,7 +2774,7 @@ const PDV = () => {
 
                 {/* Action Buttons */}
                 <div className="grid grid-cols-2 gap-2">                  <Button
-                    onClick={handleFinalizeSale}
+                    onClick={openCheckout}
                     disabled={processing || cart.length === 0}
                     className="w-full bg-green-600 hover:bg-green-700 h-9 text-sm font-bold shadow-sm"
                   >
@@ -2765,7 +2782,7 @@ const PDV = () => {
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     ) : (
                       <>
-                        Finalizar
+                        Fechar
                         <span className="ml-1 opacity-90 text-xs font-normal">
                           {formatCurrency(getFinalTotal())}
                         </span>
@@ -2779,7 +2796,7 @@ const PDV = () => {
                     disabled={processing || cart.length === 0}
                     className="h-9 w-full border-[#003223]/20 text-sm font-bold text-[#003223] hover:bg-[#F5EBE1]"
                   >
-                    Lançar mesa
+                    Add à mesa
                   </Button>
                 </div>
               </div>
@@ -2897,7 +2914,7 @@ const PDV = () => {
 
                {/* Mobile Checkout Form */}
                <div className="border-t bg-white p-3">
-                  <div className="mb-3 space-y-2">
+                  <div className="hidden">
                     <div className="hidden gap-2">
                       <Input
                         placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome *"}
@@ -3001,7 +3018,7 @@ const PDV = () => {
                       <span>{formatCurrency(getFinalTotal())}</span>
                     </div>
                   </div>                  <Button
-                    onClick={handleFinalizeSale}
+                    onClick={openCheckout}
                     disabled={processing || cart.length === 0}
                     className="h-9 w-full rounded-xl bg-green-600 text-[12px] font-bold text-white opacity-100 hover:bg-green-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100"
                   >
@@ -3009,7 +3026,7 @@ const PDV = () => {
                       <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
                     ) : (
                       <>
-                        Finalizar
+                        Fechar
                         <span className="ml-2 text-[10px] font-normal opacity-90">
                           {formatCurrency(getFinalTotal())}
                         </span>
@@ -3023,7 +3040,7 @@ const PDV = () => {
                     disabled={processing || cart.length === 0}
                     className="mt-2 h-9 w-full rounded-xl border-[#003223]/20 text-[12px] font-bold text-[#003223] hover:bg-[#F5EBE1] disabled:bg-slate-100"
                   >
-                    Lançar em mesa
+                    Add à mesa
                   </Button>
                </div>
             </SheetContent>
@@ -3093,6 +3110,134 @@ const PDV = () => {
               }}
             >
               Adicionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+        <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fechar pedido</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : (orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome *")}
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="h-10"
+              />
+              {orderType !== 'counter' && (
+                <Input
+                  placeholder="Telefone"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="h-10"
+                />
+              )}
+            </div>
+
+            {orderType === 'delivery' && (
+              <div className="grid gap-2 sm:grid-cols-[1fr_220px]">
+                <Input
+                  placeholder="Endereço *"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  className="h-10"
+                />
+                <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Bairro *" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deliveryZones.map((zone) => (
+                      <SelectItem key={zone.id} value={zone.id}>
+                        {zone.name} (+{formatCurrency(zone.delivery_fee)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {orderType === 'dine_in' && (
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <Select value={selectedTable} onValueChange={setSelectedTable}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Selecione a Mesa *" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tables.length > 0 ? (
+                      tables.map((table) => (
+                        <SelectItem key={table.id} value={table.id}>
+                          Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <div className="p-2 text-sm text-center text-muted-foreground">Nenhuma mesa cadastrada</div>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setOrderType('counter');
+                    setSelectedTable('');
+                  }}
+                  className="h-10"
+                >
+                  Tirar mesa
+                </Button>
+              </div>
+            )}
+
+            {renderPaymentControls(true)}
+
+            <div className="rounded-xl border bg-gray-50 p-3 text-sm space-y-1">
+              <div className="flex justify-between text-gray-500">
+                <span>Subtotal</span>
+                <span>{formatCurrency(getTotalValue())}</span>
+              </div>
+              {getDeliveryFee() > 0 && (
+                <div className="flex justify-between text-gray-500">
+                  <span>Entrega</span>
+                  <span>{formatCurrency(getDeliveryFee())}</span>
+                </div>
+              )}
+              {getDiscountValue() > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>Desconto</span>
+                  <span>-{formatCurrency(getDiscountValue())}</span>
+                </div>
+              )}
+              {getSurchargeValue() > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Acréscimo</span>
+                  <span>{formatCurrency(getSurchargeValue())}</span>
+                </div>
+              )}
+              <div className="mt-2 flex justify-between border-t pt-2 text-lg font-bold text-gray-950">
+                <span>Total</span>
+                <span>{formatCurrency(getFinalTotal())}</span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCheckoutOpen(false)}>Voltar</Button>
+            <Button
+              onClick={handleFinalizeSale}
+              disabled={processing || cart.length === 0}
+              className="bg-green-600 font-bold hover:bg-green-700"
+            >
+              {processing ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+              ) : (
+                `Confirmar ${formatCurrency(getFinalTotal())}`
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
