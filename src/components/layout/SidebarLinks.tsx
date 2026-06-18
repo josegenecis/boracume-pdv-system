@@ -27,22 +27,22 @@ const SidebarLinks = () => {
 
   const links = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/produtos', icon: ShoppingBag, label: 'Produtos' },
-    { to: '/variacoes-globais', icon: Tag, label: 'Adicionais' },
-    { to: '/cardapio', icon: QrCode, label: 'Cardápio Digital' },
     { to: '/pedidos', icon: FileText, label: 'Pedidos' },
     { to: '/pdv', icon: CreditCard, label: 'PDV (Ponto de Venda)' },
-    { to: '/estoque', icon: Package, label: 'Estoque' },
     { to: '/mesas', icon: Utensils, label: 'Mesas' },
+    { to: '/produtos', icon: ShoppingBag, label: 'Produtos' },
+    { to: '/cardapio', icon: QrCode, label: 'Cardápio Digital' },
+    { to: '/estoque', icon: Package, label: 'Estoque' },
     { to: '/cozinha', icon: ChefHat, label: 'Cozinha (KDS)' },
-    { to: '/agente', icon: Bot, label: 'Ajuda Inteligente' },
-    { to: '/marketing', icon: Megaphone, label: 'Propaganda' },
+    { to: '/marketing?tab=whatsapp', icon: Megaphone, label: 'Envio em massa' },
     { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
     { to: '/financeiro', icon: CreditCard, label: 'Financeiro' },
+    { to: '/pix', icon: CreditCard, label: 'PIX / Mercado Pago' },
+    { to: '/agente', icon: Bot, label: 'Ajuda Inteligente' },
     { to: '/downloads', icon: Download, label: 'App Desktop' },
     { to: '/configuracoes', icon: Settings, label: 'Configurações' },
     { to: '/subscription', icon: Crown, label: 'Planos' },
-    { to: '/debug-pix', icon: Bug, label: 'Debug Pix' }, // Temporário
+    ...(import.meta.env.DEV ? [{ to: '/debug-pix', icon: Bug, label: 'Debug Pix' }] : []),
   ];
 
   return (
@@ -50,7 +50,8 @@ const SidebarLinks = () => {
       <ul className="space-y-2">
         {links.map((link) => {
           const Icon = link.icon;
-          const isActive = location.pathname === link.to;
+          const linkPath = link.to.split('?')[0];
+          const isActive = location.pathname === linkPath;
           
           return (
             <li key={link.to}>

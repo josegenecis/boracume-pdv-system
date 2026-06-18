@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import MarketingSettings from '@/components/marketing/MarketingSettings';
 import ProfileSettings from '@/components/settings/ProfileSettings';
 import NotificationSettings from '@/components/settings/NotificationSettings';
 import AppearanceSettings from '@/components/settings/AppearanceSettings';
@@ -21,7 +20,6 @@ import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings
 import PixSetup from '@/pages/PixSetup';
 import HardwareSettings from '@/components/settings/HardwareSettings';
 import SupportSettings from '@/components/settings/SupportSettings';
-import TableOrderFlowSettings from '@/components/settings/TableOrderFlowSettings';
 import Garcons from '@/pages/Garcons';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,10 +48,8 @@ const Configuracoes: React.FC = () => {
     fiscal: 'fiscal',
     hardware: 'hardware',
     ifood: 'ifood',
-    tables: 'tables',
     users: 'team',
     notifications: 'settings',
-    marketing: 'marketing',
     support: 'settings',
   };
 
@@ -88,11 +84,9 @@ const Configuracoes: React.FC = () => {
       'whatsapp-api',
       'fiscal',
       'hardware',
-      'tables',
       'ifood',
       'users',
       'notifications',
-      'marketing',
       'support'
     ];
     if (!allowed.includes(requested)) return 'profile';
@@ -149,12 +143,10 @@ const Configuracoes: React.FC = () => {
               <option value="whatsapp">WhatsApp Mensagens</option>
               {subscription?.plan_id === 2 && <option value="whatsapp-api">WhatsApp Global (Admin)</option>}
               <option value="hardware">Impressoras e Balanças</option>
-              <option value="tables">Mesas e Comandas</option>
               <option value="fiscal">Fiscal / NFC-e</option>
               <option value="ifood">iFood (em breve)</option>
               <option value="users">Usuários e Equipe</option>
               <option value="notifications">Notificações</option>
-              <option value="marketing">Propaganda</option>
               <option value="support">Suporte</option>
             </select>
           </div>
@@ -171,15 +163,12 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="whatsapp">{tabLabel('WhatsApp Mensagens', 'whatsapp')}</TabsTrigger>
           {subscription?.plan_id === 2 && <TabsTrigger value="whatsapp-api">WhatsApp Global (Admin)</TabsTrigger>}
           <TabsTrigger value="hardware">{tabLabel('Impressoras e Balanças', 'hardware')}</TabsTrigger>
-          <TabsTrigger value="tables">{tabLabel('Mesas e Comandas', 'tables')}</TabsTrigger>
           <TabsTrigger value="fiscal">{tabLabel('Fiscal / NFC-e', 'fiscal')}</TabsTrigger>
           <TabsTrigger value="ifood">
             {tabLabel(<IfoodLogo className="h-4 w-auto" />, 'ifood')}
           </TabsTrigger>
           <TabsTrigger value="users">{tabLabel('Usuários e Equipe', 'team')}</TabsTrigger>
           <TabsTrigger value="notifications">{tabLabel('Notificações', 'settings')}</TabsTrigger>
-
-          <TabsTrigger value="marketing">{tabLabel('Propaganda', 'marketing')}</TabsTrigger>
           <TabsTrigger value="support">{tabLabel('Suporte', 'settings')}</TabsTrigger>
         </TabsList>
         
@@ -278,10 +267,6 @@ const Configuracoes: React.FC = () => {
           <HardwareSettings />
         </TabsContent>
 
-        <TabsContent value="tables">
-          <TableOrderFlowSettings />
-        </TabsContent>
-        
         <TabsContent value="fiscal">
           <FiscalSettings />
         </TabsContent>
@@ -292,10 +277,6 @@ const Configuracoes: React.FC = () => {
 
         <TabsContent value="users">
           <Garcons />
-        </TabsContent>
-
-        <TabsContent value="marketing">
-          <MarketingSettings />
         </TabsContent>
 
         <TabsContent value="support">

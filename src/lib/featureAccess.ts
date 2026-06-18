@@ -240,6 +240,7 @@ export const getRouteFeature = (pathname: string): FeatureKey | null => {
     ['/cardapio', 'menu'],
     ['/bairros-entrega', 'delivery'],
     ['/pix', 'pix'],
+    ['/pagamentos', 'pix'],
     ['/caixa', 'finance'],
     ['/financeiro', 'finance'],
     ['/despesas', 'finance'],

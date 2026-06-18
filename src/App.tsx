@@ -73,6 +73,8 @@ import CustomerView from '@/pages/CustomerView';
 import DebugPix from '@/pages/DebugPix';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Marketing from '@/pages/Marketing';
+import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
+import TableOrderFlowSettings from '@/components/settings/TableOrderFlowSettings';
 import './App.css';
 import './styles/responsive.css';
 
@@ -151,6 +153,7 @@ function AppContent() {
           <Route path="/cozinha" element={<OperatorRoute area="kds"><FeatureRoute feature="kds"><Kitchen /></FeatureRoute></OperatorRoute>} />
           <Route path="/pdv" element={<OperatorRoute area="pdv"><FeatureRoute feature="pdv"><PDV /></FeatureRoute></OperatorRoute>} />
           <Route path="/mesas" element={<OperatorRoute area="tables"><FeatureRoute feature="tables"><Mesas /></FeatureRoute></OperatorRoute>} />
+          <Route path="/mesas/regras" element={<OperatorRoute area="tables"><FeatureRoute feature="tables"><div className="space-y-4"><h1 className="text-2xl font-bold tracking-tight">Regras de Mesa/Comanda</h1><TableOrderFlowSettings /></div></FeatureRoute></OperatorRoute>} />
           <Route path="/relatorios" element={<OperatorRoute area="reports"><FeatureRoute feature="reports"><Relatorios /></FeatureRoute></OperatorRoute>} />
           <Route path="/configuracoes" element={<OperatorRoute area="settings"><FeatureRoute feature="settings"><Configuracoes /></FeatureRoute></OperatorRoute>} />
           <Route path="/subscription" element={<Subscription />} />
@@ -165,6 +168,7 @@ function AppContent() {
           <Route path="/financeiro" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />
           <Route path="/financeiro/despesas" element={<Navigate to="/despesas" replace />} />
           <Route path="/despesas" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><Despesas /></FeatureRoute></OperatorRoute>} />
+          <Route path="/pagamentos" element={<OperatorRoute area="pix"><FeatureRoute feature="pix"><div className="space-y-4"><h1 className="text-2xl font-bold tracking-tight">Formas de Pagamento</h1><PaymentMethodsSettings /></div></FeatureRoute></OperatorRoute>} />
           <Route path="/security" element={<OperatorRoute area="security"><FeatureRoute feature="security"><SecurityDashboard /></FeatureRoute></OperatorRoute>} />
           <Route path="/whatsapp-bot" element={<OperatorRoute area="marketing"><FeatureRoute feature="whatsapp"><WhatsAppBot /></FeatureRoute></OperatorRoute>} />
           <Route path="/downloads" element={<OperatorRoute area="desktop"><FeatureRoute feature="desktop"><Downloads /></FeatureRoute></OperatorRoute>} />

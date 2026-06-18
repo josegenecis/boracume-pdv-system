@@ -159,7 +159,7 @@ const pathOperatorAreas: Array<{ area: OperatorArea; paths: string[] }> = [
   { area: 'agent', paths: ['/agente'] },
   { area: 'security', paths: ['/security'] },
   { area: 'nfce', paths: ['/nfce'] },
-  { area: 'pix', paths: ['/pix'] },
+  { area: 'pix', paths: ['/pix', '/pagamentos'] },
 ]
 
 export const getOperatorAreaForPath = (pathname?: string): OperatorArea | null => {

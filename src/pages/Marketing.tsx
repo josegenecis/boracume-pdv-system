@@ -16,7 +16,7 @@ const TABS = [
   { value: 'highlights', label: 'Produtos em Destaque' },
   { value: 'upsells', label: 'Venda Mais' },
   { value: 'pop-ai', label: 'Anúncios Automáticos' },
-  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'whatsapp', label: 'Envio em massa' },
   { value: 'loyalty', label: 'Clientes Fiéis' },
   { value: 'pixels', label: 'Facebook e Instagram' }
 ];
@@ -43,7 +43,7 @@ export default function Marketing() {
         <div>
           <div className="text-2xl font-bold tracking-tight">Propaganda</div>
           <div className="text-sm text-muted-foreground mt-1">
-            Artes, cupons, produtos em destaque, WhatsApp e anúncios para vender mais.
+            Artes, cupons, produtos em destaque, envio em massa e anúncios para vender mais.
           </div>
         </div>
       </div>

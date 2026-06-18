@@ -116,6 +116,7 @@ const CollapsibleSidebar = () => {
         { to: '/caixa', label: 'Caixa Geral', feature: 'finance', area: 'finance' },
         { to: '/pdv', label: 'PDV / Frente de Caixa', feature: 'pdv', area: 'pdv' },
         { to: '/mesas', label: 'Gestão de Mesas', feature: 'tables', area: 'tables' },
+        { to: '/mesas/regras', label: 'Regras de Mesa/Comanda', feature: 'tables', area: 'tables' },
       ]
     },
     {
@@ -125,6 +126,8 @@ const CollapsibleSidebar = () => {
       items: [
         { to: '/financeiro', label: 'Visão Geral', feature: 'finance', area: 'finance' },
         { to: '/despesas', label: 'Contas a Pagar', feature: 'finance', area: 'finance' },
+        { to: '/pagamentos', label: 'Formas de Pagamento', feature: 'pix', area: 'pix' },
+        { to: '/pix', label: 'PIX / Mercado Pago', feature: 'pix', area: 'pix' },
       ]
     },
     {
@@ -161,7 +164,7 @@ const CollapsibleSidebar = () => {
         { to: '/produtos?tab=categories', label: 'Categorias', feature: 'products', area: 'products' },
         { to: '/produtos?tab=global-variations', label: 'Adicionais', feature: 'products', area: 'products' },
         { to: '/cardapio', label: 'Acessar cardápio', feature: 'menu', area: 'products' },
-        { to: '/configuracoes?tab=menu', label: 'Cardápio Online', feature: 'menu', area: 'products' },
+        { to: '/configuracoes?tab=appearance', label: 'Cores do Cardápio', feature: 'settings', area: 'settings' },
       ]
     },
     {
@@ -183,7 +186,7 @@ const CollapsibleSidebar = () => {
         { to: '/marketing?tab=upsells', label: 'Venda Mais', feature: 'marketing', area: 'marketing' },
         { to: '/marketing?tab=loyalty', label: 'Clientes Fiéis', feature: 'marketing', area: 'marketing' },
         { to: '/marketing?tab=pixels', label: 'Facebook e Instagram', feature: 'marketing', area: 'marketing' },
-        { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp', feature: 'whatsapp', area: 'marketing' },
+        { to: '/marketing?tab=whatsapp', label: 'Envio em massa', feature: 'whatsapp', area: 'marketing' },
         { to: '/whatsapp-bot', label: 'Robô do WhatsApp', feature: 'whatsapp', area: 'marketing' },
       ]
     },
@@ -192,16 +195,14 @@ const CollapsibleSidebar = () => {
       icon: Settings,
       label: 'Configurações',
       items: [
-        { to: '/configuracoes?tab=general', label: 'Geral', feature: 'settings', area: 'settings' },
-        { to: '/configuracoes?tab=hardware', label: 'Impressão / Balanças', feature: 'hardware', area: 'settings' },
-        { to: '/configuracoes?tab=devices', label: 'Sessões ativas', feature: 'settings', area: 'settings' },
         { to: '/configuracoes?tab=profile', label: 'Perfil', feature: 'settings', area: 'settings' },
-        { to: '/configuracoes?tab=notifications', label: 'Notificações', feature: 'settings', area: 'settings' },
         { to: '/configuracoes?tab=appearance', label: 'Aparência', feature: 'settings', area: 'settings' },
+        { to: '/configuracoes?tab=notifications', label: 'Notificações', feature: 'settings', area: 'settings' },
+        { to: '/configuracoes?tab=hardware', label: 'Impressoras e Balanças', feature: 'hardware', area: 'settings' },
+        { to: '/configuracoes?tab=whatsapp', label: 'Conectar WhatsApp', feature: 'whatsapp', area: 'settings' },
         { to: '/configuracoes?tab=delivery', label: 'Delivery', feature: 'delivery', area: 'delivery' },
         { to: '/entregadores', label: 'Motoboys & Entregas', feature: 'deliveryTeam', area: 'delivery' },
         { to: '/configuracoes?tab=fiscal', label: 'Fiscal / NFC-e', feature: 'fiscal', area: 'nfce' },
-        { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos', feature: 'pix', area: 'pix' },
         { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div>, title: 'iFood', feature: 'ifood', area: 'settings' },
         { to: '/configuracoes?tab=users', label: 'Usuários e Equipe', feature: 'team', area: 'team' },
         { to: '/ponto', label: 'Controle de Ponto', feature: 'team', area: 'team' },
