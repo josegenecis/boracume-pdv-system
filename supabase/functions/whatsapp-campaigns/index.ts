@@ -57,6 +57,22 @@ function buildPhoneCandidates(value: string | null | undefined) {
   ].map((item) => String(item || "").replace(/\D/g, "")).filter(Boolean)));
 }
 
+function phoneDedupKey(value: string | null | undefined) {
+  const normalized = normalizePhone(value);
+  if (!normalized) return "";
+  const withoutCountry = normalized.startsWith("55") ? normalized.slice(2) : normalized;
+
+  if (withoutCountry.length === 11 && withoutCountry[2] === "9") {
+    return `55${withoutCountry.slice(0, 2)}${withoutCountry.slice(3)}`;
+  }
+
+  if (withoutCountry.length === 10) {
+    return `55${withoutCountry}`;
+  }
+
+  return normalized;
+}
+
 function parseManualPhones(value: unknown) {
   const rawPhones = Array.isArray(value)
     ? value.map((item) => normalizePhone(String(item))).filter(Boolean)
@@ -68,9 +84,9 @@ function parseManualPhones(value: unknown) {
   const seen = new Set<string>();
   const unique: string[] = [];
   for (const phone of rawPhones) {
-    const candidates = buildPhoneCandidates(phone);
-    if (candidates.some((candidate) => seen.has(candidate))) continue;
-    candidates.forEach((candidate) => seen.add(candidate));
+    const key = phoneDedupKey(phone);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
     unique.push(phone);
   }
 
@@ -296,8 +312,8 @@ function mergeAudienceByPhone(target: Map<string, any>, item: any) {
   const phone = normalizePhone(item?.customer_phone || item?.phone);
   if (!phone) return;
 
-  const candidates = buildPhoneCandidates(phone);
-  const key = candidates.find((candidate) => target.has(candidate)) || phone;
+  const key = phoneDedupKey(phone);
+  if (!key) return;
   const current = target.get(key);
   const incomingDate = new Date(item?.updated_at || item?.created_at || item?.lastActivity || 0).getTime();
   const currentDate = current ? new Date(current?.updated_at || current?.created_at || current?.lastActivity || 0).getTime() : 0;
@@ -313,7 +329,6 @@ function mergeAudienceByPhone(target: Map<string, any>, item: any) {
   };
 
   target.set(key, next);
-  for (const candidate of candidates) target.set(candidate, next);
 }
 
 function dedupeAudienceByPhone(audience: any[]) {
@@ -327,10 +342,9 @@ function dedupeAudienceByPhone(audience: any[]) {
   const seen = new Set<string>();
   const unique: any[] = [];
   for (const item of sorted) {
-    const candidates = buildPhoneCandidates(item?.customer_phone);
-    if (candidates.length === 0) continue;
-    if (candidates.some((candidate) => seen.has(candidate))) continue;
-    candidates.forEach((candidate) => seen.add(candidate));
+    const key = phoneDedupKey(item?.customer_phone);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
     unique.push({ ...item, customer_phone: normalizePhone(item.customer_phone) });
   }
 
