@@ -33,6 +33,15 @@ type Campaign = {
   audience_type?: string | null;
   product_name?: string | null;
   promo_image_url?: string | null;
+  queued_count?: number;
+  sending_count?: number;
+  opted_out_count?: number;
+  cancelled_count?: number;
+  pending_count?: number;
+  first_sent_at?: string | null;
+  last_sent_at?: string | null;
+  next_scheduled_at?: string | null;
+  delivery_seconds?: number | null;
 };
 
 type ProductOption = {
@@ -91,6 +100,24 @@ function progressOf(campaign: Campaign) {
   const total = Number(campaign.target_count || 0);
   if (!total) return 0;
   return Math.min(100, Math.round(((Number(campaign.sent_count || 0) + Number(campaign.failed_count || 0) + Number(campaign.skipped_count || 0)) / total) * 100));
+}
+
+function formatDuration(seconds?: number | null) {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '-';
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s`;
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  if (hours > 0) return restMinutes > 0 ? `${hours}h ${restMinutes}min` : `${hours}h`;
+  return `${minutes}min`;
+}
+
+function formatInterval(campaign: Campaign) {
+  const min = Math.round(Number(campaign.min_delay_seconds || 0) / 60);
+  const max = Math.round(Number(campaign.max_delay_seconds || 0) / 60);
+  if (!min && !max) return '-';
+  if (min === max) return `${min}min`;
+  return `${min}-${max}min`;
 }
 
 export default function WhatsAppCampaignManager() {
@@ -161,7 +188,71 @@ export default function WhatsAppCampaignManager() {
       return;
     }
 
-    setCampaigns(data || []);
+    const rows = data || [];
+    const ids = rows.map((item: Campaign) => item.id).filter(Boolean);
+    let recipients: any[] = [];
+    if (ids.length > 0) {
+      const { data: recipientRows, error: recipientError } = await (supabase as any)
+        .from('whatsapp_marketing_recipients')
+        .select('campaign_id,status,scheduled_at,sent_at,last_error')
+        .in('campaign_id', ids);
+
+      if (recipientError) {
+        console.error(recipientError);
+      } else {
+        recipients = recipientRows || [];
+      }
+    }
+
+    const statsByCampaign = new Map<string, any>();
+    for (const recipient of recipients) {
+      const campaignId = String(recipient.campaign_id || '');
+      if (!campaignId) continue;
+      const stats = statsByCampaign.get(campaignId) || {
+        queued_count: 0,
+        sending_count: 0,
+        sent_count: 0,
+        failed_count: 0,
+        skipped_count: 0,
+        opted_out_count: 0,
+        cancelled_count: 0,
+        next_scheduled_at: null,
+        first_sent_at: null,
+        last_sent_at: null,
+      };
+
+      const status = String(recipient.status || '');
+      const key = `${status}_count`;
+      stats[key] = Number(stats[key] || 0) + 1;
+
+      if (status === 'queued' && recipient.scheduled_at) {
+        const currentNext = stats.next_scheduled_at ? new Date(stats.next_scheduled_at).getTime() : Infinity;
+        const nextTime = new Date(recipient.scheduled_at).getTime();
+        if (Number.isFinite(nextTime) && nextTime < currentNext) stats.next_scheduled_at = recipient.scheduled_at;
+      }
+
+      if (status === 'sent' && recipient.sent_at) {
+        const sentTime = new Date(recipient.sent_at).getTime();
+        const firstTime = stats.first_sent_at ? new Date(stats.first_sent_at).getTime() : Infinity;
+        const lastTime = stats.last_sent_at ? new Date(stats.last_sent_at).getTime() : 0;
+        if (Number.isFinite(sentTime) && sentTime < firstTime) stats.first_sent_at = recipient.sent_at;
+        if (Number.isFinite(sentTime) && sentTime > lastTime) stats.last_sent_at = recipient.sent_at;
+      }
+
+      statsByCampaign.set(campaignId, stats);
+    }
+
+    setCampaigns(rows.map((campaign: Campaign) => {
+      const stats = statsByCampaign.get(campaign.id) || {};
+      const first = stats.first_sent_at ? new Date(stats.first_sent_at).getTime() : null;
+      const last = stats.last_sent_at ? new Date(stats.last_sent_at).getTime() : null;
+      return {
+        ...campaign,
+        ...stats,
+        pending_count: Number(stats.queued_count || 0) + Number(stats.sending_count || 0),
+        delivery_seconds: first && last && last >= first ? Math.round((last - first) / 1000) : null,
+      };
+    }));
   };
 
   const fetchProducts = async () => {
@@ -270,7 +361,9 @@ export default function WhatsAppCampaignManager() {
       setSelectedProductId('none');
       setPromoImageUrl('');
       await Promise.all([fetchCampaigns(), previewAudience()]);
-      if (audienceType === 'manual' && immediateManualTest) {
+      const selectedStart = scheduledAt ? new Date(scheduledAt) : new Date();
+      const startsInFuture = Number.isFinite(selectedStart.getTime()) && selectedStart.getTime() > Date.now() + 30000;
+      if (audienceType === 'manual' && immediateManualTest && !startsInFuture) {
         await processQueue(false);
       }
     } catch (error: any) {
@@ -846,6 +939,7 @@ export default function WhatsAppCampaignManager() {
                 <TableHead>Campanha</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Progresso</TableHead>
+                <TableHead>Entrega</TableHead>
                 <TableHead>Agendada</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -853,7 +947,7 @@ export default function WhatsAppCampaignManager() {
             <TableBody>
               {campaigns.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     Nenhuma campanha criada ainda.
                   </TableCell>
                 </TableRow>
@@ -888,11 +982,28 @@ export default function WhatsAppCampaignManager() {
                       <span>{progressOf(campaign)}%</span>
                     </div>
                     <Progress value={progressOf(campaign)} />
-                    {(campaign.failed_count > 0 || campaign.skipped_count > 0) && (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {campaign.failed_count} falha(s), {campaign.skipped_count} ignorado(s)
+                    <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-muted-foreground">
+                      <span>Pendentes: {campaign.pending_count || 0}</span>
+                      <span>Falhas: {campaign.failed_count || 0}</span>
+                      <span>Ignorados: {(campaign.skipped_count || 0) + (campaign.opted_out_count || 0)}</span>
+                      <span>Cancelados: {campaign.cancelled_count || 0}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="min-w-[190px] text-xs text-muted-foreground">
+                    <div className="space-y-1">
+                      <div>
+                        <span className="font-semibold text-foreground">Intervalo:</span> {formatInterval(campaign)}
                       </div>
-                    )}
+                      <div>
+                        <span className="font-semibold text-foreground">Duração:</span> {formatDuration(campaign.delivery_seconds)}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-foreground">Próximo:</span> {campaign.next_scheduled_at ? formatDateTime(campaign.next_scheduled_at) : '-'}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-foreground">Último envio:</span> {campaign.last_sent_at ? formatDateTime(campaign.last_sent_at) : '-'}
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell>{formatDateTime(campaign.scheduled_at)}</TableCell>
                   <TableCell>

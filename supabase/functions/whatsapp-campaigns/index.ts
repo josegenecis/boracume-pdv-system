@@ -527,6 +527,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
   const quietHoursEnd = String(body.quietHoursEnd || "09:00");
   const optOutText = String(body.optOutText || "").trim();
   const scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : new Date();
+  const effectiveScheduledAt = Number.isNaN(scheduledAt.getTime()) ? new Date() : scheduledAt;
   const productId = String(body.productId || "").trim() || null;
   const productName = String(body.productName || "").trim() || null;
   const productPrice = body.productPrice !== undefined && body.productPrice !== null && body.productPrice !== ""
@@ -534,7 +535,9 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     : null;
   const promoImageUrl = String(body.promoImageUrl || "").trim() || null;
   const audienceFilters = parseAudienceFilters(body);
-  const immediateManualTest = Boolean(body.immediateManualTest) && audienceFilters.audienceType === "manual";
+  const immediateManualTestRequested = Boolean(body.immediateManualTest) && audienceFilters.audienceType === "manual";
+  const startsInFuture = effectiveScheduledAt.getTime() > Date.now() + 30000;
+  const immediateManualTest = immediateManualTestRequested && !startsInFuture;
 
   if (!title || title.length < 3) return { error: "Informe um nome para a campanha." };
   if (!message || message.length < 10) return { error: "Escreva uma mensagem de oferta com pelo menos 10 caracteres." };
@@ -571,7 +574,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
       quiet_hours_start: quietHoursStart,
       quiet_hours_end: quietHoursEnd,
       timezone,
-      scheduled_at: Number.isNaN(scheduledAt.getTime()) ? new Date().toISOString() : scheduledAt.toISOString(),
+      scheduled_at: effectiveScheduledAt.toISOString(),
       target_count: audience.length,
       product_id: productId,
       product_name: productName,
@@ -585,6 +588,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
         },
         audienceFilters,
         immediateManualTest,
+        immediateManualTestRequested,
       },
     })
     .select("*")
@@ -596,6 +600,8 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
   const recipients = audience.map((item: any, index: number) => {
     if (immediateManualTest) {
       cursor = new Date(Date.now() - 5000 - index * 1000);
+    } else if (index === 0) {
+      cursor = new Date(campaign.scheduled_at);
     } else {
       cursor = new Date(cursor.getTime() + randomInt(minDelaySeconds, maxDelaySeconds) * 1000);
     }
@@ -634,7 +640,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     event_type: "campaign_created",
     severity: "warning",
     description: "Campanha criada com clientes conhecidos, cooldown e opt-out obrigatório.",
-    metadata: { targetCount: audience.length, minDelaySeconds, maxDelaySeconds, dailyLimit, audienceFilters, immediateManualTest },
+    metadata: { targetCount: audience.length, minDelaySeconds, maxDelaySeconds, dailyLimit, audienceFilters, immediateManualTest, immediateManualTestRequested },
   });
 
   const processed = immediateManualTest
@@ -800,7 +806,7 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
   const now = new Date().toISOString();
   const { data: recipients, error } = await serviceClient
     .from("whatsapp_marketing_recipients")
-    .select("*, whatsapp_marketing_campaigns!inner(status,daily_limit)")
+    .select("*, whatsapp_marketing_campaigns!inner(status,daily_limit,min_delay_seconds,max_delay_seconds,scheduled_at)")
     .eq("user_id", userId)
     .eq("status", "queued")
     .lte("scheduled_at", now)
@@ -812,10 +818,20 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
 
   const processed: any[] = [];
   const dailyCounters = new Map<string, number>();
+  const lastSentByCampaign = new Map<string, string | null>();
+  const processedCampaigns = new Set<string>();
   const instanceName = await loadInstanceName(serviceClient, userId);
   for (const recipient of recipients || []) {
     const campaignLimit = Number(recipient.whatsapp_marketing_campaigns?.daily_limit || 40);
     const campaignId = String(recipient.campaign_id || "");
+    const campaignMinDelay = Math.max(60, Number(recipient.whatsapp_marketing_campaigns?.min_delay_seconds || 180));
+    const campaignMaxDelay = Math.max(campaignMinDelay, Number(recipient.whatsapp_marketing_campaigns?.max_delay_seconds || 720));
+
+    if (processedCampaigns.has(campaignId)) {
+      processed.push({ id: recipient.id, status: "waiting_campaign_interval" });
+      continue;
+    }
+
     if (!dailyCounters.has(campaignId)) {
       const since = new Date();
       since.setHours(0, 0, 0, 0);
@@ -829,8 +845,38 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
       dailyCounters.set(campaignId, Number(count || 0));
     }
 
+    if (!lastSentByCampaign.has(campaignId)) {
+      const { data: lastSent } = await serviceClient
+        .from("whatsapp_marketing_recipients")
+        .select("sent_at")
+        .eq("campaign_id", campaignId)
+        .eq("user_id", userId)
+        .eq("status", "sent")
+        .order("sent_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      lastSentByCampaign.set(campaignId, lastSent?.sent_at || null);
+    }
+
+    const lastSentAt = lastSentByCampaign.get(campaignId);
+    if (lastSentAt) {
+      const nextAllowedAt = new Date(new Date(lastSentAt).getTime() + campaignMinDelay * 1000);
+      if (nextAllowedAt.getTime() > Date.now()) {
+        await serviceClient
+          .from("whatsapp_marketing_recipients")
+          .update({
+            scheduled_at: new Date(new Date(lastSentAt).getTime() + randomInt(campaignMinDelay, campaignMaxDelay) * 1000).toISOString(),
+          })
+          .eq("id", recipient.id);
+        processedCampaigns.add(campaignId);
+        processed.push({ id: recipient.id, status: "waiting_interval", nextAllowedAt: nextAllowedAt.toISOString() });
+        continue;
+      }
+    }
+
     if (Number(dailyCounters.get(campaignId) || 0) >= campaignLimit) {
       processed.push({ id: recipient.id, status: "daily_limit_wait" });
+      processedCampaigns.add(campaignId);
       continue;
     }
 
@@ -896,6 +942,8 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
       .eq("id", recipient.id);
 
     dailyCounters.set(campaignId, Number(dailyCounters.get(campaignId) || 0) + 1);
+    lastSentByCampaign.set(campaignId, new Date().toISOString());
+    processedCampaigns.add(campaignId);
     processed.push({ id: recipient.id, status: "sent" });
   }
 
