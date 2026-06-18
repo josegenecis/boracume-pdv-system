@@ -2164,9 +2164,9 @@ const PDV = () => {
   ];
 
   const renderPaymentControls = (compact = false) => {
-    const inputClassName = compact ? 'h-7.5 text-[10px]' : 'h-7 text-[11px]';
+    const inputClassName = compact ? 'h-12 text-lg font-semibold' : 'h-7 text-[11px]';
     const labelClassName = compact
-      ? 'text-[9px] font-semibold uppercase tracking-[0.12em]'
+      ? 'text-[10px] font-bold uppercase tracking-[0.14em]'
       : 'text-[9px] font-semibold uppercase tracking-[0.12em]';
     const selectedAmount = paymentAmounts[paymentMethod];
     const displayedPaymentAmount = selectedAmount || formatCurrency(getFinalTotal());
@@ -2177,15 +2177,15 @@ const PDV = () => {
     const cashChange = getCashChangeValue();
 
     return (
-      <div className={compact ? 'space-y-2' : 'space-y-1.5'}>
-        <div className="grid grid-cols-3 gap-1.5">
+      <div className={compact ? 'space-y-3' : 'space-y-1.5'}>
+        <div className={compact ? 'grid grid-cols-3 gap-2 rounded-2xl bg-[#F5EBE1]/70 p-1.5' : 'grid grid-cols-3 gap-1.5'}>
           {PDV_PAYMENT_METHODS.map((method) => (
             <Button
               key={method.value}
               type="button"
               size={compact ? undefined : 'sm'}
               variant={paymentMethod === method.value ? 'default' : 'outline'}
-              className={compact ? 'h-7.5 text-[10px]' : 'h-7 rounded-lg text-[11px]'}
+              className={compact ? 'h-11 rounded-xl text-sm font-bold' : 'h-7 rounded-lg text-[11px]'}
               onClick={() => {
                 setSelectedPaymentMethod(method.value);
                 if (method.value !== 'cartao') setTefData(null);
@@ -2200,7 +2200,7 @@ const PDV = () => {
           ))}
         </div>
 
-        <div className={compact ? 'rounded-xl border border-[#003223]/10 bg-[#F8FBF6] p-2' : 'rounded-lg border border-[#003223]/10 bg-[#F8FBF6] p-1.5'}>
+        <div className={compact ? 'rounded-2xl border border-[#003223]/10 bg-[#F8FBF6] p-3 shadow-sm' : 'rounded-lg border border-[#003223]/10 bg-[#F8FBF6] p-1.5'}>
           <div className={`${labelClassName} text-[#003223]/70`}>Valor neste método</div>
           <CurrencyTextInput
             placeholder="R$ 0,00"
@@ -2209,14 +2209,14 @@ const PDV = () => {
             className={`${inputClassName} mt-1 bg-white`}
           />
           {compact && (
-            <div className="mt-1 text-[10px] leading-4 text-slate-500">
+            <div className="mt-2 text-xs leading-5 text-slate-500">
               Deixe em branco para receber o total em {getPaymentMethodLabel(paymentMethod)}. Digite um valor para dividir em mais métodos.
             </div>
           )}
         </div>
 
         {paymentMethod === 'dinheiro' && (
-          <div className={compact ? 'grid grid-cols-2 gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 p-2' : 'grid grid-cols-2 gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50/70 p-1.5'}>
+          <div className={compact ? 'grid grid-cols-2 gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 shadow-sm' : 'grid grid-cols-2 gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50/70 p-1.5'}>
             <div className="space-y-1">
               <div className={`${labelClassName} text-emerald-800`}>Valor recebido</div>
               <CurrencyTextInput
@@ -2228,7 +2228,7 @@ const PDV = () => {
             </div>
             <div className="space-y-1">
               <div className={`${labelClassName} text-emerald-800`}>Troco</div>
-              <div className={`${inputClassName} flex items-center rounded-md border bg-white px-2 font-bold text-emerald-700`}>
+              <div className={`${inputClassName} flex items-center rounded-md border bg-white px-3 text-emerald-700`}>
                 {formatCurrency(cashChange)}
               </div>
             </div>
@@ -2292,7 +2292,7 @@ const PDV = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className={compact ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-2 gap-1.5'}>
           <div className="space-y-1">
             <div className={`${labelClassName} text-red-600`}>Desconto</div>
             <CurrencyTextInput
@@ -3116,12 +3116,23 @@ const PDV = () => {
       </Dialog>
 
       <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-        <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto rounded-2xl border-[#FF6400]/10 bg-[#FFFDF9] p-0">
           <DialogHeader>
-            <DialogTitle>Fechar pedido</DialogTitle>
+            <div className="rounded-t-2xl border-b border-[#FF6400]/10 bg-gradient-to-r from-[#FFF4EA] via-white to-[#F4FAEC] px-6 py-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <DialogTitle className="text-2xl font-bold text-[#003223]">Fechar pedido</DialogTitle>
+                  <p className="mt-1 text-sm text-slate-500">{cartItemsCount} item(ns) no carrinho</p>
+                </div>
+                <div className="rounded-2xl border border-[#003223]/10 bg-white px-4 py-2 text-right shadow-sm">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Total</div>
+                  <div className="text-2xl font-black text-[#003223]">{formatCurrency(getFinalTotal())}</div>
+                </div>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 px-6 py-5">
             <div className="grid gap-2 sm:grid-cols-2">
               <Input
                 placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : (orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome *")}
@@ -3196,7 +3207,7 @@ const PDV = () => {
 
             {renderPaymentControls(true)}
 
-            <div className="rounded-xl border bg-gray-50 p-3 text-sm space-y-1">
+            <div className="rounded-2xl border border-[#003223]/10 bg-white p-4 text-sm shadow-sm space-y-1">
               <div className="flex justify-between text-gray-500">
                 <span>Subtotal</span>
                 <span>{formatCurrency(getTotalValue())}</span>
@@ -3219,24 +3230,24 @@ const PDV = () => {
                   <span>{formatCurrency(getSurchargeValue())}</span>
                 </div>
               )}
-              <div className="mt-2 flex justify-between border-t pt-2 text-lg font-bold text-gray-950">
+              <div className="mt-3 flex justify-between border-t pt-3 text-xl font-black text-gray-950">
                 <span>Total</span>
                 <span>{formatCurrency(getFinalTotal())}</span>
               </div>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCheckoutOpen(false)}>Voltar</Button>
+          <DialogFooter className="border-t border-[#003223]/10 bg-white px-6 py-4">
+            <Button variant="outline" onClick={() => setCheckoutOpen(false)} className="h-12 rounded-xl px-8 font-bold">Voltar</Button>
             <Button
               onClick={handleFinalizeSale}
               disabled={processing || cart.length === 0}
-              className="bg-green-600 font-bold hover:bg-green-700"
+              className="h-12 rounded-xl bg-green-600 px-8 text-base font-black hover:bg-green-700"
             >
               {processing ? (
                 <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
               ) : (
-                `Confirmar ${formatCurrency(getFinalTotal())}`
+                `Confirmar venda ${formatCurrency(getFinalTotal())}`
               )}
             </Button>
           </DialogFooter>
