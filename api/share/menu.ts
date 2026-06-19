@@ -28,6 +28,22 @@ function normalizeAbsoluteUrl(value: string) {
   return '';
 }
 
+function isPreviewBot(userAgent: string) {
+  const ua = String(userAgent || '').toLowerCase();
+  return [
+    'whatsapp',
+    'facebookexternalhit',
+    'facebot',
+    'twitterbot',
+    'telegrambot',
+    'linkedinbot',
+    'slackbot',
+    'discordbot',
+    'googlebot',
+    'bingbot',
+  ].some((needle) => ua.includes(needle));
+}
+
 async function fetchProfile(userId: string) {
   const url = new URL(`${SUPABASE_URL}/rest/v1/profiles`);
   url.searchParams.set('select', 'restaurant_name,description,logo_url,banner_url');
@@ -56,6 +72,18 @@ export default async function handler(req: any, res: any) {
     }
 
     const redirectUrl = `/menu/${encodeURIComponent(id)}`;
+    const userAgent = String(req?.headers?.['user-agent'] || '');
+
+    if (!isPreviewBot(userAgent)) {
+      res.statusCode = 302;
+      res.setHeader('location', redirectUrl);
+      res.setHeader('cache-control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('pragma', 'no-cache');
+      res.setHeader('expires', '0');
+      res.end();
+      return;
+    }
+
     const profile = await fetchProfile(id).catch(() => null);
     const restaurantName = String(profile?.restaurant_name || 'Cardápio Digital');
     const description = String(profile?.description || 'Confira nosso cardápio digital.');
