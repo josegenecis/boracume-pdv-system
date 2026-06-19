@@ -12,12 +12,29 @@ export const invokeEdgeFunction = async (
   const startTime = Date.now();
 
   try {
+    let authHeaders: Record<string, string> = {};
+    try {
+      let { data: sessionData } = await supabase.auth.getSession();
+      let session = sessionData?.session || null;
+      const expiresAtMs = Number(session?.expires_at || 0) * 1000;
+
+      if (!session?.access_token || (expiresAtMs > 0 && expiresAtMs - Date.now() < 60_000)) {
+        const refreshed = await supabase.auth.refreshSession();
+        session = refreshed.data?.session || session;
+      }
+
+      if (session?.access_token) {
+        authHeaders = { Authorization: `Bearer ${session.access_token}` };
+      }
+    } catch {}
+
     const timeoutMs = Math.max(1000, Number(options?.timeoutMs ?? 120000) || 120000);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     const invokePromise = supabase.functions.invoke(functionPath, {
       body: body,
+      headers: authHeaders,
       // @ts-ignore
       signal: controller.signal
     });
