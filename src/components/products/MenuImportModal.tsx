@@ -117,6 +117,36 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     }
   };
 
+  const isAuthImportError = (message?: string | null) => {
+    const normalized = String(message || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    return (
+      normalized.includes('usuario') ||
+      normalized.includes('autentic') ||
+      normalized.includes('logado') ||
+      normalized.includes('jwt') ||
+      normalized.includes('token')
+    );
+  };
+
+  const importBrendiViaCompatibleFlow = async (url: string) => {
+    setLoadingMessage('Usando modo compatível do Brendi...');
+    const { data, status } = await invokeEdgeFunction('scrape-menu', {
+      type: 'url',
+      data: url,
+      action: 'start',
+    }, { timeoutMs: 120000, authToken: session?.access_token });
+
+    if (status !== 200 || !data?.success || !Array.isArray(data.categories)) {
+      throw new Error(data?.error || 'Não foi possível extrair esse cardápio pelo modo compatível.');
+    }
+
+    return data.categories as ImportedCategory[];
+  };
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
@@ -601,20 +631,25 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           }, { timeoutMs: 120000, authToken: session?.access_token });
 
           if (status !== 200 || !data?.success) {
-            throw new Error(data?.error || 'Não foi possível analisar esse link.');
+            const errorMessage = data?.error || 'Não foi possível analisar esse link.';
+            if (isAuthImportError(errorMessage)) {
+              categoriesToImport = await importBrendiViaCompatibleFlow(urlInput.trim());
+            } else {
+              throw new Error(errorMessage);
+            }
+          } else {
+            setLinkPreview({
+              platform: data.platform,
+              restaurant: data.restaurant,
+              stats: data.stats,
+              preview: data.preview,
+            });
+            toast({
+              title: 'Cardápio encontrado',
+              description: `${data.stats.products} produtos, ${data.stats.categories} categorias e ${data.stats.deliveryRegions} bairros encontrados.`,
+            });
+            return;
           }
-
-          setLinkPreview({
-            platform: data.platform,
-            restaurant: data.restaurant,
-            stats: data.stats,
-            preview: data.preview,
-          });
-          toast({
-            title: 'Cardápio encontrado',
-            description: `${data.stats.products} produtos, ${data.stats.categories} categorias e ${data.stats.deliveryRegions} bairros encontrados.`,
-          });
-          return;
         }
 
         // 1. Iniciar Job (Async)
