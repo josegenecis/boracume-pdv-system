@@ -20,6 +20,124 @@ function extractUuidFromAny(text: string): string | null {
   return m ? m[0] : null;
 }
 
+const cleanText = (value: unknown) => String(value || '').replace(/\s+/g, ' ').trim();
+
+const moneyFromCents = (value: unknown) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round((numeric / 100) * 100) / 100;
+};
+
+const brendiImageUrl = (raw: unknown) => {
+  const value = cleanText(raw);
+  if (!value || value === 'null' || value === 'undefined') return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://firebasestorage.googleapis.com/v0/b/brendi-app.appspot.com/o/${encodeURIComponent(value)}?alt=media`;
+};
+
+function decodeBrendiNuxtPayload(html: string) {
+  const match = html.match(/<script[^>]*id=["']__NUXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (!match?.[1]) throw new Error('Não encontrei os dados estruturados desse cardápio Brendi.');
+
+  const values = JSON.parse(match[1]);
+  const cache = new Map<number, any>();
+
+  function hydrate(index: number): any {
+    if (index === -1) return undefined;
+    const value = values[index];
+    if (value === null || typeof value !== 'object') return value;
+    if (cache.has(index)) return cache.get(index);
+
+    if (Array.isArray(value)) {
+      const tag = value[0];
+      if (typeof tag === 'string' && ['Reactive', 'ShallowReactive', 'Ref', 'EmptyRef', 'Set'].includes(tag)) {
+        if (tag === 'EmptyRef') return null;
+        if (tag === 'Set') {
+          const set = new Set((value.slice(1) || []).map((item: number) => hydrate(item)));
+          cache.set(index, set);
+          return set;
+        }
+        return hydrate(value[1]);
+      }
+
+      const array: any[] = [];
+      cache.set(index, array);
+      for (const item of value) array.push(typeof item === 'number' ? hydrate(item) : item);
+      return array;
+    }
+
+    const object: Record<string, any> = {};
+    cache.set(index, object);
+    for (const [key, ref] of Object.entries(value)) {
+      object[key] = typeof ref === 'number' ? hydrate(ref as number) : ref;
+    }
+    return object;
+  }
+
+  const root = hydrate(0);
+  const entries = Object.values(root?.data || {}) as any[];
+  return entries.find((entry) => entry?.categories && entry?.productsByCategory && entry?.store);
+}
+
+async function extractBrendiCategories(rawUrl: string) {
+  const response = await fetch(rawUrl, {
+    headers: {
+      'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+    redirect: 'follow',
+  });
+
+  if (!response.ok) throw new Error(`Não consegui abrir o link Brendi (${response.status}).`);
+
+  const data = decodeBrendiNuxtPayload(await response.text());
+  if (!data) throw new Error('Não encontrei categorias e produtos nesse cardápio Brendi.');
+
+  const orderedCategories = (data.store?.config?.menu?.orderedCategories || [])
+    .map((path: string) => String(path || '').split('/').pop())
+    .filter(Boolean);
+
+  const categories = [...(data.categories || [])]
+    .filter((category: any) => category?.active !== false)
+    .sort((a: any, b: any) => {
+      const ai = orderedCategories.indexOf(a.id);
+      const bi = orderedCategories.indexOf(b.id);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    })
+    .map((category: any) => ({
+      name: cleanText(category.name) || 'Geral',
+      items: (data.productsByCategory?.[category.id] || [])
+        .filter((product: any) => product?.active !== false && product?.missing !== true)
+        .map((product: any) => ({
+          name: cleanText(product.name),
+          description: cleanText(product.description),
+          price: moneyFromCents(product.price),
+          image_url: brendiImageUrl(product.picture),
+          available: product.active !== false && product.missing !== true,
+          variations: (product.customs || [])
+            .filter((group: any) => group?.active !== false)
+            .map((group: any) => ({
+              name: cleanText(group?.title) || 'Adicionais',
+              required: Number(group?.minChoices || 0) > 0,
+              max_selections: Math.max(1, Number(group?.maxChoices || 1)),
+              options: (group?.choices || [])
+                .filter((choice: any) => choice?.active !== false && choice?.missing !== true)
+                .map((choice: any) => ({
+                  name: cleanText(choice?.title),
+                  price: moneyFromCents(choice?.extraPrice),
+                }))
+                .filter((option: any) => option.name),
+            }))
+            .filter((group: any) => group.name && group.options.length > 0),
+        }))
+        .filter((product: any) => product.name),
+    }))
+    .filter((category: any) => category.items.length > 0);
+
+  if (!categories.length) throw new Error('Não encontrei produtos nesse cardápio Brendi.');
+  return categories;
+}
+
 async function resolveIfoodStoreId(rawUrl: string): Promise<string | null> {
   const direct = extractUuidFromAny(rawUrl);
   if (direct) return direct;
@@ -110,6 +228,15 @@ Deno.serve(async (req: Request) => {
                 );
               }
             } catch {}
+
+            if (parsedUrl.host.toLowerCase().includes('brendi.com.br')) {
+              console.log('[Start] Importação Brendi direta no scrape-menu.');
+              const categories = await extractBrendiCategories(rawUrl);
+              return new Response(
+                JSON.stringify({ success: true, status: 'completed', platform: 'brendi', categories }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              );
+            }
 
              // 1. iFood Logic
              if (APIFY_TOKEN && rawUrl.includes('ifood.com.br')) {
