@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2, FileJson } from 'lucide-react';
+import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2, FileJson, RefreshCw, PlusCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -59,6 +59,28 @@ type NormalizedMenuResult = {
   stats: MenuImportStats;
 };
 
+type LinkImportPreview = {
+  platform: string;
+  restaurant?: {
+    name?: string;
+    phone?: string;
+    address?: string;
+  };
+  stats: {
+    categories: number;
+    products: number;
+    productsWithImages: number;
+    variationLinks: number;
+    deliveryRegions: number;
+    banners: number;
+  };
+  preview?: {
+    categories?: Array<{ name: string; products: number }>;
+    products?: Array<{ name: string; price: number; category: string; variations: number; image_url?: string | null }>;
+    delivery_zones?: Array<{ name: string; delivery_fee: number; delivery_time?: string }>;
+  };
+};
+
 const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onImportComplete }) => {
   const [activeTab, setActiveTab] = useState('text');
   const [textInput, setTextInput] = useState('');
@@ -68,6 +90,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   const [loadingMessage, setLoadingMessage] = useState('Processando...');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [linkPreview, setLinkPreview] = useState<LinkImportPreview | null>(null);
   const cancelRef = useRef(false);
   
   const { toast } = useToast();
@@ -85,6 +108,17 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       return false;
     }
   };
+
+  const isBrendiUrl = (value: string) => {
+    try {
+      return new URL(value.trim()).host.toLowerCase().includes('brendi.com.br');
+    } catch {
+      return false;
+    }
+  };
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
   const normalizeImageUrl = (value?: string | null) => {
     const v = (value || '').trim().replace(/^['"]|['"]$/g, '');
@@ -354,6 +388,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     reader.readAsDataURL(file);
   };
 
+  const resetLinkPreview = () => setLinkPreview(null);
+
   const convertFileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -557,6 +593,30 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         }
       }
       else if (activeTab === 'link') {
+        if (isBrendiUrl(urlInput)) {
+          setLoadingMessage('Analisando cardápio...');
+          const { data, status } = await invokeEdgeFunction('menu-importer', {
+            action: 'analyze',
+            url: urlInput.trim(),
+          }, { timeoutMs: 120000 });
+
+          if (status !== 200 || !data?.success) {
+            throw new Error(data?.error || 'Não foi possível analisar esse link.');
+          }
+
+          setLinkPreview({
+            platform: data.platform,
+            restaurant: data.restaurant,
+            stats: data.stats,
+            preview: data.preview,
+          });
+          toast({
+            title: 'Cardápio encontrado',
+            description: `${data.stats.products} produtos, ${data.stats.categories} categorias e ${data.stats.deliveryRegions} bairros encontrados.`,
+          });
+          return;
+        }
+
         // 1. Iniciar Job (Async)
         setLoadingMessage('Extraindo dados...');
         const { data: startData, status: startStatus } = await invokeEdgeFunction('scrape-menu', { 
@@ -861,6 +921,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       setSelectedImage(null);
       setImagePreview(null);
       setUrlInput('');
+      setLinkPreview(null);
       
     } catch (error: any) {
       console.error('[Import] Erro:', error);
@@ -875,9 +936,46 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     }
   };
 
+  const applyLinkImport = async (replace: boolean) => {
+    if (!urlInput.trim()) return;
+    setLoading(true);
+    setLoadingMessage(replace ? 'Substituindo cardápio...' : 'Importando cardápio...');
+
+    try {
+      const { data, status } = await invokeEdgeFunction('menu-importer', {
+        action: 'apply',
+        url: urlInput.trim(),
+        replace,
+      }, { timeoutMs: 180000 });
+
+      if (status !== 200 || !data?.success) {
+        throw new Error(data?.error || 'Não foi possível importar esse cardápio.');
+      }
+
+      toast({
+        title: 'Cardápio importado',
+        description: `${data.result.productsCreated} produtos, ${data.result.globalVariationsCreated} complementos e ${data.stats.deliveryRegions} bairros importados.`,
+      });
+
+      onImportComplete();
+      onClose();
+      setUrlInput('');
+      setLinkPreview(null);
+    } catch (error: any) {
+      toast({
+        title: 'Erro na importação',
+        description: error?.message || 'Erro desconhecido.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+      setLoadingMessage('Processando...');
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wand2 className="w-5 h-5 text-purple-600" />
@@ -930,12 +1028,77 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
               <Input 
                 placeholder="https://..." 
                 value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
+                onChange={(e) => {
+                  setUrlInput(e.target.value);
+                  resetLinkPreview();
+                }}
               />
               <div className="flex items-center gap-2 p-3 bg-purple-50 text-purple-800 rounded-md text-xs border border-purple-100">
                 <Wand2 className="w-4 h-4" />
-                <span>O PopSystem vai ler o cardápio e organizar os produtos automaticamente.</span>
+                <span>Links Brendi são importados automaticamente com produtos, imagens, complementos, bairros e banners.</span>
               </div>
+              {linkPreview && (
+                <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+                  <div>
+                    <p className="text-sm font-bold text-emerald-950">Prévia encontrada</p>
+                    <p className="text-xs text-emerald-800">
+                      {linkPreview.restaurant?.name || 'Restaurante'} {linkPreview.restaurant?.address ? `• ${linkPreview.restaurant.address}` : ''}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg bg-white p-3">
+                      <p className="text-xl font-bold text-emerald-950">{linkPreview.stats.categories}</p>
+                      <p className="text-xs text-emerald-700">categorias</p>
+                    </div>
+                    <div className="rounded-lg bg-white p-3">
+                      <p className="text-xl font-bold text-emerald-950">{linkPreview.stats.products}</p>
+                      <p className="text-xs text-emerald-700">produtos</p>
+                    </div>
+                    <div className="rounded-lg bg-white p-3">
+                      <p className="text-xl font-bold text-emerald-950">{linkPreview.stats.productsWithImages}</p>
+                      <p className="text-xs text-emerald-700">imagens</p>
+                    </div>
+                    <div className="rounded-lg bg-white p-3">
+                      <p className="text-xl font-bold text-emerald-950">{linkPreview.stats.variationLinks}</p>
+                      <p className="text-xs text-emerald-700">complementos</p>
+                    </div>
+                    <div className="rounded-lg bg-white p-3">
+                      <p className="text-xl font-bold text-emerald-950">{linkPreview.stats.deliveryRegions}</p>
+                      <p className="text-xs text-emerald-700">bairros</p>
+                    </div>
+                    <div className="rounded-lg bg-white p-3">
+                      <p className="text-xl font-bold text-emerald-950">{linkPreview.stats.banners}</p>
+                      <p className="text-xs text-emerald-700">banners</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg bg-white p-3">
+                      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Categorias</p>
+                      <div className="space-y-1">
+                        {(linkPreview.preview?.categories || []).slice(0, 6).map((category) => (
+                          <div key={category.name} className="flex justify-between gap-3 text-sm">
+                            <span className="truncate font-medium text-slate-900">{category.name}</span>
+                            <span className="shrink-0 text-slate-500">{category.products} itens</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-white p-3">
+                      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Produtos</p>
+                      <div className="space-y-1">
+                        {(linkPreview.preview?.products || []).slice(0, 6).map((product) => (
+                          <div key={`${product.category}-${product.name}`} className="flex justify-between gap-3 text-sm">
+                            <span className="truncate font-medium text-slate-900">{product.name}</span>
+                            <span className="shrink-0 text-slate-500">{formatCurrency(product.price)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </TabsContent>
 
@@ -981,10 +1144,23 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           >
             Cancelar
           </Button>
-          <Button onClick={handleImport} disabled={loading} className={activeTab !== 'text' ? "bg-purple-600 hover:bg-purple-700" : ""}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-            {loading ? loadingMessage : 'Analisar Cardápio'}
-          </Button>
+          {activeTab === 'link' && linkPreview ? (
+            <>
+              <Button variant="outline" onClick={() => applyLinkImport(false)} disabled={loading}>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <PlusCircle className="w-4 h-4 mr-2" />}
+                Somar sem apagar
+              </Button>
+              <Button onClick={() => applyLinkImport(true)} disabled={loading} className="bg-orange-600 hover:bg-orange-700">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                Substituir cardápio
+              </Button>
+            </>
+          ) : (
+            <Button onClick={handleImport} disabled={loading} className={activeTab !== 'text' ? "bg-purple-600 hover:bg-purple-700" : ""}>
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+              {loading ? loadingMessage : 'Analisar Cardápio'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
