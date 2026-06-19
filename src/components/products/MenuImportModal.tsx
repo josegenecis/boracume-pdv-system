@@ -1070,7 +1070,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
               />
               <div className="flex items-center gap-2 p-3 bg-purple-50 text-purple-800 rounded-md text-xs border border-purple-100">
                 <Wand2 className="w-4 h-4" />
-                <span>Links Brendi são importados automaticamente com produtos, imagens, complementos, bairros e banners.</span>
+                <span>Links Brendi e Anota.ai são importados automaticamente com produtos, imagens e complementos.</span>
               </div>
               {linkPreview && (
                 <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">

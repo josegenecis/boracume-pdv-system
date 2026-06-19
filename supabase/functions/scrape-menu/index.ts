@@ -35,6 +35,133 @@ const brendiImageUrl = (raw: unknown) => {
   return `https://firebasestorage.googleapis.com/v0/b/brendi-app.appspot.com/o/${encodeURIComponent(value)}?alt=media`;
 };
 
+const numberMoney = (value: unknown) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(numeric * 100) / 100;
+};
+
+const anotaSlugFromUrl = (rawUrl: string) => {
+  try {
+    const url = new URL(rawUrl);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const lojaIndex = parts.findIndex((part) => part.toLowerCase() === 'loja');
+    if (lojaIndex >= 0 && parts[lojaIndex + 1]) return parts[lojaIndex + 1];
+    return parts[parts.length - 1] || '';
+  } catch {
+    return '';
+  }
+};
+
+const anotaImageUrl = (raw: unknown) => {
+  const value = cleanText(raw);
+  if (!value || value === 'null' || value === 'undefined') return '';
+  if (value.startsWith('//')) return `https:${value}`;
+  if (/^https?:\/\//i.test(value)) return value;
+  return '';
+};
+
+async function fetchAnotaMenu(rawUrl: string) {
+  const slug = anotaSlugFromUrl(rawUrl);
+  if (!slug) throw new Error('Link do Anota AI inválido. Use o link da loja, por exemplo: https://pedido.anota.ai/loja/nome-da-loja');
+
+  const baseHeaders = {
+    'accept': 'application/json',
+    'authorization': '',
+    'referer': 'https://pedido.anota.ai/',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+  };
+
+  const tokenResponse = await fetch(`https://api.anota.ai/noauth/access//get-token/${encodeURIComponent(slug)}`, {
+    headers: baseHeaders,
+    redirect: 'follow',
+  });
+
+  if (!tokenResponse.ok) throw new Error(`Não consegui abrir o cardápio Anota AI (${tokenResponse.status}).`);
+  const tokenData = await tokenResponse.json();
+  const token = cleanText(tokenData?.token);
+  if (!token || tokenData?.success === false) {
+    throw new Error('Não consegui obter o acesso público desse cardápio Anota AI.');
+  }
+
+  const menuResponse = await fetch('https://api.anota.ai/clientauth/nm-category/menu-merchant?displaySources=DIGITAL_MENU', {
+    headers: {
+      ...baseHeaders,
+      authorization: token,
+    },
+    redirect: 'follow',
+  });
+
+  if (!menuResponse.ok) throw new Error(`Não consegui baixar os produtos do Anota AI (${menuResponse.status}).`);
+  const menuData = await menuResponse.json();
+  if (!menuData?.success || !menuData?.data?.menu?.menu) {
+    throw new Error('O Anota AI respondeu, mas não encontrei categorias e produtos nesse cardápio.');
+  }
+
+  return menuData.data;
+}
+
+function normalizeAnotaCategories(data: any) {
+  const auxCategories = new Map<string, any>();
+  for (const aux of data?.menu?.menu_aux || []) {
+    if (aux?.category_id) auxCategories.set(String(aux.category_id), aux);
+  }
+
+  const normalizeStep = (step: any) => {
+    const aux = auxCategories.get(String(step?.category || ''));
+    if (!aux) return null;
+
+    const options = (aux.itens || [])
+      .filter((item: any) => item?.title && item?.out !== true)
+      .sort((a: any, b: any) => Number(a?.order ?? 9999) - Number(b?.order ?? 9999))
+      .map((item: any) => ({
+        name: cleanText(item.title),
+        price: numberMoney(item.price ?? item.price_base ?? 0),
+      }))
+      .filter((option: any) => option.name);
+
+    if (!options.length) return null;
+
+    const maxSelections = Number(step?.max);
+    return {
+      name: cleanText(aux.internal_title) || cleanText(aux.title) || 'Adicionais',
+      required: Number(step?.min || 0) > 0,
+      max_selections: maxSelections > 0 ? maxSelections : 10,
+      options,
+    };
+  };
+
+  const categories = [...(data?.menu?.menu || [])]
+    .filter((category: any) => category?.title && category?.only_pdv !== true)
+    .sort((a: any, b: any) => Number(a?.order ?? 9999) - Number(b?.order ?? 9999))
+    .map((category: any) => ({
+      name: cleanText(category.title) || 'Geral',
+      items: (category.itens || [])
+        .filter((item: any) => item?.title)
+        .sort((a: any, b: any) => Number(a?.order ?? 9999) - Number(b?.order ?? 9999))
+        .map((item: any) => ({
+          name: cleanText(item.title),
+          description: cleanText(item.description),
+          price: numberMoney(item.price ?? item.price_base ?? 0),
+          image_url: anotaImageUrl(item.image),
+          available: item.out !== true,
+          variations: (item.next_steps || [])
+            .map(normalizeStep)
+            .filter(Boolean),
+        }))
+        .filter((item: any) => item.name),
+    }))
+    .filter((category: any) => category.items.length > 0);
+
+  if (!categories.length) throw new Error('Não encontrei produtos nesse cardápio Anota AI.');
+  return categories;
+}
+
+async function extractAnotaCategories(rawUrl: string) {
+  const data = await fetchAnotaMenu(rawUrl);
+  return normalizeAnotaCategories(data);
+}
+
 function decodeBrendiNuxtPayload(html: string) {
   const match = html.match(/<script[^>]*id=["']__NUXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
   if (!match?.[1]) throw new Error('Não encontrei os dados estruturados desse cardápio Brendi.');
@@ -234,6 +361,15 @@ Deno.serve(async (req: Request) => {
               const categories = await extractBrendiCategories(rawUrl);
               return new Response(
                 JSON.stringify({ success: true, status: 'completed', platform: 'brendi', categories }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              );
+            }
+
+            if (parsedUrl.host.toLowerCase() === 'pedido.anota.ai' || parsedUrl.host.toLowerCase().endsWith('.anota.ai')) {
+              console.log('[Start] Importação Anota AI direta no scrape-menu.');
+              const categories = await extractAnotaCategories(rawUrl);
+              return new Response(
+                JSON.stringify({ success: true, status: 'completed', platform: 'anota-ai', categories }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
               );
             }
