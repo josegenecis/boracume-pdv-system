@@ -1,30 +1,29 @@
-import { supabase } from '@/integrations/supabase/client'
+import { supabase, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from '@/integrations/supabase/client'
 
 export const invokeEdgeFunction = async (
   functionName: string,
   body: unknown,
-  options?: { timeoutMs?: number }
+  options?: { timeoutMs?: number; authToken?: string | null }
 ): Promise<{ data: any | null; status: number }> => {
-  // GARANTIR TRAILING SLASH PARA EVITAR REDIRECIONAMENTO 307 DO SUPABASE (CAUSA ERRO CORS)
-  const functionPath = functionName.endsWith('/') ? functionName : `${functionName}/`;
+  const functionPath = functionName.replace(/^\/+|\/+$/g, '');
   
   console.log(`[EdgeFunction] Invoking ${functionPath}...`);
   const startTime = Date.now();
 
   try {
-    let authHeaders: Record<string, string> = {};
+    let authToken = String(options?.authToken || '').trim();
     try {
-      let { data: sessionData } = await supabase.auth.getSession();
-      let session = sessionData?.session || null;
-      const expiresAtMs = Number(session?.expires_at || 0) * 1000;
+      if (!authToken) {
+        let { data: sessionData } = await supabase.auth.getSession();
+        let session = sessionData?.session || null;
+        const expiresAtMs = Number(session?.expires_at || 0) * 1000;
 
-      if (!session?.access_token || (expiresAtMs > 0 && expiresAtMs - Date.now() < 60_000)) {
-        const refreshed = await supabase.auth.refreshSession();
-        session = refreshed.data?.session || session;
-      }
+        if (!session?.access_token || (expiresAtMs > 0 && expiresAtMs - Date.now() < 60_000)) {
+          const refreshed = await supabase.auth.refreshSession();
+          session = refreshed.data?.session || session;
+        }
 
-      if (session?.access_token) {
-        authHeaders = { Authorization: `Bearer ${session.access_token}` };
+        authToken = String(session?.access_token || '').trim();
       }
     } catch {}
 
@@ -32,14 +31,28 @@ export const invokeEdgeFunction = async (
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const invokePromise = supabase.functions.invoke(functionPath, {
-      body: body,
-      headers: authHeaders,
-      // @ts-ignore
-      signal: controller.signal
+    const invokePromise = fetch(`${SUPABASE_URL}/functions/v1/${functionPath}`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${authToken || SUPABASE_PUBLISHABLE_KEY}`,
+        'Content-Type': 'application/json',
+        'X-Client-Info': 'boracume-app',
+      },
+      body: JSON.stringify(body ?? {}),
+      signal: controller.signal,
+    }).then(async (response) => {
+      const text = await response.text();
+      let parsed: any = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = { error: text || `HTTP ${response.status}` };
+      }
+      return { data: parsed, error: response.ok ? null : { message: parsed?.error || parsed?.message || `HTTP ${response.status}` }, status: response.status };
     });
 
-    const { data, error } = await Promise.race([
+    const { data, error, status } = await Promise.race([
       invokePromise,
       new Promise((_, reject) =>
         setTimeout(() => {
@@ -78,10 +91,10 @@ export const invokeEdgeFunction = async (
          }
        }
        const errorData = { error: detailed };
-       return { data: errorData, status: 500 };
+       return { data: errorData, status: status || 500 };
     }
 
-    return { data, status: 200 }
+    return { data, status: status || 200 }
   } catch (err: any) {
     const duration = (Date.now() - startTime) / 1000;
     console.error(`[EdgeFunction] Exception after ${duration}s:`, err);
