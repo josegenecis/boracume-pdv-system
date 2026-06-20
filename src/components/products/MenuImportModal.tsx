@@ -747,6 +747,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
       let totalProducts = 0;
       let totalImages = 0;
+      let totalProductsUpdated = 0;
       let totalAddonGroupsLinked = 0;
       let totalAddonGroupsCreated = 0;
       let totalAddonErrors = 0;
@@ -786,6 +787,60 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         }
       } catch {}
 
+      const syncProductVariations = async (productId: string, product: ImportedProduct) => {
+        if (!product.variations || product.variations.length === 0) return;
+
+        for (const v of product.variations || []) {
+          const groupName = String(v?.name || '').trim();
+          if (!groupName) continue;
+          const optionsString = normalizeOptionsToString(v?.options);
+          const optionsArr: any[] = (() => { try { return JSON.parse(optionsString); } catch { return []; } })();
+          if (!Array.isArray(optionsArr) || optionsArr.length === 0) continue;
+
+          const key = `${normalizeKey(groupName)}|${optionsString}`;
+          let globalId = globalVariationByKey.get(key);
+
+          if (!globalId) {
+            try {
+              const { data: created, error: createError } = await supabase
+                .from('global_variations')
+                .insert({
+                  user_id: user?.id,
+                  name: groupName,
+                  required: Boolean(v?.required),
+                  max_selections: Math.max(1, Number(v?.max_selections) || 1),
+                  options: optionsString,
+                  description: ''
+                })
+                .select('id')
+                .single();
+              if (!createError && created?.id) {
+                globalId = String(created.id);
+                globalVariationByKey.set(key, globalId);
+                totalAddonGroupsCreated++;
+              }
+            } catch (e) {
+              totalAddonErrors++;
+              continue;
+            }
+          }
+
+          if (globalId) {
+            try {
+              await (supabase as any)
+                .from('product_global_variation_links')
+                .upsert(
+                  { product_id: productId, global_variation_id: globalId },
+                  { onConflict: 'product_id,global_variation_id', ignoreDuplicates: true }
+                );
+              totalAddonGroupsLinked++;
+            } catch (e) {
+              totalAddonErrors++;
+            }
+          }
+        }
+      };
+
       // Salvamento no Banco (igual ao anterior)
       for (const category of categoriesToImport) {
         let categoryId: string | null = null;
@@ -814,15 +869,6 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         for (const product of category.items) {
             if (!product || !product.name) continue; // Pula produtos nulos ou sem nome
 
-            const { data: existingProduct } = await supabase
-                .from('products')
-                .select('id')
-                .eq('user_id', user?.id)
-                .eq('name', product.name)
-                .maybeSingle();
-            
-            if (existingProduct) continue;
-
             const priceVariants = (product.price_variants && product.price_variants.length > 0)
               ? product.price_variants
               : (product.variants || []);
@@ -843,6 +889,39 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                     : 0);
             const normalizedImageUrl = normalizeImageUrl(product.image_url);
             const productAvailable = product.available !== false;
+
+            const { data: existingProduct } = await supabase
+                .from('products')
+                .select('id')
+                .eq('user_id', user?.id)
+                .eq('name', product.name)
+                .maybeSingle();
+
+            if (existingProduct?.id) {
+                try {
+                  await supabase
+                    .from('products')
+                    .update({
+                      price: effectiveBasePrice,
+                      description: product.description ? product.description.toLowerCase() : '',
+                      image_url: normalizedImageUrl,
+                      category: category.name || 'Geral',
+                      category_id: categoryId,
+                      available: productAvailable,
+                      is_available: productAvailable,
+                      show_in_pdv: productAvailable,
+                      show_in_delivery: productAvailable
+                    })
+                    .eq('id', existingProduct.id)
+                    .eq('user_id', user?.id);
+                  totalProductsUpdated++;
+                } catch (updateError) {
+                  console.error('[Import] Erro ao atualizar produto existente:', product.name, updateError);
+                }
+
+                await syncProductVariations(String(existingProduct.id), product);
+                continue;
+            }
 
             const { data: newProduct, error: prodError } = await supabase
                 .from('products')
@@ -883,62 +962,12 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                     }
                 }
 
-                if (product.variations && product.variations.length > 0) {
-                    for (const v of product.variations || []) {
-                      const groupName = String(v?.name || '').trim();
-                      if (!groupName) continue;
-                      const optionsString = normalizeOptionsToString(v?.options);
-                      const optionsArr: any[] = (() => { try { return JSON.parse(optionsString); } catch { return []; } })();
-                      if (!Array.isArray(optionsArr) || optionsArr.length === 0) continue;
-
-                      const key = `${normalizeKey(groupName)}|${optionsString}`;
-                      let globalId = globalVariationByKey.get(key);
-
-                      if (!globalId) {
-                        try {
-                          const { data: created, error: createError } = await supabase
-                            .from('global_variations')
-                            .insert({
-                              user_id: user?.id,
-                              name: groupName,
-                              required: Boolean(v?.required),
-                              max_selections: Math.max(1, Number(v?.max_selections) || 1),
-                              options: optionsString,
-                              description: ''
-                            })
-                            .select('id')
-                            .single();
-                          if (!createError && created?.id) {
-                            globalId = String(created.id);
-                            globalVariationByKey.set(key, globalId);
-                            totalAddonGroupsCreated++;
-                          }
-                        } catch (e) {
-                          totalAddonErrors++;
-                          continue;
-                        }
-                      }
-
-                      if (globalId) {
-                        try {
-                          await (supabase as any)
-                            .from('product_global_variation_links')
-                            .upsert(
-                              { product_id: newProduct.id, global_variation_id: globalId },
-                              { onConflict: 'product_id,global_variation_id', ignoreDuplicates: true }
-                            );
-                          totalAddonGroupsLinked++;
-                        } catch (e) {
-                          totalAddonErrors++;
-                        }
-                      }
-                    }
-                }
+                await syncProductVariations(String(newProduct.id), product);
             }
         }
       }
 
-      if (totalProducts === 0) {
+      if (totalProducts === 0 && totalProductsUpdated === 0 && totalAddonGroupsLinked === 0) {
         throw new Error('Nenhum produto novo foi criado. Verifique se o JSON tem produtos válidos ou se esses produtos já existem no sistema.');
       }
 
@@ -946,7 +975,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       const addonsErrorsSummary = totalAddonErrors > 0 ? ` • ${totalAddonErrors} falhas em adicionais` : '';
       toast({
         title: 'Encontramos seu cardápio',
-        description: `${totalProducts} produtos encontrados. ${totalImages} imagens. ${addonsSummary}${addonsErrorsSummary}.`,
+        description: `${totalProducts} produtos novos${totalProductsUpdated > 0 ? `, ${totalProductsUpdated} atualizados` : ''}. ${totalImages} imagens. ${addonsSummary}${addonsErrorsSummary}.`,
       });
       
       onImportComplete();
