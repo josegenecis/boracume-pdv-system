@@ -12,7 +12,7 @@ const corsHeaders = {
 type Ambiente = 'producao' | 'homologacao';
 
 interface NFCeData {
-  operation: 'emitir' | 'consultar' | 'cancelar' | 'download_xml' | 'testar_conexao';
+  operation: 'emitir' | 'consultar' | 'cancelar' | 'download_xml' | 'testar_conexao' | 'validar_config';
   order_id?: string;
   cupom_id?: string;
   consumer_data?: {
@@ -56,6 +56,8 @@ serve(async (req) => {
         return await downloadXML(supabase, user.id, required(requestData.cupom_id, 'cupom_id'));
       case 'testar_conexao':
         return await testarConexaoSefaz(supabase, user.id);
+      case 'validar_config':
+        return await validarConfiguracaoFiscal(supabase, user.id);
       default:
         throw new Error('Operacao nao suportada');
     }
@@ -67,7 +69,7 @@ serve(async (req) => {
 
 async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
   const fiscalSettings = await loadFiscalSettings(supabase, userId, true);
-  validateFiscalSettingsForEmission(fiscalSettings);
+  validateFiscalSettingsForEmission(fiscalSettings, { requireCePilot: true });
   const { certInfo, sefazClient } = loadSefazClient(fiscalSettings);
 
   try {
@@ -279,7 +281,7 @@ async function cancelarNFCe(supabase: any, userId: string, cupomId: string, moti
 
 async function testarConexaoSefaz(supabase: any, userId: string) {
   const fiscalSettings = await loadFiscalSettings(supabase, userId, true);
-  validateFiscalSettingsForEmission(fiscalSettings);
+  validateFiscalSettingsForEmission(fiscalSettings, { requireCePilot: true });
   const { certInfo, sefazClient } = loadSefazClient(fiscalSettings);
   try {
     const result = await sefazClient.consultarStatusServico(
@@ -297,6 +299,44 @@ async function testarConexaoSefaz(supabase: any, userId: string) {
   } finally {
     sefazClient.close();
   }
+}
+
+async function validarConfiguracaoFiscal(supabase: any, userId: string) {
+  const fiscalSettings = await loadFiscalSettings(supabase, userId, false);
+  const checklist = buildFiscalReadiness(fiscalSettings, { requireCePilot: true });
+  let certificate: any = null;
+
+  if (fiscalSettings.certificado_a1_base64 && fiscalSettings.certificado_senha) {
+    try {
+      const certInfo = loadCertificateFromBase64(fiscalSettings.certificado_a1_base64, fiscalSettings.certificado_senha);
+      const validation = validateCertificate(certInfo, fiscalSettings.cnpj);
+      certificate = {
+        valid: validation.valid,
+        errors: validation.errors,
+        cnpj: certInfo.cnpj,
+        valid_from: certInfo.validFrom.toISOString(),
+        valid_to: certInfo.validTo.toISOString(),
+        issuer: certInfo.issuer,
+      };
+      if (!validation.valid) {
+        checklist.errors.push(...validation.errors.map((message) => `Certificado: ${message}`));
+      }
+    } catch (error) {
+      checklist.errors.push(`Certificado: ${error.message}`);
+      certificate = { valid: false, errors: [error.message] };
+    }
+  }
+
+  const ready = checklist.errors.length === 0;
+  return json({
+    success: ready,
+    ready,
+    pilot: 'CE',
+    ambiente: fiscalSettings.ambiente,
+    uf: fiscalSettings.endereco_uf,
+    checklist,
+    certificate,
+  });
 }
 
 async function downloadXML(supabase: any, userId: string, cupomId: string) {
@@ -331,14 +371,54 @@ function loadSefazClient(fiscalSettings: any) {
   return { certInfo, sefazClient: new SefazClient(certInfo) };
 }
 
-function validateFiscalSettingsForEmission(settings: any) {
+function validateFiscalSettingsForEmission(settings: any, options: { requireCePilot?: boolean } = {}) {
+  const readiness = buildFiscalReadiness(settings, options);
+  if (readiness.errors.length) {
+    throw new Error(`Configuracao fiscal incompleta: ${readiness.errors.join('; ')}`);
+  }
+}
+
+function buildFiscalReadiness(settings: any, options: { requireCePilot?: boolean } = {}) {
+  const errors: string[] = [];
+  const warnings: string[] = [];
   const requiredFields = [
     'cnpj', 'razao_social', 'endereco_logradouro', 'endereco_numero', 'endereco_bairro',
     'endereco_municipio', 'endereco_uf', 'endereco_cep', 'codigo_municipio',
-    'nfce_serie', 'csc_id', 'csc_token',
+    'nfce_serie', 'nfce_numero_atual', 'csc_id', 'csc_token',
   ];
-  const missing = requiredFields.filter((field) => !String(settings[field] || '').trim());
-  if (missing.length) throw new Error(`Configuracao fiscal incompleta: ${missing.join(', ')}`);
+  for (const field of requiredFields) {
+    if (!String(settings[field] || '').trim()) errors.push(`Campo obrigatorio ausente: ${field}`);
+  }
+
+  const uf = String(settings.endereco_uf || '').toUpperCase();
+  if (options.requireCePilot && uf !== 'CE') {
+    errors.push('Piloto fiscal liberado apenas para empresas do Ceara (UF CE)');
+  }
+  if (uf === 'CE') {
+    const codigoMunicipio = onlyDigits(settings.codigo_municipio);
+    if (codigoMunicipio.length !== 7 || !codigoMunicipio.startsWith('23')) {
+      errors.push('Codigo do municipio do Ceara deve ter 7 digitos e comecar com 23');
+    }
+    if (!onlyDigits(settings.inscricao_estadual)) {
+      errors.push('Inscricao Estadual e obrigatoria para NFC-e no piloto CE');
+    }
+  }
+
+  const cnpj = onlyDigits(settings.cnpj);
+  if (cnpj.length !== 14) errors.push('CNPJ deve conter 14 digitos');
+  const serie = Number(settings.nfce_serie);
+  if (!Number.isInteger(serie) || serie < 1 || serie > 999) errors.push('Serie NFC-e deve ser um numero entre 1 e 999');
+  const nextNumber = Number(settings.nfce_numero_atual);
+  if (!Number.isInteger(nextNumber) || nextNumber < 1) errors.push('Proximo numero da NFC-e deve ser maior que zero');
+  if (!String(settings.ambiente || '').match(/^(homologacao|producao)$/)) errors.push('Ambiente fiscal invalido');
+  if (!onlyDigits(settings.csc_id)) errors.push('CSC ID deve ser numerico');
+  if (String(settings.csc_token || '').trim().length < 8) warnings.push('Confira se o CSC Token esta completo antes de emitir em producao');
+  if (!settings.certificado_a1_base64 || !settings.certificado_senha) errors.push('Certificado A1 e senha sao obrigatorios');
+  if (settings.ambiente === 'producao') {
+    warnings.push('Producao CE exige credenciamento NFC-e ativo na Sefaz e CSC de producao. Teste primeiro em homologacao.');
+  }
+
+  return { errors, warnings };
 }
 
 async function getNextNFCeNumber(supabase: any, userId: string, serie: string): Promise<number> {

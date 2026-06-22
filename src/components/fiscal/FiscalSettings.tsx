@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Receipt, Settings, FileText, Upload, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Receipt, Settings, FileText, Upload, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -62,6 +62,24 @@ type CnpjRegistrationData = {
   cep?: string;
   codigo_municipio?: string;
   inscricao_estadual?: string;
+};
+
+type FiscalReadiness = {
+  ready: boolean;
+  pilot?: string;
+  ambiente?: string;
+  uf?: string;
+  checklist?: {
+    errors?: string[];
+    warnings?: string[];
+  };
+  certificate?: {
+    valid?: boolean;
+    errors?: string[];
+    cnpj?: string;
+    valid_from?: string;
+    valid_to?: string;
+  } | null;
 };
 
 const onlyDigits = (value?: string) => String(value || '').replace(/\D/g, '');
@@ -303,6 +321,7 @@ const FiscalSettings: React.FC = () => {
   const [certificateInfo, setCertificateInfo] = useState<ParsedCertificateInfo | null>(null);
   const [certificateAutofillLoading, setCertificateAutofillLoading] = useState(false);
   const [nfceNumeroRaw, setNfceNumeroRaw] = useState('1');
+  const [readiness, setReadiness] = useState<FiscalReadiness | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -457,7 +476,7 @@ const FiscalSettings: React.FC = () => {
     }
   };
 
-  const saveSettings = async () => {
+  const saveSettings = async (): Promise<boolean> => {
     try {
       setLoading(true);
 
@@ -468,7 +487,7 @@ const FiscalSettings: React.FC = () => {
           description: "Preencha todos os campos obrigatórios.",
           variant: "destructive"
         });
-        return;
+        return false;
       }
 
       const settingsData = {
@@ -501,13 +520,50 @@ const FiscalSettings: React.FC = () => {
 
       // Reload settings to get the ID if it was a new insert
       if (!settings.id) {
-        loadFiscalSettings();
+        await loadFiscalSettings();
       }
+      return true;
     } catch (error: any) {
       console.error('Erro ao salvar:', error);
       toast({
         title: "Erro",
         description: "Erro ao salvar configurações fiscais.",
+        variant: "destructive"
+      });
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validateFiscalReadiness = async () => {
+    try {
+      setLoading(true);
+
+      if (!settings.id) {
+        const saved = await saveSettings();
+        if (!saved) return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('nfce-operations', {
+        body: { operation: 'validar_config' }
+      });
+
+      if (error) throw error;
+      setReadiness(data as FiscalReadiness);
+
+      toast({
+        title: data?.ready ? 'Fiscal CE pronto para teste' : 'Ainda falta ajustar o fiscal',
+        description: data?.ready
+          ? 'A configuração passou na validação inicial do piloto Ceará.'
+          : (data?.checklist?.errors?.[0] || 'Veja os pontos pendentes no checklist.'),
+        variant: data?.ready ? 'default' : 'destructive'
+      });
+    } catch (error: any) {
+      setReadiness(null);
+      toast({
+        title: "Erro na validação fiscal",
+        description: error.message || "Não foi possível validar as configurações fiscais.",
         variant: "destructive"
       });
     } finally {
@@ -520,7 +576,8 @@ const FiscalSettings: React.FC = () => {
       setLoading(true);
       
       if (!settings.id) {
-        await saveSettings();
+        const saved = await saveSettings();
+        if (!saved) return;
       }
 
       const { data, error } = await supabase.functions.invoke('nfce-operations', {
@@ -611,6 +668,78 @@ const FiscalSettings: React.FC = () => {
     </div>
   );
 
+  const renderCeReadinessSection = () => {
+    const errors = readiness?.checklist?.errors || [];
+    const warnings = readiness?.checklist?.warnings || [];
+    const isCe = settings.endereco_uf === 'CE';
+
+    return (
+      <div className={`rounded-2xl border p-4 ${readiness?.ready ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="flex gap-3">
+            {readiness?.ready ? (
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-700" />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+            )}
+            <div>
+              <h3 className="text-lg font-medium">Piloto NFC-e Ceará</h3>
+              <p className="mt-1 text-sm text-slate-700">
+                Este primeiro emissor próprio está preparado para validar empresas do CE antes de testar envio na Sefaz.
+              </p>
+              {!isCe && (
+                <p className="mt-2 text-sm font-medium text-amber-800">
+                  Selecione UF CE para usar o piloto fiscal sem gateway.
+                </p>
+              )}
+            </div>
+          </div>
+          <Button onClick={validateFiscalReadiness} disabled={loading} variant="outline">
+            Validar fiscal CE
+          </Button>
+        </div>
+
+        {readiness && (
+          <div className="mt-4 space-y-3 text-sm">
+            <div className="rounded-xl bg-white/80 p-3">
+              <div className="font-semibold text-slate-900">
+                Status: {readiness.ready ? 'Pronto para teste em homologação' : 'Ajustes pendentes'}
+              </div>
+              <div className="text-slate-600">
+                UF: {readiness.uf || '--'} | Ambiente: {readiness.ambiente || '--'} | Piloto: {readiness.pilot || 'CE'}
+              </div>
+            </div>
+
+            {errors.length > 0 && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-800">
+                <div className="font-semibold">Corrigir antes de emitir</div>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {errors.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {warnings.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
+                <div className="font-semibold">Atenção</div>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {warnings.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {readiness.certificate && (
+              <div className="rounded-xl border border-slate-200 bg-white/80 p-3 text-slate-700">
+                Certificado: {readiness.certificate.valid ? 'válido' : 'com erro'}
+                {readiness.certificate.cnpj ? ` | CNPJ ${formatCnpj(readiness.certificate.cnpj)}` : ''}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -633,6 +762,7 @@ const FiscalSettings: React.FC = () => {
           {settings.ativo && (
             <>
               {renderCertificateImportSection()}
+              {renderCeReadinessSection()}
 
               {/* Dados da Empresa */}
               <div className="space-y-4">
