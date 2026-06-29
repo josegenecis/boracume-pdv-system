@@ -10,12 +10,21 @@ export function minutesSince(date: string) {
 }
 
 export function formatMinutes(value: number) {
-  if (value < 60) {
-    return `${value} min`;
+  const totalMinutes = Math.max(0, Math.floor(value || 0));
+  if (totalMinutes < 1) {
+    return 'agora';
   }
-  const hours = Math.floor(value / 60);
-  const minutes = value % 60;
-  return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m`;
+  }
+  const totalHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (totalHours < 24) {
+    return minutes > 0 ? `${totalHours}h ${minutes}m` : `${totalHours}h`;
+  }
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
 }
 
 export function formatTime(value: string) {

@@ -92,6 +92,157 @@ async function findIngredient(supabase: any, userId: string, name: string) {
   return fuzzy || null;
 }
 
+function looksLikeSaleProduct(item: any) {
+  const category = cleanName(item?.category).toLowerCase();
+  const subcategory = cleanName(item?.subcategory).toLowerCase();
+  const name = cleanName(item?.normalized_name || item?.description).toLowerCase();
+  const text = `${category} ${subcategory} ${name}`;
+
+  const stockOnlyWords = [
+    "insumo",
+    "ingrediente",
+    "limpeza",
+    "operacional",
+    "embalagem",
+    "embalagens",
+    "descartavel",
+    "descartaveis",
+    "fruta",
+    "frutas",
+    "calda",
+    "cobertura",
+    "topping",
+    "complemento",
+    "massa",
+    "farinha",
+    "oleo",
+    "acucar",
+    "leite condensado",
+  ];
+  const resaleWords = [
+    "bebida",
+    "bebidas",
+    "refrigerante",
+    "suco",
+    "agua",
+    "cerveja",
+    "energetico",
+    "bomboniere",
+    "chocolate",
+    "biscoito",
+    "salgadinho",
+    "produto industrializado",
+    "mercadoria",
+    "revenda",
+  ];
+
+  if (resaleWords.some((word) => text.includes(word))) return true;
+  if (stockOnlyWords.some((word) => text.includes(word))) return false;
+  return false;
+}
+
+async function ensureCategory(supabase: any, userId: string, name: string) {
+  const categoryName = String(name || "Mercadorias").trim() || "Mercadorias";
+  const { data: existing } = await supabase
+    .from("categories")
+    .select("id, name")
+    .eq("user_id", userId)
+    .ilike("name", categoryName)
+    .limit(1)
+    .maybeSingle();
+  if (existing) return existing;
+
+  const { data: created, error } = await supabase
+    .from("categories")
+    .insert([{
+      user_id: userId,
+      name: categoryName,
+      description: "Categoria criada automaticamente pela nota inteligente.",
+    }])
+    .select("id, name")
+    .single();
+  if (error) throw error;
+  return created;
+}
+
+async function findProduct(supabase: any, userId: string, name: string) {
+  const cleaned = cleanName(name);
+  if (!cleaned) return null;
+  const { data } = await supabase
+    .from("products")
+    .select("*")
+    .eq("user_id", userId)
+    .ilike("name", cleaned)
+    .limit(1)
+    .maybeSingle();
+  if (data) return data;
+
+  const firstWord = cleaned.split(" ").filter((word) => word.length > 2)[0];
+  if (!firstWord) return null;
+  const { data: fuzzy } = await supabase
+    .from("products")
+    .select("*")
+    .eq("user_id", userId)
+    .ilike("name", `%${firstWord}%`)
+    .limit(1)
+    .maybeSingle();
+  return fuzzy || null;
+}
+
+async function upsertSaleProductFromInvoice(supabase: any, userId: string, item: any) {
+  if (!looksLikeSaleProduct(item)) return null;
+
+  const category = await ensureCategory(supabase, userId, item.category || "Mercadorias");
+  const quantity = Math.max(1, Math.floor(numberValue(item.quantity, 1)));
+  const costPrice = numberValue(item.unit_price, 0);
+  let product = await findProduct(supabase, userId, item.normalized_name);
+
+  if (!product) {
+    const suggestedPrice = Number((costPrice > 0 ? costPrice * 1.8 : 0).toFixed(2));
+    const { data: created, error } = await supabase
+      .from("products")
+      .insert([{
+        user_id: userId,
+        name: item.normalized_name,
+        description: item.description || item.normalized_name,
+        category: category.name,
+        category_id: category.id,
+        price: suggestedPrice,
+        available: true,
+        is_available: true,
+        show_in_pdv: true,
+        show_in_delivery: false,
+        track_stock: true,
+        stock_quantity: quantity,
+        low_stock_threshold: 5,
+      }])
+      .select("*")
+      .single();
+    if (error) throw error;
+    return created;
+  }
+
+  const nextStock = Math.max(0, Math.floor(numberValue(product.stock_quantity, 0) + quantity));
+  const { data: updated, error } = await supabase
+    .from("products")
+    .update({
+      category: product.category || category.name,
+      category_id: product.category_id || category.id,
+      track_stock: true,
+      stock_quantity: nextStock,
+      low_stock_threshold: Math.max(1, Math.floor(numberValue(product.low_stock_threshold, 5))),
+      available: product.available !== false,
+      is_available: product.is_available !== false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", product.id)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return updated || product;
+}
+
 async function analyzeInvoice(supabase: any, userId: string, body: any) {
   const mimeType = String(body.mimeType || body.mime_type || "image/jpeg");
   const fileBase64 = String(body.fileBase64 || body.file_base64 || "").replace(/^data:[^,]+,/, "");
@@ -327,6 +478,8 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
         amount: totalAmount,
         category: importRow.expense_category || "insumos",
         expense_date: importRow.invoice_date || todayIso(),
+        due_date: importRow.invoice_date || todayIso(),
+        status: "pending",
         receipt_url: importRow.receipt_url,
       }])
       .select("id")
@@ -412,7 +565,31 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
           .eq("id", item.id)
           .eq("user_id", userId);
       }
-      stockResults.push({ item: item.normalized_name, ingredient_id: ingredient.id, quantity: item.quantity });
+
+      const product = await upsertSaleProductFromInvoice(supabase, userId, item);
+      if (product?.id && item.id) {
+        await supabase
+          .from("smart_invoice_import_items")
+          .update({ product_id: product.id })
+          .eq("id", item.id)
+          .eq("user_id", userId);
+
+        await supabase
+          .from("inventory_movements")
+          .insert([{
+            user_id: userId,
+            product_id: product.id,
+            type: "purchase",
+            quantity: Math.max(1, Math.floor(numberValue(item.quantity, 1))),
+          }]);
+      }
+
+      stockResults.push({
+        item: item.normalized_name,
+        ingredient_id: ingredient.id,
+        product_id: product?.id || null,
+        quantity: item.quantity,
+      });
     }
   }
 
@@ -445,7 +622,7 @@ serve(async (req) => {
     if (operation === "analyze") return await analyzeInvoice(supabase, user.id, body);
     if (operation === "commit") return await commitInvoice(supabase, user.id, body);
     throw new Error("Operacao nao suportada.");
-  } catch (error) {
+  } catch (error: any) {
     console.error("smart-invoice-import error:", error);
     return json({ ok: false, error: error?.message || "Erro interno" }, 400);
   }

@@ -310,8 +310,8 @@ const orderStatusLabel: Record<string, string> = {
   accepted: 'aceito',
   preparing: 'em preparo',
   ready: 'pronto',
-  in_delivery: 'entregue no balcao',
-  delivered: 'finalizado',
+  in_delivery: 'levou para mesa',
+  delivered: 'mesa atendida',
   completed: 'finalizado',
   cancelled: 'cancelado',
 }
@@ -553,7 +553,7 @@ async function listTransferTables(supabase: any, restaurantId: string, currentSe
 async function getServiceChargeSettings(supabase: any, restaurantId: string) {
   const { data, error } = await supabase
     .from('waiter_service_charge_settings')
-    .select('enabled, percentage, tax_withhold_percent')
+    .select('enabled, auto_apply, percentage, tax_withhold_percent')
     .eq('user_id', restaurantId)
     .maybeSingle()
 
@@ -563,6 +563,7 @@ async function getServiceChargeSettings(supabase: any, restaurantId: string) {
 
   return {
     enabled: data?.enabled !== false,
+    autoApply: Boolean(data?.auto_apply),
     percentage: Math.max(0, Number(data?.percentage ?? 10)),
     taxWithholdPercent: Math.max(0, Number(data?.tax_withhold_percent ?? 0)),
   }
@@ -1577,6 +1578,24 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'time_clock_punch') {
       return punchTimeClock(supabase, waiterSession, body)
+    }
+
+    if (action === 'payment_settings') {
+      const { data, error } = await supabase
+        .from('pix_settings')
+        .select('enabled, mp_pdv_enabled, mp_waiter_enabled')
+        .eq('user_id', waiterSession.profile.restaurantId)
+        .maybeSingle()
+
+      if (error && error.code !== 'PGRST116') {
+        console.warn('[waiter-web] pix_settings unavailable:', error?.message || error)
+      }
+
+      return ok({
+        pixEnabled: data?.enabled === true,
+        mpPdvEnabled: data?.mp_pdv_enabled === true,
+        mpWaiterPixEnabled: data?.enabled === true && data?.mp_waiter_enabled === true,
+      })
     }
 
     if (action === 'create_table') {

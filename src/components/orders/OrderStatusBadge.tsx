@@ -15,9 +15,10 @@ export type OrderStatusType =
 interface OrderStatusBadgeProps {
   status: OrderStatusType;
   className?: string;
+  isTableOrder?: boolean;
 }
 
-const OrderStatusBadge: React.FC<OrderStatusBadgeProps> = ({ status, className = "" }) => {
+const OrderStatusBadge: React.FC<OrderStatusBadgeProps> = ({ status, className = "", isTableOrder = false }) => {
   const getStatusConfig = (status: OrderStatusType) => {
     switch (status) {
       case 'new':
@@ -31,8 +32,10 @@ const OrderStatusBadge: React.FC<OrderStatusBadgeProps> = ({ status, className =
       case 'ready':
         return { label: 'Pronto', color: 'bg-amber-100 text-amber-800 border-amber-300' };
       case 'in_delivery':
+        if (isTableOrder) return { label: 'Levou para Mesa', color: 'bg-purple-100 text-purple-800 border-purple-300' };
         return { label: 'Saiu para Entrega', color: 'bg-purple-100 text-purple-800 border-purple-300' };
       case 'delivered':
+        if (isTableOrder) return { label: 'Mesa Atendida', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
         return { label: 'Finalizado', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
       case 'cancelled':
         return { label: 'Cancelado', color: 'bg-red-100 text-red-800 border-red-300' };

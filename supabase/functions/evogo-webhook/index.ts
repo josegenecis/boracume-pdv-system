@@ -113,6 +113,19 @@ function isLikelyBotEcho(text: string) {
     value.includes('cardapio completo');
 }
 
+function isMessageFromRestaurant(item: any) {
+  const key = item?.key || item?.data?.key || {};
+  return Boolean(
+    key?.fromMe ??
+    item?.fromMe ??
+    item?.data?.fromMe ??
+    item?.Info?.IsFromMe ??
+    item?.data?.Info?.IsFromMe ??
+    item?.info?.isFromMe ??
+    item?.data?.info?.isFromMe
+  );
+}
+
 serve(async (req) => {
   const debugMode = new URL(req.url).searchParams.get('debug') === '1';
   if (req.method === 'OPTIONS') {
@@ -255,7 +268,7 @@ serve(async (req) => {
           item?.data?.Info?.Chat ||
           ''
         );
-        const fromMe = Boolean(key?.fromMe ?? item?.fromMe ?? item?.data?.fromMe ?? item?.Info?.IsFromMe ?? item?.data?.Info?.IsFromMe);
+        const fromMe = isMessageFromRestaurant(item);
         return fromMe && remoteJid && !remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast');
       });
 
@@ -270,7 +283,7 @@ serve(async (req) => {
           primaryOutgoing?.data?.Info?.Chat ||
           ''
         );
-        const outgoingText = Array.from(new Set(outgoingMessages
+        let outgoingText = Array.from(new Set(outgoingMessages
           .map((outgoing: any) => {
             const message =
               outgoing?.message ||
@@ -288,6 +301,7 @@ serve(async (req) => {
           .filter(Boolean)))
           .join('\n');
         const phone = extractPhoneFromRemoteJid(remoteJid);
+        if (!outgoingText) outgoingText = '[mensagem enviada pelo restaurante]';
 
         if (phone && outgoingText && !isLikelyBotEcho(outgoingText)) {
           const pauseResult = await pauseRestaurantBotForConversation({
@@ -318,7 +332,7 @@ serve(async (req) => {
           item?.data?.Info?.Chat ||
           ''
         );
-        const fromMe = Boolean(key?.fromMe ?? item?.fromMe ?? item?.data?.fromMe ?? item?.Info?.IsFromMe ?? item?.data?.Info?.IsFromMe);
+        const fromMe = isMessageFromRestaurant(item);
         return !fromMe && remoteJid && !remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast');
       });
 

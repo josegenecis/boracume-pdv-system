@@ -26,7 +26,8 @@
     "test:menu-perf": "playwright test tests/menu-cart-perf.spec.ts",
     "test:checkout": "playwright test tests/checkout-pix.spec.ts tests/menu-addons-perf.spec.ts",
     "dist:bridge": "node scripts/build-bridge.cjs",
-    "pack:bridge": "node scripts/build-bridge.cjs --dir"
+    "pack:bridge": "node scripts/build-bridge.cjs --dir",
+    "nfce:validate": "node scripts/validate-nfce-schema.cjs"
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^7.1.1",
@@ -66,6 +67,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@supabase/supabase-js": "^2.56.0",
     "@tanstack/react-query": "^5.56.2",
+    "@xmldom/xmldom": "^0.9.10",
     "axios": "^1.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

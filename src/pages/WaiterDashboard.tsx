@@ -22,6 +22,7 @@ import {
 import { WaiterBottomNav } from '@/components/waiter-web/WaiterBottomNav';
 import { WaiterEmptyState } from '@/components/waiter-web/WaiterEmptyState';
 import { StoneIntegrationPanel } from '@/components/waiter-web/StoneIntegrationPanel';
+import { formatElapsedMinutes } from '@/utils/elapsedTime';
 import {
   Armchair,
   ChefHat,
@@ -424,7 +425,14 @@ const WaiterDashboard = () => {
                     </div>
 
                     <div className="flex flex-1 items-center justify-center">
-                      <div className="text-4xl font-semibold leading-none sm:text-5xl">{table.number}</div>
+                      <div className="text-center">
+                        <div className="text-4xl font-semibold leading-none sm:text-5xl">{table.number}</div>
+                        {table.status !== 'free' ? (
+                          <div className="mt-1 text-[10px] font-black uppercase tracking-[0.08em] opacity-80 sm:text-xs">
+                            {formatElapsedMinutes(table.openMinutes)}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 );

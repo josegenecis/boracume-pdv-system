@@ -10,6 +10,7 @@ export interface SefazResponse {
   xmlRetorno: string;
   xmlEnviado?: string;
   digestValue?: string;
+  qrCodeUrl?: string;
   chaveAcesso?: string;
   rawStatus?: string;
 }

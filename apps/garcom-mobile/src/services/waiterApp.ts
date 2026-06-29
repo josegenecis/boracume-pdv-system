@@ -402,14 +402,34 @@ export async function recordPayment(
   _operator: OperatorProfile,
 ) {
   const session = await requireStoredSession();
+  let payments: Array<{ accountId: string; method: PaymentMethod; amount: number; provider: string; status: string; date: string }> = [];
+
+  if (accountId) {
+    payments = [{ accountId, method, amount, provider: 'manual', status: 'approved', date: new Date().toISOString() }];
+  } else {
+    const currentSession = await getSessionDetails(sessionId);
+    payments = (currentSession.accounts || [])
+      .map((account) => ({
+        accountId: account.id,
+        method,
+        amount: Number((account as any).dueAmount ?? account.total ?? 0),
+        provider: 'manual',
+        status: 'approved',
+        date: new Date().toISOString(),
+      }))
+      .filter((payment) => payment.accountId && payment.amount > 0);
+  }
+
+  if (!payments.length) {
+    throw new Error('Nao encontrei saldo em aberto para receber.');
+  }
+
   await invokeWaiterFunction(
     'waiter-web',
     {
-      action: 'record_payment',
+      action: 'record_payments',
       sessionId,
-      accountId,
-      amount,
-      method,
+      payments,
     },
     session.token,
   );

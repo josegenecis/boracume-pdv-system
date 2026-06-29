@@ -70,6 +70,120 @@ class PrinterService extends EventEmitter {
     return String(method || 'N/A').toUpperCase().replace(/_/g, ' ');
   }
 
+  normalizeNfcePrintData(data = {}) {
+    const raw = data.nfce || data.fiscal || data.nfce_data || null;
+    if (!raw || typeof raw !== 'object') return null;
+    const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const decodeXmlEntities = (value) => String(value || '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+    const extractQrCodeFromXml = (value) => {
+      const match = String(value || '').match(/<qrCode>([\s\S]*?)<\/qrCode>/i);
+      return match ? clean(decodeXmlEntities(match[1])) : '';
+    };
+    const extractAccessKeyFromXml = (value) => {
+      const xml = String(value || '');
+      const idMatch = xml.match(/<infNFe\b[^>]*\bId=["']NFe(\d{44})["']/i);
+      if (idMatch?.[1]) return idMatch[1];
+      const keyMatch = xml.match(/<chNFe>(\d{44})<\/chNFe>/i);
+      return keyMatch?.[1] || '';
+    };
+    const extractQrAccessKey = (value) => {
+      const match = String(value || '').match(/[?&]p=([^&\s]+)/);
+      if (!match) return '';
+      return decodeURIComponent(match[1]).replace(/%7C/gi, '|').split('|')[0]?.replace(/\D/g, '').slice(0, 44) || '';
+    };
+    const xmlContent = clean(raw.xml_content || raw.xmlContent || raw.xml_enviado || raw.xmlEnviado || raw.xml_autorizado || raw.xmlAutorizado);
+    const numero = clean(raw.numero || raw.number || raw.nfce_number);
+    const serie = clean(raw.serie || raw.series || raw.nfce_serie || '1');
+    const protocolo = clean(raw.protocolo || raw.protocolo_autorizacao || raw.protocol);
+    const chave = clean(raw.chave_acesso || raw.access_key || raw.chave || extractAccessKeyFromXml(xmlContent));
+    let qrCodeUrl = clean(extractQrCodeFromXml(xmlContent) || raw.qr_code_url || raw.qrCodeUrl || raw.qrcode_url || raw.qr_url);
+    const ambiente = clean(raw.ambiente || raw.environment);
+    if (ambiente && ambiente !== 'producao' && qrCodeUrl.includes('://nfce.sefaz.ce.gov.br/')) {
+      qrCodeUrl = qrCodeUrl.replace('://nfce.sefaz.ce.gov.br/', '://nfceh.sefaz.ce.gov.br/');
+    }
+    const qrAccessKey = extractQrAccessKey(qrCodeUrl);
+    const accessKey = chave.replace(/\D/g, '').slice(0, 44);
+    if (accessKey && qrAccessKey && accessKey !== qrAccessKey) {
+      console.warn('NFC-e QR Code ignorado: chave do QR diferente da chave autorizada.', { accessKey, qrAccessKey });
+      qrCodeUrl = '';
+    }
+    if (!numero && !protocolo && !chave && !qrCodeUrl) return null;
+    return { numero, serie, protocolo, chave, qrCodeUrl, ambiente };
+  }
+
+  formatAccessKeyForPrint(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 44);
+    if (!digits) return '';
+    return (digits.match(/.{1,4}/g) || [digits]).join(' ');
+  }
+
+  getNfceConsultaBaseUrl(qrCodeUrl) {
+    const value = String(qrCodeUrl || '').replace(/\s+/g, ' ').trim();
+    if (!value) return '';
+    const queryIndex = value.indexOf('?');
+    return queryIndex >= 0 ? value.slice(0, queryIndex) : value;
+  }
+
+  getNfceQrCodePayloadUrl(qrCodeUrl) {
+    return String(qrCodeUrl || '').replace(/\s+/g, ' ').trim().replace(/%7C/gi, '|');
+  }
+
+  printWrappedChunks(printer, value, chunkSize) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return;
+    const size = Math.max(8, Number(chunkSize) || 24);
+    for (let i = 0; i < text.length; i += size) {
+      printer.println(text.slice(i, i + size));
+    }
+  }
+
+  printNfceBlock(printer, data, section) {
+    const nfce = this.normalizeNfcePrintData(data);
+    if (!nfce) return;
+
+    const width = this.getSectionWidth(section);
+    printer.drawLine();
+    printer.alignCenter();
+    printer.bold(true);
+    printer.println('CUPOM FISCAL NFC-e');
+    printer.bold(false);
+    if (nfce.numero) printer.println(`NFC-e ${nfce.numero}${nfce.serie ? ` / Serie ${nfce.serie}` : ''}`);
+    if (nfce.protocolo) printer.println(`Protocolo: ${nfce.protocolo}`);
+    if (nfce.ambiente && nfce.ambiente !== 'producao') {
+      printer.bold(true);
+      printer.println(`AMBIENTE: ${nfce.ambiente.toUpperCase()}`);
+      printer.bold(false);
+    }
+    printer.alignLeft();
+    if (nfce.chave) {
+      printer.alignCenter();
+      printer.bold(true);
+      printer.println('CHAVE DE ACESSO');
+      printer.bold(false);
+      printer.alignLeft();
+      this.printWrappedChunks(printer, this.formatAccessKeyForPrint(nfce.chave), width <= 32 ? 22 : 28);
+    }
+    if (nfce.qrCodeUrl) {
+      printer.alignCenter();
+      try {
+        printer.printQR(this.getNfceQrCodePayloadUrl(nfce.qrCodeUrl), {
+          cellSize: width <= 32 ? 4 : 5,
+          correction: 'M',
+        });
+      } catch (error) {
+        console.warn('Falha ao imprimir QR Code NFC-e nativo:', error?.message || error);
+      }
+      printer.alignLeft();
+      printer.println('Consulta pela chave:');
+      this.printWrappedChunks(printer, this.getNfceConsultaBaseUrl(nfce.qrCodeUrl), width <= 32 ? 22 : 28);
+    }
+  }
+
   async connectPrinter(deviceId, options = {}) {
     try {
       // Verificar se já está conectado
@@ -544,8 +658,12 @@ class PrinterService extends EventEmitter {
     printer.alignCenter();
     printer.drawLine();
     printer.bold(true);
+
+    this.printNfceBlock(printer, data, section);
     
     if (data.payment_method) {
+      printer.alignCenter();
+      printer.bold(true);
       printer.println(`Pagamento: ${this.formatPaymentMethodLabel(data.payment_method, data)}`);
     }
     

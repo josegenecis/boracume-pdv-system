@@ -15,8 +15,7 @@ import { colors, radius, spacing, typography } from '../config/theme';
 import { useAuthSession } from '../contexts/AuthSessionContext';
 import { formatCpf } from '../services/waiterApp';
 
-const appMark = require('../../assets/app-garcom.png');
-const wordmark = require('../../assets/logo-boracume.png');
+const loginLogo = require('../../assets/login-logo.png');
 
 export function LoginScreen() {
   const { signIn } = useAuthSession();
@@ -48,11 +47,7 @@ export function LoginScreen() {
             <View style={styles.heroGlowLarge} />
             <View style={styles.heroGlowSmall} />
 
-            <View style={styles.appMarkWrap}>
-              <Image source={appMark} style={styles.appMark} resizeMode="contain" />
-            </View>
-
-            <Image source={wordmark} style={styles.wordmark} resizeMode="contain" />
+            <Image source={loginLogo} style={styles.loginLogo} resizeMode="contain" />
 
             <View style={styles.badge}>
               <Text style={styles.badgeText}>App Garcom</Text>
@@ -155,26 +150,10 @@ const styles = StyleSheet.create({
     borderRadius: 63,
     backgroundColor: 'rgba(255, 100, 0, 0.14)',
   },
-  appMarkWrap: {
-    width: 156,
-    height: 156,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: 'rgba(0, 0, 0, 0.28)',
-    shadowOpacity: 0.22,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 7,
-  },
-  appMark: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 36,
-  },
-  wordmark: {
-    width: '88%',
-    height: 94,
+  loginLogo: {
+    width: '92%',
+    maxWidth: 300,
+    height: 150,
   },
   badge: {
     borderRadius: radius.pill,

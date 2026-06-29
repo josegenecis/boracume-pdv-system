@@ -1,6 +1,33 @@
 {
   "headers": [
     {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate"
+        }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         {
@@ -27,6 +54,20 @@
     }
   ],
   "routes": [
+    {
+      "src": "^/sw\\.js$",
+      "headers": {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate"
+      },
+      "dest": "/sw.js"
+    },
+    {
+      "src": "^/manifest\\.json$",
+      "headers": {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate"
+      },
+      "dest": "/manifest.json"
+    },
     {
       "src": "^/(.*)$",
       "has": [{ "type": "host", "value": "boracume.com" }],

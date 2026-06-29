@@ -117,6 +117,7 @@ Deno.serve(async (req) => {
       CREATE TABLE IF NOT EXISTS public.waiter_service_charge_settings (
         user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
         enabled boolean NOT NULL DEFAULT true,
+        auto_apply boolean NOT NULL DEFAULT false,
         percentage numeric(6, 2) NOT NULL DEFAULT 10,
         tax_withhold_percent numeric(6, 2) NOT NULL DEFAULT 0,
         updated_at timestamptz NOT NULL DEFAULT now()

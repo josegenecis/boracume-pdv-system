@@ -37,6 +37,7 @@ import {
   requestWaiterCheck,
   sendAllWaiterSessionItems,
   sendWaiterAccountItems,
+  getWaiterPaymentSettings,
   startWaiterPixCheckout,
   TableAccount,
   TableSession,
@@ -53,6 +54,7 @@ import { WaiterStatusBadge } from '@/components/waiter-web/WaiterStatusBadge';
 import { StoneIntegrationPanel } from '@/components/waiter-web/StoneIntegrationPanel';
 import { stoneProvider } from '@/services/payments/stoneProvider';
 import { enqueueOfflinePayment, syncOfflinePayments } from '@/services/payments/offlinePaymentQueue';
+import { formatElapsedSince } from '@/utils/elapsedTime';
 import {
   ArrowLeft,
   Check,
@@ -111,13 +113,17 @@ const buildOptionLabel = (groupName: string, optionName: string) => `${groupName
 
 const paymentMethodLabel: Record<PaymentMethod, string> = {
   cash: 'Dinheiro',
-  pix: 'PIX Stone',
-  debit: 'Debito Stone',
-  credit: 'Credito Stone',
+  pix: 'PIX',
+  debit: 'Debito',
+  credit: 'Credito',
   card: 'Cartao',
 };
 
 const stonePaymentMethods: PaymentMethod[] = ['pix', 'debit', 'credit'];
+
+const shouldAutoApplyServiceCharge = (settings?: TableSession['serviceChargeSettings']) => {
+  return Boolean(settings?.enabled && settings?.autoApply && Number(settings?.percentage || 0) > 0);
+};
 
 const WaiterSessionPage = () => {
   const { sessionId = '' } = useParams();
@@ -148,6 +154,7 @@ const WaiterSessionPage = () => {
   const [splitPeople, setSplitPeople] = useState('2');
   const [serviceChargeAccepted, setServiceChargeAccepted] = useState(false);
   const [pixCheckout, setPixCheckout] = useState<WaiterPixCheckoutState | null>(null);
+  const [waiterMpPixEnabled, setWaiterMpPixEnabled] = useState(false);
   const [stoneSettingsOpen, setStoneSettingsOpen] = useState(false);
   const [moveItemId, setMoveItemId] = useState('');
   const [moveTargetAccountId, setMoveTargetAccountId] = useState('');
@@ -317,6 +324,20 @@ const WaiterSessionPage = () => {
     void loadSession(false);
     void loadCatalog();
   }, [sessionId]);
+
+  useEffect(() => {
+    let mounted = true;
+    getWaiterPaymentSettings()
+      .then((settings) => {
+        if (mounted) setWaiterMpPixEnabled(Boolean(settings.mpWaiterPixEnabled));
+      })
+      .catch(() => {
+        if (mounted) setWaiterMpPixEnabled(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -656,7 +677,7 @@ const WaiterSessionPage = () => {
           .map((current) => createPaymentLine(current.id, current.dueAmount));
 
     setPaymentLines(lines.length ? lines : [createPaymentLine(baseSession.accounts[0]?.id || '', 0)]);
-    setServiceChargeAccepted(false);
+    setServiceChargeAccepted(shouldAutoApplyServiceCharge(baseSession.serviceChargeSettings));
     setPaymentDialogOpen(true);
   };
 
@@ -718,11 +739,45 @@ const WaiterSessionPage = () => {
     const payload: WaiterPaymentInput[] = [];
 
     try {
+      const canStartOnlinePix =
+        waiterMpPixEnabled &&
+        !serviceEnabled &&
+        initialPayload.length === 1 &&
+        initialPayload[0].method === 'pix';
+
+      if (canStartOnlinePix) {
+        const payment = initialPayload[0];
+        const targetAccount = session.accounts.find((account) => account.id === payment.accountId);
+        if (!targetAccount) throw new Error('Selecione uma comanda valida para receber.');
+
+        const checkout = await startWaiterPixCheckout({
+          sessionId: session.id,
+          accountId: payment.accountId,
+          amount: payment.amount,
+          accountName: targetAccount.name,
+          tableLabel: session.tableLabel,
+        });
+
+        setPixCheckout({
+          ...checkout,
+          accountId: payment.accountId,
+          amount: payment.amount,
+        });
+        setPaymentDialogOpen(false);
+        return;
+      }
+
+      let stoneAvailable = false;
+      if (initialPayload.some((payment) => stonePaymentMethods.includes(payment.method))) {
+        const stoneStatus = await stoneProvider.getStatus?.().catch(() => null);
+        stoneAvailable = Boolean(stoneStatus?.available);
+      }
+
       for (const payment of initialPayload) {
         const targetAccount = session.accounts.find((account) => account.id === payment.accountId);
         if (!targetAccount) throw new Error('Selecione uma comanda valida para receber.');
 
-        if (stonePaymentMethods.includes(payment.method)) {
+        if (stonePaymentMethods.includes(payment.method) && stoneAvailable) {
           const stoneResult = await stoneProvider.startPayment({
             amount: payment.amount,
             paymentType: payment.method === 'pix' ? 'pix' : payment.method === 'debit' ? 'debit' : 'credit',
@@ -1042,7 +1097,7 @@ const WaiterSessionPage = () => {
             <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[10px] text-white/75 sm:text-xs">
               <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5">
                 <Clock3 className="h-3 w-3 text-[#A4D65E]" />
-                {Math.max(0, Math.floor((Date.now() - new Date(session.openedAt).getTime()) / 60000))} min
+                {formatElapsedSince(session.openedAt)}
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5">
                 <Users className="h-3 w-3 text-[#A4D65E]" />
@@ -1776,7 +1831,9 @@ const WaiterSessionPage = () => {
           <div className="border-b border-[#E7E1D8] bg-white px-4 pb-3 pt-5 sm:px-6">
             <DialogTitle className="pr-8 text-xl font-semibold leading-tight text-[#082F23] sm:text-2xl">Receber Pagamento</DialogTitle>
             <DialogDescription className="mt-1 text-sm leading-5">
-              Receba pela Stone, em dinheiro ou divida a conta sem sair do app.
+              {waiterMpPixEnabled
+                ? 'Receba por QR Code PIX, Stone no POS ou registre pagamentos manuais sem sair do app.'
+                : 'No celular e web, o pagamento é registrado manualmente. No POS Android, Stone recebe débito, crédito e PIX.'}
             </DialogDescription>
           </div>
 
@@ -1890,7 +1947,10 @@ const WaiterSessionPage = () => {
                         Cliente autorizou adicionar {serviceChargePercent}% do garçom?
                       </div>
                       <div className="mt-1 text-xs leading-5 text-amber-800">
-                        O valor entra junto no recebimento da mesa. Retenção configurada: {Number(serviceChargeSettings?.taxWithholdPercent || 0)}%.
+                        {serviceChargeSettings?.autoApply
+                          ? 'A regra da mesa deixou a taxa marcada automaticamente. Desmarque se o cliente nao aceitar.'
+                          : 'Marque somente se o cliente autorizar a taxa neste fechamento.'}{' '}
+                        Retenção configurada: {Number(serviceChargeSettings?.taxWithholdPercent || 0)}%.
                       </div>
                     </div>
                     <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
@@ -1975,7 +2035,7 @@ const WaiterSessionPage = () => {
       <Dialog open={stoneSettingsOpen} onOpenChange={setStoneSettingsOpen}>
         <DialogContent className="rounded-[28px] border-0 p-4 sm:max-w-xl">
           <DialogTitle className="text-2xl font-semibold text-[#082F23]">Configurações Stone</DialogTitle>
-          <DialogDescription>Confira o POS antes de receber PIX, débito ou crédito.</DialogDescription>
+          <DialogDescription>Confira o POS antes de receber PIX, débito ou crédito pela Stone.</DialogDescription>
           <StoneIntegrationPanel />
         </DialogContent>
       </Dialog>

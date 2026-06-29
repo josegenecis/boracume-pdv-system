@@ -32,6 +32,16 @@ const isTableServiceOrder = (order: any) => {
   return orderType === 'dine_in' && (Boolean(order?.table_id) || source.includes('table'));
 };
 
+const shouldAutoPrintTableServiceOrder = (order: any) => {
+  if (!isTableServiceOrder(order)) return false;
+  const showInManager = order?.variations?.show_in_manager;
+  const flow = String(order?.variations?.table_order_flow || '').toLowerCase();
+  if (showInManager === false || flow === 'account_only') return false;
+  const status = String(order?.status || '').toLowerCase();
+  const acceptanceStatus = String(order?.acceptance_status || '').toLowerCase();
+  return status === 'preparing' || status === 'accepted' || acceptanceStatus === 'accepted';
+};
+
 const GlobalNotificationSystem: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -215,7 +225,22 @@ const GlobalNotificationSystem: React.FC = () => {
         async (payload) => {
           const newOrder = payload.new as PendingOrder;
           if (isPdvCounterOrder(newOrder)) return;
-          if (isTableServiceOrder(newOrder)) return;
+          if (isTableServiceOrder(newOrder)) {
+            if (shouldAutoPrintTableServiceOrder(newOrder)) {
+              try {
+                const { data: fullOrder } = await supabase.from('orders').select('*').eq('id', newOrder.id).maybeSingle();
+                if (fullOrder) {
+                  PrinterService.printOrderOnAccept({
+                    ...fullOrder,
+                    items: Array.isArray((fullOrder as any).items) ? (fullOrder as any).items : [],
+                  });
+                }
+              } catch (error) {
+                console.warn('Falha ao imprimir pedido de mesa autoaceito:', error);
+              }
+            }
+            return;
+          }
 
           const showForInsert =
             newOrder.acceptance_status === 'pending_acceptance' ||
@@ -237,8 +262,25 @@ const GlobalNotificationSystem: React.FC = () => {
         },
         async (payload) => {
           const updatedOrder = payload.new as PendingOrder;
-          if (isPdvCounterOrder(updatedOrder) || isTableServiceOrder(updatedOrder)) {
+          if (isPdvCounterOrder(updatedOrder)) {
             setPendingOrders((prev) => prev.filter((order) => order.id !== updatedOrder.id));
+            return;
+          }
+          if (isTableServiceOrder(updatedOrder)) {
+            setPendingOrders((prev) => prev.filter((order) => order.id !== updatedOrder.id));
+            if (shouldAutoPrintTableServiceOrder(updatedOrder)) {
+              try {
+                const { data: fullOrder } = await supabase.from('orders').select('*').eq('id', updatedOrder.id).maybeSingle();
+                if (fullOrder) {
+                  PrinterService.printOrderOnAccept({
+                    ...fullOrder,
+                    items: Array.isArray((fullOrder as any).items) ? (fullOrder as any).items : [],
+                  });
+                }
+              } catch (error) {
+                console.warn('Falha ao imprimir pedido de mesa aceito:', error);
+              }
+            }
             return;
           }
 

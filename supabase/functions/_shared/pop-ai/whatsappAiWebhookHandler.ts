@@ -35,6 +35,10 @@ function manualPauseMinutes() {
   return Number.isFinite(raw) && raw > 0 ? raw : 20;
 }
 
+function shouldAutoResumeManualPause() {
+  return String(Deno.env.get('WHATSAPP_AUTO_RESUME_MANUAL_PAUSE') || 'false').trim().toLowerCase() === 'true';
+}
+
 function isActionableCustomerIntent(text: string) {
   const value = normalizeIntentText(text);
   return /^(oi+|ola+|opa+|bom dia|boa tarde|boa noite)\b/.test(value) ||
@@ -72,6 +76,7 @@ export async function processPopAiMessage(params: PopAiIncomingMessage): Promise
     if (aiConversation.status === 'human_active' || aiConversation.status === 'human_required') {
       const pausedAt = String(aiConversation?.metadata?.pausedAt || aiConversation?.last_message_at || '');
       const shouldResume =
+        shouldAutoResumeManualPause() &&
         minutesSince(pausedAt) >= manualPauseMinutes() &&
         isActionableCustomerIntent(text);
 

@@ -19,13 +19,13 @@ import TableManager from '@/components/tables/TableManager';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import FirstOperatorDialog from '@/components/pdv/FirstOperatorDialog';
-import NFCeEmissionModal from '@/components/nfce/NFCeEmissionModal';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { canGiveDiscount, getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
 import { useTefSettings } from '@/hooks/useTefSettings';
 import { PrinterService } from '@/utils/printerService';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import { formatElapsedMinutes } from '@/utils/elapsedTime';
 import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 import { ensureDefaultTables } from '@/utils/tableDefaults';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -53,6 +53,14 @@ interface Product {
   description?: string;
   weight_based?: boolean;
   send_to_kds?: boolean;
+  fiscal_ncm?: string | null;
+  fiscal_cfop?: string | null;
+  fiscal_csosn?: string | null;
+  fiscal_cst_pis?: string | null;
+  fiscal_cst_cofins?: string | null;
+  fiscal_origem?: string | null;
+  fiscal_cest?: string | null;
+  fiscal_beneficio?: string | null;
 }
 
 interface CategoryConfig extends PizzaCategoryConfig {
@@ -95,25 +103,28 @@ interface Table {
   status: string;
 }
 
-type PdvPaymentMethod = 'pix' | 'cartao' | 'dinheiro';
+type PdvPaymentMethod = 'pix' | 'cartao_credito' | 'cartao_debito' | 'dinheiro';
 
 type PdvPaymentAmounts = Record<PdvPaymentMethod, string>;
 
 const PDV_PAYMENT_METHODS: Array<{ value: PdvPaymentMethod; label: string }> = [
   { value: 'pix', label: 'PIX' },
-  { value: 'cartao', label: 'Cartão' },
+  { value: 'cartao_credito', label: 'Crédito' },
+  { value: 'cartao_debito', label: 'Débito' },
   { value: 'dinheiro', label: 'Dinheiro' },
 ];
 
 const emptyPdvPaymentAmounts = (): PdvPaymentAmounts => ({
   pix: '',
-  cartao: '',
+  cartao_credito: '',
+  cartao_debito: '',
   dinheiro: '',
 });
 
 const getPaymentMethodLabel = (method: PdvPaymentMethod | string) => {
   if (method === 'pix_online') return 'PIX online';
   if (method === 'pix_entrega') return 'PIX na entrega';
+  if (method === 'cartao' || method === 'card') return 'Cartão';
   return PDV_PAYMENT_METHODS.find((option) => option.value === method)?.label || String(method || '-');
 };
 
@@ -190,8 +201,6 @@ const PDV = () => {
   const [activeTab, setActiveTab] = useState('products');
   const [pixAmount, setPixAmount] = useState(0);
   const [mpPixCheckout, setMpPixCheckout] = useState<null | { correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string; paymentId?: string }>(null);
-  const [createdOrderForNfce, setCreatedOrderForNfce] = useState<any>(null);
-  const [nfceModalOpen, setNfceModalOpen] = useState(false);
   const [cashSession, setCashSession] = useState<CashSession | null>(null);
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
   const [cashDialogMode, setCashDialogMode] = useState<'open' | 'close'>('open');
@@ -314,13 +323,17 @@ const PDV = () => {
       if (['delivery', 'pickup', 'dine_in', 'counter'].includes(parsed?.orderType)) setOrderType(parsed.orderType);
       if (typeof parsed?.selectedDeliveryZone === 'string') setSelectedDeliveryZone(parsed.selectedDeliveryZone);
       if (typeof parsed?.selectedTable === 'string') setSelectedTable(parsed.selectedTable);
-      if (PDV_PAYMENT_METHODS.some((method) => method.value === parsed?.paymentMethod)) {
+      if (parsed?.paymentMethod === 'cartao') {
+        setPaymentMethod('cartao_credito');
+      } else if (PDV_PAYMENT_METHODS.some((method) => method.value === parsed?.paymentMethod)) {
         setPaymentMethod(parsed.paymentMethod);
       }
       if (parsed?.paymentAmounts && typeof parsed.paymentAmounts === 'object') {
+        const legacyCardAmount = typeof parsed.paymentAmounts.cartao === 'string' ? parsed.paymentAmounts.cartao : '';
         setPaymentAmounts({
           pix: typeof parsed.paymentAmounts.pix === 'string' ? parsed.paymentAmounts.pix : '',
-          cartao: typeof parsed.paymentAmounts.cartao === 'string' ? parsed.paymentAmounts.cartao : '',
+          cartao_credito: typeof parsed.paymentAmounts.cartao_credito === 'string' ? parsed.paymentAmounts.cartao_credito : legacyCardAmount,
+          cartao_debito: typeof parsed.paymentAmounts.cartao_debito === 'string' ? parsed.paymentAmounts.cartao_debito : '',
           dinheiro: typeof parsed.paymentAmounts.dinheiro === 'string' ? parsed.paymentAmounts.dinheiro : '',
         });
       }
@@ -626,7 +639,7 @@ const PDV = () => {
       const spacing = Math.max(1, lineWidth - safeLabel.length - safeValue.length);
       return `${safeLabel}${' '.repeat(spacing)}${safeValue}`;
     };
-    const formatMinutes = (value: number) => `${Math.max(0, Math.round(value || 0))} min`;
+    const formatMinutes = (value: number) => formatElapsedMinutes(Math.max(0, Math.round(value || 0)));
     const difference = informedAmount - summary.expectedCash;
 
     const lines = [
@@ -1775,6 +1788,83 @@ const PDV = () => {
     setCheckoutOpen(true);
   };
 
+  const isFiscalEmissionActive = async () => {
+    if (!user?.id) return false;
+
+    try {
+      const { data, error } = await supabase
+        .from('fiscal_settings')
+        .select('ativo')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return Boolean(data?.ativo);
+    } catch (error) {
+      console.warn('Não foi possível verificar se a NFC-e está ativa:', error);
+      return false;
+    }
+  };
+
+  const emitNfceForOrder = async (order: any) => {
+    if (!order?.id) throw new Error('Pedido inválido para emissão fiscal.');
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+
+    if (!accessToken) {
+      throw new Error('Login não confirmado. Saia e entre novamente antes de emitir a NFC-e.');
+    }
+
+    const response = await fetch('/api/nfce/emit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        order_id: order.id,
+        consumer_data: order.customer_name ? { nome: order.customer_name } : null,
+        observacoes: '',
+      }),
+    });
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(data?.error || data?.message || 'Erro ao emitir cupom fiscal.');
+    }
+    if (!data?.success) {
+      throw new Error(data?.motivo || data?.error || 'A NFC-e foi rejeitada pela Sefaz.');
+    }
+
+    return data;
+  };
+
+  const printOrderAfterSale = async (order: any, fiscalActive?: boolean) => {
+    const shouldEmitFiscal = typeof fiscalActive === 'boolean' ? fiscalActive : await isFiscalEmissionActive();
+
+    if (!shouldEmitFiscal) {
+      await PrinterService.printOrder(order, {
+        openCashDrawer: shouldOpenCashDrawerForOrder(order),
+      });
+      return { fiscal: false as const, nfce: null };
+    }
+
+    toast({
+      title: 'Emitindo NFC-e',
+      description: 'Fiscal ativo: o cupom fiscal será emitido e impresso automaticamente.',
+    });
+
+    const nfceData = await emitNfceForOrder(order);
+    const fiscalOrder = { ...order, nfce: nfceData };
+
+    await PrinterService.printOrder(fiscalOrder, {
+      openCashDrawer: shouldOpenCashDrawerForOrder(fiscalOrder),
+    });
+
+    return { fiscal: true as const, nfce: nfceData };
+  };
+
   const handleFinalizeSale = async () => {
     console.log('Finalizando venda...');
     
@@ -1891,6 +1981,14 @@ const PDV = () => {
         price: item.price,
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
+        fiscal_ncm: item.fiscal_ncm || null,
+        fiscal_cfop: item.fiscal_cfop || null,
+        fiscal_csosn: item.fiscal_csosn || null,
+        fiscal_cst_pis: item.fiscal_cst_pis || null,
+        fiscal_cst_cofins: item.fiscal_cst_cofins || null,
+        fiscal_origem: item.fiscal_origem || null,
+        fiscal_cest: item.fiscal_cest || null,
+        fiscal_beneficio: item.fiscal_beneficio || null,
         options,
         variations: variationLines,
         notes: item.notes || ''
@@ -1972,7 +2070,7 @@ const PDV = () => {
             })),
           },
           environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-          tef: paymentMethod === 'cartao' && cardProcessingMode === 'tef' ? (tefData || null) : null
+          tef: (paymentMethod === 'cartao_credito' || paymentMethod === 'cartao_debito') && cardProcessingMode === 'tef' ? (tefData || null) : null
         }
       };
 
@@ -2079,14 +2177,6 @@ const PDV = () => {
         }
       }
 
-      setCreatedOrderForNfce(created || null);
-      try {
-        await PrinterService.printOrder(created, {
-          openCashDrawer: shouldOpenCashDrawerForOrder(created),
-        });
-      } catch (e) {
-        console.warn('Falha ao imprimir automaticamente:', e);
-      }
       try {
         await supabase.from('security_logs').insert({
           user_id: user?.id,
@@ -2096,9 +2186,23 @@ const PDV = () => {
           user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
         } as any);
       } catch {}
+      const fiscalActiveForSale = await isFiscalEmissionActive();
+      let printResult: { fiscal: boolean; nfce: any | null } = { fiscal: fiscalActiveForSale, nfce: null };
+      try {
+        printResult = await printOrderAfterSale(created, fiscalActiveForSale);
+      } catch (e: any) {
+        console.warn('Falha ao emitir/imprimir após a venda:', e);
+        toast({
+          title: fiscalActiveForSale ? 'Venda registrada, NFC-e não concluída' : 'Venda registrada, mas não imprimiu',
+          description: e?.message || 'Verifique as configurações fiscais e a impressora.',
+          variant: 'destructive',
+        });
+      }
       toast({
         title: "Venda finalizada!",
-        description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
+        description: printResult.fiscal && printResult.nfce
+          ? `Pedido #${orderNumber} finalizado com NFC-e emitida automaticamente.`
+          : `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
       });
       setMobileCartOpen(false);
       setCheckoutOpen(false);
@@ -2178,7 +2282,7 @@ const PDV = () => {
 
     return (
       <div className={compact ? 'space-y-3' : 'space-y-1.5'}>
-        <div className={compact ? 'grid grid-cols-3 gap-2 rounded-2xl bg-[#F5EBE1]/70 p-1.5' : 'grid grid-cols-3 gap-1.5'}>
+        <div className={compact ? 'grid grid-cols-4 gap-2 rounded-2xl bg-[#F5EBE1]/70 p-1.5' : 'grid grid-cols-4 gap-1.5'}>
           {PDV_PAYMENT_METHODS.map((method) => (
             <Button
               key={method.value}
@@ -2188,8 +2292,8 @@ const PDV = () => {
               className={compact ? 'h-11 rounded-xl text-sm font-bold' : 'h-7 rounded-lg text-[11px]'}
               onClick={() => {
                 setSelectedPaymentMethod(method.value);
-                if (method.value !== 'cartao') setTefData(null);
-                if (method.value === 'cartao') {
+                if (method.value !== 'cartao_credito' && method.value !== 'cartao_debito') setTefData(null);
+                if (method.value === 'cartao_credito' || method.value === 'cartao_debito') {
                   setCardProcessingMode('maquininha');
                   setTefOpen(false);
                 }
@@ -2235,7 +2339,7 @@ const PDV = () => {
           </div>
         )}
 
-        {paymentMethod === 'cartao' && (
+        {(paymentMethod === 'cartao_credito' || paymentMethod === 'cartao_debito') && (
           tefSettings.enabled ? (
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
@@ -3333,17 +3437,23 @@ const PDV = () => {
                     customer_name: customerName,
                   } as any);
 
-                setCreatedOrderForNfce(resolvedOrder);
+                const fiscalActiveForSale = await isFiscalEmissionActive();
+                let printResult: { fiscal: boolean; nfce: any | null } = { fiscal: fiscalActiveForSale, nfce: null };
                 try {
-                  await PrinterService.printOrder(resolvedOrder, {
-                    openCashDrawer: shouldOpenCashDrawerForOrder(resolvedOrder),
+                  printResult = await printOrderAfterSale(resolvedOrder, fiscalActiveForSale);
+                } catch (e: any) {
+                  console.warn('Falha ao emitir/imprimir automaticamente (PIX):', e);
+                  toast({
+                    title: fiscalActiveForSale ? 'Venda registrada, NFC-e não concluída' : 'Venda registrada, mas não imprimiu',
+                    description: e?.message || 'Verifique as configurações fiscais e a impressora.',
+                    variant: 'destructive',
                   });
-                } catch (e) {
-                  console.warn('Falha ao imprimir automaticamente (PIX):', e);
                 }
                 toast({
                   title: "Pagamento confirmado!",
-                  description: "Pedido entrou em preparo e foi enviado para impressão.",
+                  description: printResult.fiscal && printResult.nfce
+                    ? "Pedido entrou em preparo com NFC-e emitida automaticamente."
+                    : "Pedido entrou em preparo e foi enviado para impressão.",
                 });
                 resetCurrentSale(getNextSaleOrderType());
               } catch (e: any) {
@@ -3354,13 +3464,6 @@ const PDV = () => {
           }}
         />
       ) : null}
-
-      <NFCeEmissionModal
-        isOpen={nfceModalOpen}
-        onClose={() => setNfceModalOpen(false)}
-        order={createdOrderForNfce}
-        onSuccess={() => {}}
-      />
 
       <Dialog open={tefOpen} onOpenChange={setTefOpen}>
         <DialogContent>

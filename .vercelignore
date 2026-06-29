@@ -2,5 +2,7 @@ node_modules/
 **/node_modules/**
 dist-electron/
 electron/
+apps/
+native-bridge/
 .git/
 .DS_Store

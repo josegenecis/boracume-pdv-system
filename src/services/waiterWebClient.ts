@@ -76,6 +76,13 @@ export type TimeClockStatus = {
   nextEventType: TimeClockEventType;
 };
 
+export type WaiterServiceChargeSettings = {
+  enabled: boolean;
+  autoApply?: boolean;
+  percentage: number;
+  taxWithholdPercent?: number;
+};
+
 export type WaiterTableChoice = {
   id: string;
   number: number;
@@ -124,12 +131,6 @@ export type PaymentEntry = {
   terminal?: string | null;
   stoneCode?: string | null;
   receiptText?: string | null;
-};
-
-export type WaiterServiceChargeSettings = {
-  enabled: boolean;
-  percentage: number;
-  taxWithholdPercent: number;
 };
 
 export type AccountTicket = {
@@ -1032,6 +1033,15 @@ export async function recordWaiterPayments(sessionId: string, payments: WaiterPa
 
   storeSessionSnapshot(sessionId, response.session);
   return response;
+}
+
+export async function getWaiterPaymentSettings() {
+  const session = requireSession();
+  return invokeFunction<{ mpWaiterPixEnabled: boolean; mpPdvEnabled: boolean; pixEnabled: boolean }>(
+    'waiter-web',
+    { action: 'payment_settings' },
+    session.token,
+  );
 }
 
 export async function startWaiterPixCheckout(input: {

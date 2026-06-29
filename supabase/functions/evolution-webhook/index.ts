@@ -128,6 +128,19 @@ function isLikelyBotEcho(text: string) {
     value.includes('cardapio completo');
 }
 
+function isMessageFromRestaurant(data: any) {
+  const key = data?.key || data?.data?.key || {};
+  return Boolean(
+    key?.fromMe ??
+    data?.fromMe ??
+    data?.data?.fromMe ??
+    data?.Info?.IsFromMe ??
+    data?.data?.Info?.IsFromMe ??
+    data?.info?.isFromMe ??
+    data?.data?.info?.isFromMe
+  );
+}
+
 function pickIncomingEnvelope(body: any) {
   const direct = body?.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data : body;
   const list = body?.data?.messages || body?.messages || body?.data;
@@ -183,7 +196,7 @@ Deno.serve(async (req: Request) => {
 
   const instance = pickInstanceName(body);
   const data = pickIncomingEnvelope(body);
-  const fromMe = Boolean(data?.key?.fromMe ?? data?.fromMe);
+  const fromMe = isMessageFromRestaurant(data);
 
   const remoteJid = String(data?.key?.remoteJid || data?.remoteJid || '');
   if (!remoteJid || remoteJid.includes('@g.us')) return json({ success: true, ignored: true });
@@ -191,8 +204,10 @@ Deno.serve(async (req: Request) => {
   const customerPhone = normalizeNumber(remoteJid);
   const messagePayload = data?.message || data?.text || data?.content || data;
   const media = pickMediaFromMessage(messagePayload);
-  const text = toTextFromMessage(messagePayload) || (media ? `[${media.type === 'audio' ? 'áudio recebido' : media.type === 'image' ? 'imagem recebida' : 'mídia recebida'}]` : '');
-  if (!customerPhone || !text) return json({ success: true, ignored: true });
+  let text = toTextFromMessage(messagePayload) || (media ? `[${media.type === 'audio' ? 'áudio recebido' : media.type === 'image' ? 'imagem recebida' : 'mídia recebida'}]` : '');
+  if (!customerPhone) return json({ success: true, ignored: true });
+  if (!text && fromMe) text = '[mensagem enviada pelo restaurante]';
+  if (!text) return json({ success: true, ignored: true });
 
   let userId = getMappedUserIdForInstance(instance);
   if (!userId && instance) {

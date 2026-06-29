@@ -20,6 +20,9 @@ const BRAND_POS_NAME = 'POPSYSTEM PDV';
 
 // Variável global para manter a conexão ativa (singleton pattern simples)
 let usbDevice: any = null;
+const printedAcceptedOrderIds =
+  (globalThis as any).__popsystemPrintedAcceptedOrders || new Set<string>();
+(globalThis as any).__popsystemPrintedAcceptedOrders = printedAcceptedOrderIds;
 
 type PrintOrderOptions = {
   onlyIfAuto?: boolean;
@@ -62,6 +65,83 @@ function splitLabelValue(line: string): { label: string; value: string } | null 
 
 function normalizeSingleLine(value: any) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function breakLongTextForHtml(value: string, chunkSize = 22) {
+  const text = normalizeSingleLine(value);
+  if (!text) return '';
+  const chunks: string[] = [];
+  for (let i = 0; i < text.length; i += chunkSize) {
+    chunks.push(text.slice(i, i + chunkSize));
+  }
+  return chunks.map(escapeHtml).join('<br />');
+}
+
+function formatAccessKeyForPrint(value: string) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 44);
+  if (!digits) return '';
+  return (digits.match(/.{1,4}/g) || [digits]).join(' ');
+}
+
+function getNfceConsultaBaseUrl(qrCodeUrl: string) {
+  const value = normalizeSingleLine(qrCodeUrl);
+  if (!value) return '';
+  const queryIndex = value.indexOf('?');
+  return queryIndex >= 0 ? value.slice(0, queryIndex) : value;
+}
+
+function extractNfceQrAccessKey(qrCodeUrl: string) {
+  const p = String(qrCodeUrl || '').match(/[?&]p=([^&\s]+)/)?.[1] || '';
+  const decoded = decodeURIComponent(p).replace(/%7C/gi, '|');
+  return decoded.split('|')[0]?.replace(/\D/g, '').slice(0, 44) || '';
+}
+
+function decodeXmlEntities(value: string) {
+  return String(value || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
+function extractNfceQrCodeFromXml(value: string) {
+  const match = String(value || '').match(/<qrCode>([\s\S]*?)<\/qrCode>/i);
+  return match ? normalizeSingleLine(decodeXmlEntities(match[1])) : '';
+}
+
+function extractNfceAccessKeyFromXml(value: string) {
+  const xml = String(value || '');
+  const idMatch = xml.match(/<infNFe\b[^>]*\bId=["']NFe(\d{44})["']/i);
+  if (idMatch?.[1]) return idMatch[1];
+  const keyMatch = xml.match(/<chNFe>(\d{44})<\/chNFe>/i);
+  return keyMatch?.[1] || '';
+}
+
+function normalizeNfceQrCodeUrl(qrCodeUrl: string, ambiente: string, chave: string) {
+  let url = normalizeSingleLine(qrCodeUrl);
+  if (!url) return '';
+
+  const isHomologacao = ambiente && ambiente !== 'producao';
+  if (isHomologacao && url.includes('://nfce.sefaz.ce.gov.br/')) {
+    url = url.replace('://nfce.sefaz.ce.gov.br/', '://nfceh.sefaz.ce.gov.br/');
+  }
+
+  const qrAccessKey = extractNfceQrAccessKey(url);
+  const accessKey = String(chave || '').replace(/\D/g, '').slice(0, 44);
+  if (accessKey && qrAccessKey && accessKey !== qrAccessKey) {
+    console.warn('NFC-e QR Code ignorado: chave do QR diferente da chave autorizada.', {
+      accessKey,
+      qrAccessKey,
+    });
+    return '';
+  }
+
+  return url;
+}
+
+function getNfceQrCodePayloadUrl(qrCodeUrl: string) {
+  return normalizeSingleLine(qrCodeUrl).replace(/%7C/gi, '|');
 }
 
 function resolveReceiptLogoUrl(store: any, config: any) {
@@ -111,6 +191,111 @@ function formatPaymentMethodLabel(method: any, order?: any) {
   if (value === 'cartao_credito') return 'CREDITO';
   if (value === 'cartao_debito') return 'DEBITO';
   return String(method || 'N/A').toUpperCase().replace('_', ' ');
+}
+
+function normalizeNfcePrintData(order: any) {
+  const rawCandidate = order?.nfce || order?.fiscal || order?.nfce_data || null;
+  const raw =
+    rawCandidate?.cupom && typeof rawCandidate.cupom === 'object'
+      ? { ...rawCandidate.cupom, ...rawCandidate }
+      : rawCandidate;
+  if (!raw || typeof raw !== 'object') return null;
+
+  const numero = normalizeSingleLine(raw.numero || raw.number || raw.nfce_number);
+  const serie = normalizeSingleLine(raw.serie || raw.series || raw.nfce_serie || '1');
+  const xmlContent = normalizeSingleLine(raw.xml_content || raw.xmlContent || raw.xml_enviado || raw.xmlEnviado || raw.xml_autorizado || raw.xmlAutorizado);
+  const protocolo = normalizeSingleLine(raw.protocolo || raw.protocolo_autorizacao || raw.protocol);
+  const chave = normalizeSingleLine(raw.chave_acesso || raw.access_key || raw.chave || extractNfceAccessKeyFromXml(xmlContent));
+  const ambiente = normalizeSingleLine(raw.ambiente || raw.environment);
+  const qrCodeUrl = normalizeNfceQrCodeUrl(
+    extractNfceQrCodeFromXml(xmlContent) || raw.qr_code_url || raw.qrCodeUrl || raw.qrcode_url || raw.qr_url,
+    ambiente,
+    chave
+  );
+
+  if (!numero && !protocolo && !chave && !qrCodeUrl) return null;
+  return { numero, serie, protocolo, chave, qrCodeUrl, ambiente };
+}
+
+function buildNfceHtmlBlock(order: any) {
+  const nfce = normalizeNfcePrintData(order);
+  if (!nfce) return '';
+  const qrPayloadUrl = nfce.qrCodeUrl ? getNfceQrCodePayloadUrl(nfce.qrCodeUrl) : '';
+  const qrImageUrl = nfce.qrCodeUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=12&data=${encodeURIComponent(qrPayloadUrl)}`
+    : '';
+  const qrAccessKey = nfce.qrCodeUrl ? extractNfceQrAccessKey(nfce.qrCodeUrl) : '';
+  const printedAccessKey = nfce.chave || qrAccessKey;
+  const consultaBaseUrl = getNfceConsultaBaseUrl(nfce.qrCodeUrl);
+
+  return `
+          <div class="divider"></div>
+          <div class="center bold" style="font-size: 1.05em;">CUPOM FISCAL NFC-e</div>
+          ${nfce.numero ? `<div class="center">NFC-e ${escapeHtml(nfce.numero)}${nfce.serie ? ` / Série ${escapeHtml(nfce.serie)}` : ''}</div>` : ''}
+          ${nfce.protocolo ? `<div class="center">Protocolo: ${escapeHtml(nfce.protocolo)}</div>` : ''}
+          ${nfce.ambiente && nfce.ambiente !== 'producao' ? `<div class="center bold">AMBIENTE: ${escapeHtml(nfce.ambiente.toUpperCase())}</div>` : ''}
+          ${printedAccessKey ? `<div class="nfce-long center" style="margin-top: 6px;"><span class="bold">CHAVE DE ACESSO</span><br />${escapeHtml(formatAccessKeyForPrint(printedAccessKey))}</div>` : ''}
+          ${qrImageUrl ? `<div class="center" style="margin-top: 8px;"><img src="${escapeHtml(qrImageUrl)}" alt="QR Code NFC-e" style="width: 210px; height: 210px; image-rendering: pixelated;" /></div>` : ''}
+          ${consultaBaseUrl ? `<div class="nfce-long nfce-url center" style="margin-top: 6px;"><span class="bold">Consulta pela chave:</span><br />${breakLongTextForHtml(consultaBaseUrl, 28)}</div>` : ''}
+  `;
+}
+
+function escPosQrCodeCommands(value: string, size = 5) {
+  const data = String(value || '').trim();
+  if (!data) return '';
+
+  const bytes = Array.from(new TextEncoder().encode(data));
+  const storeLength = bytes.length + 3;
+  const pL = storeLength % 256;
+  const pH = Math.floor(storeLength / 256);
+  const chr = (...values: number[]) => String.fromCharCode(...values);
+
+  let commands = '';
+  commands += chr(0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);
+  commands += chr(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, Math.max(3, Math.min(8, size)));
+  commands += chr(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31);
+  commands += chr(0x1d, 0x28, 0x6b, pL, pH, 0x31, 0x50, 0x30);
+  commands += String.fromCharCode(...bytes);
+  commands += chr(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30);
+  return commands;
+}
+
+function appendNfceEscPosCommands(order: any, lineWidth: number) {
+  const nfce = normalizeNfcePrintData(order);
+  if (!nfce) return '';
+
+  let commands = '';
+  const text = (str: string) => str + '\n';
+  const line = () => { commands += `${'-'.repeat(lineWidth)}\n`; };
+
+  line();
+  commands += ALIGN_CENTER + BOLD_ON;
+  commands += text('CUPOM FISCAL NFC-e');
+  commands += BOLD_OFF;
+  if (nfce.numero) commands += text(`NFC-e ${nfce.numero}${nfce.serie ? ` / Serie ${nfce.serie}` : ''}`);
+  if (nfce.protocolo) commands += text(`Protocolo: ${nfce.protocolo}`);
+  if (nfce.ambiente && nfce.ambiente !== 'producao') commands += text(`AMBIENTE: ${nfce.ambiente.toUpperCase()}`);
+  commands += ALIGN_LEFT;
+
+  if (nfce.chave) {
+    commands += ALIGN_CENTER + text('CHAVE DE ACESSO');
+    commands += ALIGN_LEFT;
+    wrapTextLine(formatAccessKeyForPrint(nfce.chave), lineWidth).forEach((value) => {
+      commands += text(value);
+    });
+  }
+
+  if (nfce.qrCodeUrl) {
+    commands += ALIGN_CENTER;
+    commands += escPosQrCodeCommands(getNfceQrCodePayloadUrl(nfce.qrCodeUrl), lineWidth <= 32 ? 4 : 5);
+    commands += ALIGN_LEFT;
+    commands += text('Consulta pela chave:');
+    wrapTextLine(getNfceConsultaBaseUrl(nfce.qrCodeUrl), lineWidth).forEach((value) => {
+      commands += text(value);
+    });
+  }
+
+  return commands;
 }
 
 function getKitchenCustomerLabel(order: any) {
@@ -648,6 +833,18 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             word-break: break-word;
             overflow-wrap: anywhere;
           }
+          .nfce-long {
+            width: 100%;
+            max-width: 100%;
+            white-space: normal;
+            word-break: break-all;
+            overflow-wrap: anywhere;
+            line-height: 1.18;
+          }
+          .nfce-url {
+            font-size: 0.82em;
+            line-height: 1.12;
+          }
           .total-row { font-size: 1.2em; margin-top: 10px; }
           .muted { color: #000; font-size: 0.95em; font-weight: 700; }
         </style>
@@ -744,6 +941,8 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             `;
           })()}
           ${order.change_amount ? `<div>Troco: ${formatCurrencyValue(Number(order.change_amount || 0))}</div>` : ''}
+
+          ${buildNfceHtmlBlock(order)}
           
           <div class="divider"></div>
           <div class="center" style="margin-top: 10px;">${config.print_footer}</div>
@@ -1101,7 +1300,8 @@ async function printElectron(order: any, config: any) {
     subtotal: Number(order.total || 0) - Number(order.delivery_fee || 0),
     discount: Number(order.discount || 0),
     delivery_fee: Number(order.delivery_fee || 0),
-    payment_method: formatPaymentMethodLabel(order.payment_method, order)
+    payment_method: formatPaymentMethodLabel(order.payment_method, order),
+    nfce: normalizeNfcePrintData(order),
   };
 
   const conn = await api.connectPrinter(deviceId, protocol, { protocol, width: config.paper_width === '58mm' ? 32 : 48 });
@@ -1179,6 +1379,7 @@ export const PrinterService = {
   async printOrder(order: any, options: PrintOrderOptions = {}) {
     const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
     const isElectron = Boolean(api?.printSystem && api?.printReceipt);
+    const canOpenCashDrawer = Boolean(api?.openCashDrawer);
     let drawerOpenedBeforePrint = false;
 
     // 1. Buscar configurações
@@ -1196,7 +1397,7 @@ export const PrinterService = {
       }
     }
 
-    if (options.openCashDrawer && isElectron) {
+    if (options.openCashDrawer && canOpenCashDrawer) {
       const drawerResult = await openDrawerElectron();
       drawerOpenedBeforePrint = Boolean(drawerResult?.success);
       if (!drawerOpenedBeforePrint) {
@@ -1338,7 +1539,18 @@ export const PrinterService = {
   async printOrderOnAccept(order: any) {
     const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
     const isElectron = Boolean(api?.printSystem && api?.printReceipt);
-    return this.printOrder(order, { onlyIfAuto: !isElectron });
+    const orderId = String(order?.id || '').trim();
+    if (orderId) {
+      if (printedAcceptedOrderIds.has(orderId)) return { success: true, skipped: true };
+      printedAcceptedOrderIds.add(orderId);
+    }
+
+    try {
+      return await this.printOrder(order, { onlyIfAuto: !isElectron });
+    } catch (error) {
+      if (orderId) printedAcceptedOrderIds.delete(orderId);
+      throw error;
+    }
   },
 
   async printCashReport(report: { title: string; lines: string[]; userId?: string; hideStoreHeader?: boolean; footerText?: string }) {
@@ -1570,6 +1782,8 @@ export const PrinterService = {
         commands += text(value);
       });
     }
+
+    commands += appendNfceEscPosCommands(order, lineWidth);
     
     line();
     center();

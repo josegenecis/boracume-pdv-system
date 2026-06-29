@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Save, UtensilsCrossed } from 'lucide-react';
+import { BadgePercent, Save, UtensilsCrossed } from 'lucide-react';
 
 type TableOrderMode = 'marked_items' | 'all_items' | 'account_only';
 
@@ -24,6 +25,9 @@ const TableOrderFlowSettings: React.FC = () => {
   const [mode, setMode] = useState<TableOrderMode>('marked_items');
   const [showInManager, setShowInManager] = useState(true);
   const [autoAccept, setAutoAccept] = useState(false);
+  const [serviceChargeAutoApply, setServiceChargeAutoApply] = useState(false);
+  const [serviceChargePercentage, setServiceChargePercentage] = useState(10);
+  const [serviceChargeTaxWithhold, setServiceChargeTaxWithhold] = useState(0);
 
   useEffect(() => {
     if (user?.id) void loadSettings();
@@ -38,11 +42,24 @@ const TableOrderFlowSettings: React.FC = () => {
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
-      if (!data) return;
+      if (data) {
+        setMode((data.table_order_mode || 'marked_items') as TableOrderMode);
+        setShowInManager(data.show_table_orders_in_manager !== false);
+        setAutoAccept(Boolean(data.auto_accept_table_orders));
+      }
 
-      setMode((data.table_order_mode || 'marked_items') as TableOrderMode);
-      setShowInManager(data.show_table_orders_in_manager !== false);
-      setAutoAccept(Boolean(data.auto_accept_table_orders));
+      const { data: serviceData, error: serviceError } = await (supabase as any)
+        .from('waiter_service_charge_settings')
+        .select('enabled, auto_apply, percentage, tax_withhold_percent')
+        .eq('user_id', user?.id)
+        .maybeSingle();
+
+      if (serviceError && serviceError.code !== 'PGRST116') throw serviceError;
+      if (serviceData) {
+        setServiceChargeAutoApply(Boolean(serviceData.auto_apply));
+        setServiceChargePercentage(Number(serviceData.percentage ?? 10));
+        setServiceChargeTaxWithhold(Number(serviceData.tax_withhold_percent ?? 0));
+      }
     } catch (error: any) {
       toast({
         title: 'Erro ao carregar mesas',
@@ -62,12 +79,29 @@ const TableOrderFlowSettings: React.FC = () => {
         show_table_orders_in_manager: mode === 'account_only' ? false : showInManager,
         auto_accept_table_orders: mode === 'account_only' ? false : autoAccept,
       };
+      const percentage = Math.min(30, Math.max(0, Number(serviceChargePercentage || 0)));
+      const taxWithholdPercent = Math.min(100, Math.max(0, Number(serviceChargeTaxWithhold || 0)));
 
       const { error } = await (supabase as any)
         .from('table_order_flow_settings')
         .upsert(payload, { onConflict: 'user_id' });
 
       if (error) throw error;
+
+      const { error: serviceError } = await (supabase as any)
+        .from('waiter_service_charge_settings')
+        .upsert({
+          user_id: user.id,
+          enabled: true,
+          auto_apply: serviceChargeAutoApply,
+          percentage,
+          tax_withhold_percent: taxWithholdPercent,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (serviceError) throw serviceError;
+      setServiceChargePercentage(percentage);
+      setServiceChargeTaxWithhold(taxWithholdPercent);
 
       toast({
         title: 'Configuração salva',
@@ -142,6 +176,54 @@ const TableOrderFlowSettings: React.FC = () => {
               disabled={managerDisabled}
               onCheckedChange={setAutoAccept}
             />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4">
+          <div className="mb-4 flex items-start gap-3">
+            <BadgePercent className="mt-1 h-5 w-5 text-[#FF6400]" />
+            <div>
+              <Label className="text-base">Taxa de serviço do garçom</Label>
+              <p className="text-sm text-muted-foreground">
+                Controle os 10% nas mesas. Se a cobrança automática estiver desligada, o app garçom ainda pode perguntar quando o cliente autorizar.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1.2fr,0.55fr,0.55fr]">
+            <div className="flex items-center justify-between gap-4 rounded-lg border bg-white/70 p-4">
+              <div>
+                <Label className="text-base">Cobrar 10% automaticamente no app garçom</Label>
+                <p className="text-sm text-muted-foreground">
+                  Ao fechar a mesa, a taxa já entra marcada. O garçom pode desmarcar se o cliente não aceitar.
+                </p>
+              </div>
+              <Switch checked={serviceChargeAutoApply} onCheckedChange={setServiceChargeAutoApply} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Percentual</Label>
+              <Input
+                type="number"
+                min="0"
+                max="30"
+                step="0.1"
+                value={serviceChargePercentage}
+                onChange={(event) => setServiceChargePercentage(Number(event.target.value))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Retenção (%)</Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={serviceChargeTaxWithhold}
+                onChange={(event) => setServiceChargeTaxWithhold(Number(event.target.value))}
+              />
+            </div>
           </div>
         </div>
 

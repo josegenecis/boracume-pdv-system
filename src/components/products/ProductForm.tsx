@@ -51,6 +51,15 @@ interface ProductItem {
   is_highlight?: boolean;
   original_price?: number;
   discount_percentage?: number;
+  fiscal_ncm?: string;
+  fiscal_cfop?: string;
+  fiscal_csosn?: string;
+  fiscal_cst_pis?: string;
+  fiscal_cst_cofins?: string;
+  fiscal_origem?: string;
+  fiscal_cest?: string;
+  fiscal_beneficio?: string;
+  fiscal_observacao?: string;
 }
 
 interface ProductVariant {
@@ -134,6 +143,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     is_highlight: false,
     original_price: 0,
     discount_percentage: 0,
+    fiscal_ncm: '',
+    fiscal_cfop: '',
+    fiscal_csosn: '',
+    fiscal_cst_pis: '',
+    fiscal_cst_cofins: '',
+    fiscal_origem: '0',
+    fiscal_cest: '',
+    fiscal_beneficio: '',
+    fiscal_observacao: '',
     ...product
   });
   const [categories, setCategories] = useState([]);
@@ -795,6 +813,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (!isUnsupported('is_highlight')) baseData.is_highlight = formData.is_highlight;
     if (!isUnsupported('original_price')) baseData.original_price = formData.original_price;
     if (!isUnsupported('discount_percentage')) baseData.discount_percentage = formData.discount_percentage;
+    if (!isUnsupported('fiscal_ncm')) baseData.fiscal_ncm = formData.fiscal_ncm?.replace(/\D/g, '').slice(0, 8) || null;
+    if (!isUnsupported('fiscal_cfop')) baseData.fiscal_cfop = formData.fiscal_cfop?.replace(/\D/g, '').slice(0, 4) || null;
+    if (!isUnsupported('fiscal_csosn')) baseData.fiscal_csosn = formData.fiscal_csosn?.replace(/\D/g, '').slice(0, 3) || null;
+    if (!isUnsupported('fiscal_cst_pis')) baseData.fiscal_cst_pis = formData.fiscal_cst_pis?.replace(/\D/g, '').slice(0, 2) || null;
+    if (!isUnsupported('fiscal_cst_cofins')) baseData.fiscal_cst_cofins = formData.fiscal_cst_cofins?.replace(/\D/g, '').slice(0, 2) || null;
+    if (!isUnsupported('fiscal_origem')) baseData.fiscal_origem = formData.fiscal_origem?.replace(/\D/g, '').slice(0, 1) || '0';
+    if (!isUnsupported('fiscal_cest')) baseData.fiscal_cest = formData.fiscal_cest?.replace(/\D/g, '').slice(0, 7) || null;
+    if (!isUnsupported('fiscal_beneficio')) baseData.fiscal_beneficio = formData.fiscal_beneficio?.trim() || null;
+    if (!isUnsupported('fiscal_observacao')) baseData.fiscal_observacao = formData.fiscal_observacao?.trim() || null;
 
     if (stockSchemaSupported && !isUnsupported('track_stock') && !isUnsupported('stock_quantity') && !isUnsupported('low_stock_threshold')) {
       baseData.track_stock = formData.track_stock;
@@ -1517,7 +1544,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }, 800);
     setAutoSaveTimer(timer);
     return () => clearTimeout(timer);
-  }, [user?.id, loading, createdProductId, formData.name, formData.barcode, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.receipt_ingredients_enabled, formData.receipt_ingredients, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
+  }, [user?.id, loading, createdProductId, formData.name, formData.barcode, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.receipt_ingredients_enabled, formData.receipt_ingredients, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, formData.fiscal_ncm, formData.fiscal_cfop, formData.fiscal_csosn, formData.fiscal_cst_pis, formData.fiscal_cst_cofins, formData.fiscal_origem, formData.fiscal_cest, formData.fiscal_beneficio, formData.fiscal_observacao, stockSchemaSupported]);
 
 
   const onDragEnd = (result: DropResult) => {
@@ -2223,6 +2250,124 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             </div>
           </div>
         </div>
+
+        <Accordion type="single" collapsible className="rounded-2xl border border-[#003223]/10 bg-white px-4 shadow-sm">
+          <AccordionItem value="fiscal" className="border-none">
+            <AccordionTrigger className="py-4 text-left text-sm font-bold text-[#003223] hover:no-underline">
+              Fiscal do produto
+            </AccordionTrigger>
+            <AccordionContent className="pb-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="fiscal_ncm" className="text-boracume-dark-green font-semibold">NCM</Label>
+                  <Input
+                    id="fiscal_ncm"
+                    value={formData.fiscal_ncm || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, fiscal_ncm: e.target.value.replace(/\D/g, '').slice(0, 8) }))}
+                    placeholder="Ex: 21069090"
+                    className="h-11 rounded-xl bg-[#FFFDF9] font-semibold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="fiscal_cfop" className="text-boracume-dark-green font-semibold">CFOP</Label>
+                  <Input
+                    id="fiscal_cfop"
+                    value={formData.fiscal_cfop || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, fiscal_cfop: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                    placeholder="Ex: 5102"
+                    className="h-11 rounded-xl bg-[#FFFDF9] font-semibold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="fiscal_csosn" className="text-boracume-dark-green font-semibold">CSOSN/CST ICMS</Label>
+                  <Input
+                    id="fiscal_csosn"
+                    value={formData.fiscal_csosn || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, fiscal_csosn: e.target.value.replace(/\D/g, '').slice(0, 3) }))}
+                    placeholder="Ex: 102 ou 500"
+                    className="h-11 rounded-xl bg-[#FFFDF9] font-semibold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="fiscal_origem" className="text-boracume-dark-green font-semibold">Origem</Label>
+                  <Select
+                    value={formData.fiscal_origem || '0'}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, fiscal_origem: value }))}
+                  >
+                    <SelectTrigger id="fiscal_origem" className="h-11 rounded-xl bg-[#FFFDF9] font-semibold">
+                      <SelectValue placeholder="Origem" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0 - Nacional</SelectItem>
+                      <SelectItem value="1">1 - Estrangeira importação direta</SelectItem>
+                      <SelectItem value="2">2 - Estrangeira mercado interno</SelectItem>
+                      <SelectItem value="3">3 - Nacional acima 40% importado</SelectItem>
+                      <SelectItem value="4">4 - Nacional produção PPB</SelectItem>
+                      <SelectItem value="5">5 - Nacional até 40% importado</SelectItem>
+                      <SelectItem value="6">6 - Estrangeira importação direta sem similar</SelectItem>
+                      <SelectItem value="7">7 - Estrangeira mercado interno sem similar</SelectItem>
+                      <SelectItem value="8">8 - Nacional acima 70% importado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="fiscal_cst_pis" className="text-boracume-dark-green font-semibold">CST PIS</Label>
+                  <Input
+                    id="fiscal_cst_pis"
+                    value={formData.fiscal_cst_pis || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, fiscal_cst_pis: e.target.value.replace(/\D/g, '').slice(0, 2) }))}
+                    placeholder="Ex: 07"
+                    className="h-11 rounded-xl bg-[#FFFDF9] font-semibold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="fiscal_cst_cofins" className="text-boracume-dark-green font-semibold">CST COFINS</Label>
+                  <Input
+                    id="fiscal_cst_cofins"
+                    value={formData.fiscal_cst_cofins || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, fiscal_cst_cofins: e.target.value.replace(/\D/g, '').slice(0, 2) }))}
+                    placeholder="Ex: 07"
+                    className="h-11 rounded-xl bg-[#FFFDF9] font-semibold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="fiscal_cest" className="text-boracume-dark-green font-semibold">CEST</Label>
+                  <Input
+                    id="fiscal_cest"
+                    value={formData.fiscal_cest || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, fiscal_cest: e.target.value.replace(/\D/g, '').slice(0, 7) }))}
+                    placeholder="Quando houver ST"
+                    className="h-11 rounded-xl bg-[#FFFDF9] font-semibold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="fiscal_beneficio" className="text-boracume-dark-green font-semibold">Benefício fiscal</Label>
+                  <Input
+                    id="fiscal_beneficio"
+                    value={formData.fiscal_beneficio || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, fiscal_beneficio: e.target.value }))}
+                    placeholder="Se exigido pela UF"
+                    className="h-11 rounded-xl bg-[#FFFDF9] font-semibold"
+                  />
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="fiscal_observacao" className="text-boracume-dark-green font-semibold">Observação fiscal interna</Label>
+                  <Textarea
+                    id="fiscal_observacao"
+                    value={formData.fiscal_observacao || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, fiscal_observacao: e.target.value }))}
+                    rows={2}
+                    placeholder="Ex: produto com substituição tributária, conferir contador"
+                    className="rounded-xl bg-[#FFFDF9]"
+                  />
+                </div>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                Se deixar em branco, o fiscal usa os padrões configurados em Fiscal/NFC-e. Produtos com imposto retido normalmente usam CSOSN 500/CST correspondente e CEST quando aplicável.
+              </p>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         <div className="flex gap-2 flex-wrap">
           <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ Desconto</Button>

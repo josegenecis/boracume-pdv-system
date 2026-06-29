@@ -2,17 +2,28 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { loadCertificateFromBase64, validateCertificate } from './certificate-utils.ts';
 import { SefazClient } from './sefaz-client.ts';
-import { generateQRCodeData } from './qrcode-generator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-diagnostic-key',
 };
 
 type Ambiente = 'producao' | 'homologacao';
 
+const NFE_TIMEZONE = 'America/Fortaleza';
+const MUNICIPALITY_CODE_OVERRIDES: Record<string, string> = {
+  'CE|FORTALEZA': '2304400',
+};
+
 interface NFCeData {
-  operation: 'emitir' | 'consultar' | 'cancelar' | 'download_xml' | 'testar_conexao' | 'validar_config';
+  operation:
+    | 'emitir'
+    | 'consultar'
+    | 'cancelar'
+    | 'download_xml'
+    | 'testar_conexao'
+    | 'validar_config'
+    | 'diagnosticar_cadastro_email';
   order_id?: string;
   cupom_id?: string;
   consumer_data?: {
@@ -32,6 +43,12 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+    const requestData: NFCeData = await req.json();
+
+    if (requestData.operation === 'diagnosticar_cadastro_email') {
+      return await diagnosticarCadastroPorEmail(req, supabase, requestData);
+    }
+
     const authHeader = req.headers.get('authorization');
     if (!authHeader) throw new Error('Authorization header is required');
 
@@ -39,7 +56,6 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) throw new Error('Invalid authorization token');
 
-    const requestData: NFCeData = await req.json();
     switch (requestData.operation) {
       case 'emitir':
         return await emitirNFCe(supabase, user.id, requestData);
@@ -63,7 +79,7 @@ serve(async (req) => {
     }
   } catch (error) {
     console.error('Error in nfce-operations:', error);
-    return json({ error: error.message || 'Erro interno do servidor' }, 400);
+    return json({ error: getErrorMessage(error) || 'Erro interno do servidor' }, 400);
   }
 });
 
@@ -122,6 +138,7 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
     const xmlContent = generateNFCeXML({
       fiscalSettings,
       cupom,
+      order,
       items,
       consumerData: data.consumer_data,
       observacoes: data.observacoes,
@@ -136,24 +153,19 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
     const transmissionResult = await sefazClient.enviarNFCe(
       xmlContent,
       fiscalSettings.endereco_uf,
-      fiscalSettings.ambiente as Ambiente
+      fiscalSettings.ambiente as Ambiente,
+      {
+        chaveAcesso,
+        dataEmissao: cupom.data_hora_emissao,
+        valorTotal,
+        cpfCnpjConsumidor: data.consumer_data?.cpf_cnpj,
+        cscId: fiscalSettings.csc_id,
+        cscToken: fiscalSettings.csc_token,
+      }
     );
 
     const authorized = transmissionResult.success && ['100', '150'].includes(transmissionResult.cStat);
-    let qrCodeUrl = '';
-    if (authorized) {
-      qrCodeUrl = generateQRCodeData(
-        chaveAcesso,
-        fiscalSettings.endereco_uf,
-        fiscalSettings.ambiente as Ambiente,
-        cupom.data_hora_emissao,
-        valorTotal,
-        data.consumer_data?.cpf_cnpj,
-        fiscalSettings.csc_id,
-        fiscalSettings.csc_token,
-        transmissionResult.digestValue
-      );
-    }
+    const qrCodeUrl = transmissionResult.qrCodeUrl || '';
 
     const updateData: any = {
       xml_content: transmissionResult.xmlEnviado || xmlContent,
@@ -184,7 +196,11 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
       success: authorized,
       cupom_id: cupom.id,
       numero: numeroNFCe,
+      serie: fiscalSettings.nfce_serie,
       chave_acesso: chaveAcesso,
+      qr_code_url: qrCodeUrl,
+      xml_content: transmissionResult.xmlEnviado || xmlContent,
+      ambiente: fiscalSettings.ambiente,
       status: updateData.status,
       protocolo: transmissionResult.protocolo,
       motivo: transmissionResult.xMotivo,
@@ -322,8 +338,9 @@ async function validarConfiguracaoFiscal(supabase: any, userId: string) {
         checklist.errors.push(...validation.errors.map((message) => `Certificado: ${message}`));
       }
     } catch (error) {
-      checklist.errors.push(`Certificado: ${error.message}`);
-      certificate = { valid: false, errors: [error.message] };
+      const message = getErrorMessage(error);
+      checklist.errors.push(`Certificado: ${message}`);
+      certificate = { valid: false, errors: [message] };
     }
   }
 
@@ -337,6 +354,105 @@ async function validarConfiguracaoFiscal(supabase: any, userId: string) {
     checklist,
     certificate,
   });
+}
+
+async function diagnosticarCadastroPorEmail(req: Request, supabase: any, data: any) {
+  const expectedKey = Deno.env.get('NFCE_DIAGNOSTIC_KEY') || '';
+  const receivedKey = req.headers.get('x-diagnostic-key') || '';
+  if (!expectedKey || receivedKey !== expectedKey) {
+    return json({ error: 'Diagnostico nao autorizado' }, 401);
+  }
+
+  const email = String(data.email || '').trim().toLowerCase();
+  if (!email) throw new Error('email e obrigatorio');
+
+  const user = await findAuthUserByEmail(supabase, email);
+  if (!user) return json({ success: false, error: 'Usuario nao encontrado', email });
+
+  const fiscalSettings = await loadFiscalSettings(supabase, user.id, false);
+  const readiness = buildFiscalReadiness(fiscalSettings, { requireCePilot: true });
+  let certificate: any = null;
+  let connection: any = null;
+
+  if (fiscalSettings.certificado_a1_base64 && fiscalSettings.certificado_senha) {
+    try {
+      const certInfo = loadCertificateFromBase64(fiscalSettings.certificado_a1_base64, fiscalSettings.certificado_senha);
+      const validation = validateCertificate(certInfo, fiscalSettings.cnpj);
+      certificate = {
+        valid: validation.valid,
+        errors: validation.errors,
+        cnpj: certInfo.cnpj,
+        expected_cnpj: onlyDigits(fiscalSettings.cnpj),
+        cnpj_matches: certInfo.cnpj === onlyDigits(fiscalSettings.cnpj),
+        valid_from: certInfo.validFrom.toISOString(),
+        valid_to: certInfo.validTo.toISOString(),
+        subject: certInfo.subject,
+        issuer: certInfo.issuer,
+        chain_count: certInfo.certificateChainCount,
+      };
+
+      if (validation.valid && readiness.errors.length === 0) {
+        const sefazClient = new SefazClient(certInfo);
+        try {
+          const result = await sefazClient.consultarStatusServico(
+            fiscalSettings.endereco_uf,
+            fiscalSettings.ambiente as Ambiente
+          );
+          connection = {
+            success: result.success,
+            cStat: result.cStat,
+            motivo: result.xMotivo,
+            rawStatus: result.rawStatus,
+          };
+        } finally {
+          sefazClient.close();
+        }
+      }
+    } catch (error) {
+      certificate = { valid: false, errors: [getErrorMessage(error)] };
+    }
+  }
+
+  return json({
+    success: true,
+    user: {
+      id: user.id,
+      email: user.email,
+      created_at: user.created_at,
+    },
+    fiscal: {
+      ativo: fiscalSettings.ativo,
+      cnpj: onlyDigits(fiscalSettings.cnpj),
+      razao_social: fiscalSettings.razao_social,
+      nome_fantasia: fiscalSettings.nome_fantasia,
+      inscricao_estadual: onlyDigits(fiscalSettings.inscricao_estadual),
+      uf: fiscalSettings.endereco_uf,
+      municipio: fiscalSettings.endereco_municipio,
+      codigo_municipio: onlyDigits(fiscalSettings.codigo_municipio),
+      ambiente: fiscalSettings.ambiente,
+      serie: fiscalSettings.nfce_serie,
+      proximo_numero: fiscalSettings.nfce_numero_atual,
+      has_csc_id: Boolean(String(fiscalSettings.csc_id || '').trim()),
+      has_csc_token: Boolean(String(fiscalSettings.csc_token || '').trim()),
+      has_certificate: Boolean(fiscalSettings.certificado_a1_base64),
+      certificate_bytes: Math.floor(String(fiscalSettings.certificado_a1_base64 || '').length * 3 / 4),
+    },
+    readiness,
+    certificate,
+    connection,
+  });
+}
+
+async function findAuthUserByEmail(supabase: any, email: string) {
+  for (let page = 1; page <= 20; page++) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw new Error(`Erro ao buscar usuarios: ${error.message}`);
+    const users = data?.users || [];
+    const found = users.find((user: any) => String(user.email || '').toLowerCase() === email);
+    if (found) return found;
+    if (users.length < 1000) break;
+  }
+  return null;
 }
 
 async function downloadXML(supabase: any, userId: string, cupomId: string) {
@@ -395,9 +511,12 @@ function buildFiscalReadiness(settings: any, options: { requireCePilot?: boolean
     errors.push('Piloto fiscal liberado apenas para empresas do Ceara (UF CE)');
   }
   if (uf === 'CE') {
-    const codigoMunicipio = onlyDigits(settings.codigo_municipio);
+    const codigoMunicipio = resolveMunicipalityCode(settings);
     if (codigoMunicipio.length !== 7 || !codigoMunicipio.startsWith('23')) {
       errors.push('Codigo do municipio do Ceara deve ter 7 digitos e comecar com 23');
+    }
+    if (codigoMunicipio !== onlyDigits(settings.codigo_municipio)) {
+      warnings.push(`Codigo do municipio normalizado para ${settings.endereco_municipio || 'municipio'}: ${codigoMunicipio}`);
     }
     if (!onlyDigits(settings.inscricao_estadual)) {
       errors.push('Inscricao Estadual e obrigatoria para NFC-e no piloto CE');
@@ -428,7 +547,8 @@ async function getNextNFCeNumber(supabase: any, userId: string, serie: string): 
 }
 
 async function generateAccessKey(supabase: any, fiscalSettings: any, numero: number, dataEmissao: Date): Promise<string> {
-  const aamm = `${dataEmissao.getFullYear().toString().slice(-2)}${String(dataEmissao.getMonth() + 1).padStart(2, '0')}`;
+  const parts = getNfeDateParts(dataEmissao);
+  const aamm = `${parts.year.slice(-2)}${parts.month}`;
   const codigoNumerico = crypto.getRandomValues(new Uint32Array(1))[0].toString().slice(0, 8).padStart(8, '0');
   const { data, error } = await supabase.rpc('generate_nfce_access_key', {
     p_uf: getCodigoUF(fiscalSettings.endereco_uf),
@@ -487,9 +607,42 @@ function buildFiscalItems(orderItems: any[], settings: any) {
   });
 }
 
+function normalizeTaxCst(value: string, fallback = '07') {
+  return String(value || fallback).replace(/\D/g, '').padStart(2, '0').slice(0, 2) || fallback;
+}
+
+function buildPisXml(item: any) {
+  const cst = normalizeTaxCst(item.cst_pis);
+  if (['01', '02'].includes(cst)) {
+    return `<PIS><PISAliq><CST>${cst}</CST><vBC>0.00</vBC><pPIS>0.0000</pPIS><vPIS>0.00</vPIS></PISAliq></PIS>`;
+  }
+  if (cst === '03') {
+    return `<PIS><PISQtde><CST>03</CST><qBCProd>0.0000</qBCProd><vAliqProd>0.0000</vAliqProd><vPIS>0.00</vPIS></PISQtde></PIS>`;
+  }
+  if (['04', '06', '07', '08', '09'].includes(cst)) {
+    return `<PIS><PISNT><CST>${cst}</CST></PISNT></PIS>`;
+  }
+  return `<PIS><PISOutr><CST>${cst}</CST><vBC>0.00</vBC><pPIS>0.0000</pPIS><vPIS>0.00</vPIS></PISOutr></PIS>`;
+}
+
+function buildCofinsXml(item: any) {
+  const cst = normalizeTaxCst(item.cst_cofins);
+  if (['01', '02'].includes(cst)) {
+    return `<COFINS><COFINSAliq><CST>${cst}</CST><vBC>0.00</vBC><pCOFINS>0.0000</pCOFINS><vCOFINS>0.00</vCOFINS></COFINSAliq></COFINS>`;
+  }
+  if (cst === '03') {
+    return `<COFINS><COFINSQtde><CST>03</CST><qBCProd>0.0000</qBCProd><vAliqProd>0.0000</vAliqProd><vCOFINS>0.00</vCOFINS></COFINSQtde></COFINS>`;
+  }
+  if (['04', '06', '07', '08', '09'].includes(cst)) {
+    return `<COFINS><COFINSNT><CST>${cst}</CST></COFINSNT></COFINS>`;
+  }
+  return `<COFINS><COFINSOutr><CST>${cst}</CST><vBC>0.00</vBC><pCOFINS>0.0000</pCOFINS><vCOFINS>0.00</vCOFINS></COFINSOutr></COFINS>`;
+}
+
 function generateNFCeXML(input: {
   fiscalSettings: any;
   cupom: any;
+  order: any;
   items: any[];
   consumerData?: any;
   observacoes?: string;
@@ -503,6 +656,7 @@ function generateNFCeXML(input: {
   const {
     fiscalSettings,
     cupom,
+    order,
     items,
     consumerData,
     observacoes,
@@ -515,26 +669,101 @@ function generateNFCeXML(input: {
   } = input;
   const isHomologacao = fiscalSettings.ambiente !== 'producao';
   const dhEmi = formatNfeDate(new Date(cupom.data_hora_emissao));
+  const codigoMunicipio = resolveMunicipalityCode(fiscalSettings);
   const consumidorDoc = onlyDigits(consumerData?.cpf_cnpj);
   const detXml = items.map((item, index) => {
     const productName = isHomologacao && index === 0
       ? 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
       : item.descricao;
-    return `<det nItem="${index + 1}"><prod><cProd>${escapeXml(item.codigo_produto)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${escapeXml(productName)}</xProd><NCM>${item.ncm}</NCM><CFOP>${item.cfop}</CFOP><uCom>${escapeXml(item.unidade)}</uCom><qCom>${fixed4(item.quantidade)}</qCom><vUnCom>${fixed4(item.valor_unitario)}</vUnCom><vProd>${fixed2(item.valor_total)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>${escapeXml(item.unidade)}</uTrib><qTrib>${fixed4(item.quantidade)}</qTrib><vUnTrib>${fixed4(item.valor_unitario)}</vUnTrib><indTot>1</indTot></prod><imposto><vTotTrib>${fixed2(item.valor_total * 0.0765)}</vTotTrib><ICMS><ICMSSN102><orig>0</orig><CSOSN>${item.cst_icms}</CSOSN></ICMSSN102></ICMS><PIS><PISOutr><CST>${item.cst_pis}</CST><vBC>0.00</vBC><pPIS>0.0000</pPIS><vPIS>0.00</vPIS></PISOutr></PIS><COFINS><COFINSOutr><CST>${item.cst_cofins}</CST><vBC>0.00</vBC><pCOFINS>0.0000</pCOFINS><vCOFINS>0.00</vCOFINS></COFINSOutr></COFINS></imposto></det>`;
+    return `<det nItem="${index + 1}"><prod><cProd>${escapeXml(item.codigo_produto)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${escapeXml(productName)}</xProd><NCM>${item.ncm}</NCM><CFOP>${item.cfop}</CFOP><uCom>${escapeXml(item.unidade)}</uCom><qCom>${fixed4(item.quantidade)}</qCom><vUnCom>${fixed4(item.valor_unitario)}</vUnCom><vProd>${fixed2(item.valor_total)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>${escapeXml(item.unidade)}</uTrib><qTrib>${fixed4(item.quantidade)}</qTrib><vUnTrib>${fixed4(item.valor_unitario)}</vUnTrib><indTot>1</indTot></prod><imposto><vTotTrib>${fixed2(item.valor_total * 0.0765)}</vTotTrib><ICMS><ICMSSN102><orig>0</orig><CSOSN>${item.cst_icms}</CSOSN></ICMSSN102></ICMS>${buildPisXml(item)}${buildCofinsXml(item)}</imposto></det>`;
   }).join('');
 
   const destXml = consumidorDoc
     ? `<dest>${consumidorDoc.length === 11 ? `<CPF>${consumidorDoc}</CPF>` : `<CNPJ>${consumidorDoc}</CNPJ>`}${consumerData?.nome ? `<xNome>${escapeXml(consumerData.nome)}</xNome>` : ''}<indIEDest>9</indIEDest></dest>`
     : '';
+  const paymentXml = buildPaymentDetailsXml(order, paymentMethod, valorTotal);
 
-  return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${cupom.chave_acesso}" versao="4.00"><ide><cUF>${getCodigoUF(fiscalSettings.endereco_uf)}</cUF><cNF>${cupom.chave_acesso.substring(35, 43)}</cNF><natOp>Venda</natOp><mod>65</mod><serie>${Number(cupom.serie)}</serie><nNF>${cupom.numero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>${onlyDigits(fiscalSettings.codigo_municipio)}</cMunFG><tpImp>4</tpImp><tpEmis>1</tpEmis><cDV>${cupom.chave_acesso.slice(-1)}</cDV><tpAmb>${isHomologacao ? '2' : '1'}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>PopSystem-1.0</verProc></ide><emit><CNPJ>${onlyDigits(fiscalSettings.cnpj)}</CNPJ><xNome>${escapeXml(fiscalSettings.razao_social)}</xNome><xFant>${escapeXml(fiscalSettings.nome_fantasia || fiscalSettings.razao_social)}</xFant><enderEmit><xLgr>${escapeXml(fiscalSettings.endereco_logradouro)}</xLgr><nro>${escapeXml(fiscalSettings.endereco_numero)}</nro>${fiscalSettings.endereco_complemento ? `<xCpl>${escapeXml(fiscalSettings.endereco_complemento)}</xCpl>` : ''}<xBairro>${escapeXml(fiscalSettings.endereco_bairro)}</xBairro><cMun>${onlyDigits(fiscalSettings.codigo_municipio)}</cMun><xMun>${escapeXml(fiscalSettings.endereco_municipio)}</xMun><UF>${escapeXml(fiscalSettings.endereco_uf)}</UF><CEP>${onlyDigits(fiscalSettings.endereco_cep)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${escapeXml(fiscalSettings.inscricao_estadual || 'ISENTO')}</IE><CRT>${Number(fiscalSettings.regime_tributario || 1)}</CRT></emit>${destXml}${detXml}<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${fixed2(totalProdutos)}</vProd><vFrete>${fixed2(deliveryFee)}</vFrete><vSeg>0.00</vSeg><vDesc>${fixed2(valorDesconto)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${fixed2(valorTotal)}</vNF><vTotTrib>${fixed2(valorTributos)}</vTotTrib></ICMSTot></total><transp><modFrete>9</modFrete></transp><pag><detPag><indPag>0</indPag><tPag>${mapPaymentMethod(paymentMethod)}</tPag><vPag>${fixed2(valorTotal)}</vPag></detPag></pag>${observacoes ? `<infAdic><infCpl>${escapeXml(observacoes)}</infCpl></infAdic>` : ''}</infNFe></NFe>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${cupom.chave_acesso}" versao="4.00"><ide><cUF>${getCodigoUF(fiscalSettings.endereco_uf)}</cUF><cNF>${cupom.chave_acesso.substring(35, 43)}</cNF><natOp>Venda</natOp><mod>65</mod><serie>${Number(cupom.serie)}</serie><nNF>${cupom.numero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>${codigoMunicipio}</cMunFG><tpImp>4</tpImp><tpEmis>1</tpEmis><cDV>${cupom.chave_acesso.slice(-1)}</cDV><tpAmb>${isHomologacao ? '2' : '1'}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>PopSystem-1.0</verProc></ide><emit><CNPJ>${onlyDigits(fiscalSettings.cnpj)}</CNPJ><xNome>${escapeXml(fiscalSettings.razao_social)}</xNome><xFant>${escapeXml(fiscalSettings.nome_fantasia || fiscalSettings.razao_social)}</xFant><enderEmit><xLgr>${escapeXml(fiscalSettings.endereco_logradouro)}</xLgr><nro>${escapeXml(fiscalSettings.endereco_numero)}</nro>${fiscalSettings.endereco_complemento ? `<xCpl>${escapeXml(fiscalSettings.endereco_complemento)}</xCpl>` : ''}<xBairro>${escapeXml(fiscalSettings.endereco_bairro)}</xBairro><cMun>${codigoMunicipio}</cMun><xMun>${escapeXml(fiscalSettings.endereco_municipio)}</xMun><UF>${escapeXml(fiscalSettings.endereco_uf)}</UF><CEP>${onlyDigits(fiscalSettings.endereco_cep)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${escapeXml(fiscalSettings.inscricao_estadual || 'ISENTO')}</IE><CRT>${Number(fiscalSettings.regime_tributario || 1)}</CRT></emit>${destXml}${detXml}<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${fixed2(totalProdutos)}</vProd><vFrete>${fixed2(deliveryFee)}</vFrete><vSeg>0.00</vSeg><vDesc>${fixed2(valorDesconto)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${fixed2(valorTotal)}</vNF><vTotTrib>${fixed2(valorTributos)}</vTotTrib></ICMSTot></total><transp><modFrete>9</modFrete></transp><pag>${paymentXml}</pag>${observacoes ? `<infAdic><infCpl>${escapeXml(observacoes)}</infCpl></infAdic>` : ''}</infNFe></NFe>`;
+}
+
+function buildPaymentDetailsXml(order: any, paymentMethod: string, valorTotal: number): string {
+  const lines = normalizeFiscalPaymentLines(order, paymentMethod, valorTotal);
+  return lines.map((line: { method: string; amount: number }) => {
+    const tPag = mapPaymentMethod(line.method);
+    const cardXml = buildPaymentCardXml(tPag, order, line.method);
+    return `<detPag><indPag>0</indPag><tPag>${tPag}</tPag><vPag>${fixed2(line.amount)}</vPag>${cardXml}</detPag>`;
+  }).join('');
+}
+
+function normalizeFiscalPaymentLines(order: any, paymentMethod: string, valorTotal: number): Array<{ method: string; amount: number }> {
+  const splitLines = Array.isArray(order?.variations?.payment_split?.lines)
+    ? order.variations.payment_split.lines
+    : [];
+
+  const validSplitLines = splitLines
+    .map((line: any) => ({
+      method: normalizeFiscalPaymentMethod(line?.method || line?.label || paymentMethod),
+      amount: money(Number(line?.amount || 0)),
+    }))
+    .filter((line: any) => line.amount > 0);
+
+  if (validSplitLines.length > 0) return validSplitLines;
+
+  return [{
+    method: normalizeFiscalPaymentMethod(paymentMethod),
+    amount: money(valorTotal),
+  }];
+}
+
+function normalizeFiscalPaymentMethod(method: string): string {
+  const normalized = normalizeTextKey(String(method || '')).replace(/[^A-Z0-9]/g, '_');
+  if (normalized.includes('PIX')) return normalized.includes('ONLINE') ? 'pix_online' : 'pix';
+  if (normalized.includes('DEBITO') || normalized.includes('DEBIT')) return 'cartao_debito';
+  if (normalized.includes('CREDITO') || normalized.includes('CREDIT')) return 'cartao_credito';
+  if (normalized.includes('CARTAO') || normalized.includes('CARD')) return 'cartao_credito';
+  if (normalized.includes('DINHEIRO') || normalized.includes('CASH')) return 'dinheiro';
+  return String(method || '');
+}
+
+function buildPaymentCardXml(tPag: string, order: any, method: string): string {
+  if (!['03', '04', '17'].includes(tPag)) return '';
+
+  if (tPag === '17') {
+    return '<card><tpIntegra>2</tpIntegra></card>';
+  }
+
+  const tef = order?.variations?.tef || {};
+  const acquirerCnpj = onlyDigits(tef?.acquirer_cnpj || tef?.cnpj || '');
+  const authorizationCode = String(tef?.auth || tef?.authorization_code || tef?.cAut || '').trim();
+  const brandCode = mapCardBrand(tef?.brand);
+
+  if (acquirerCnpj.length === 14 && authorizationCode && ['03', '04'].includes(tPag)) {
+    return `<card><tpIntegra>1</tpIntegra><CNPJ>${acquirerCnpj}</CNPJ>${brandCode ? `<tBand>${brandCode}</tBand>` : ''}<cAut>${escapeXml(authorizationCode).slice(0, 128)}</cAut></card>`;
+  }
+
+  return '<card><tpIntegra>2</tpIntegra></card>';
+}
+
+function mapCardBrand(value: unknown): string {
+  const brand = normalizeTextKey(String(value || ''));
+  if (!brand) return '';
+  if (brand.includes('VISA')) return '01';
+  if (brand.includes('MASTER')) return '02';
+  if (brand.includes('AMERICAN') || brand.includes('AMEX')) return '03';
+  if (brand.includes('SOROCRED')) return '04';
+  if (brand.includes('DINERS')) return '05';
+  if (brand.includes('ELO')) return '06';
+  if (brand.includes('HIPER')) return '07';
+  if (brand.includes('AURA')) return '08';
+  if (brand.includes('CABAL')) return '09';
+  return '99';
 }
 
 function mapPaymentMethod(method: string): string {
-  const normalized = String(method || '').toLowerCase();
+  const normalized = normalizeFiscalPaymentMethod(method);
   if (normalized.includes('pix')) return '17';
-  if (normalized.includes('debito') || normalized.includes('débito')) return '04';
-  if (normalized.includes('credito') || normalized.includes('crédito') || normalized === 'cartao') return '03';
+  if (normalized.includes('cartao_debito')) return '04';
+  if (normalized.includes('cartao_credito')) return '03';
   if (normalized.includes('dinheiro')) return '01';
   return '99';
 }
@@ -591,6 +820,49 @@ function fixed4(value: number): string {
   return Number(value || 0).toFixed(4);
 }
 
+function getNfeDateParts(date: Date) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: NFE_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  return {
+    year: parts.year || String(date.getUTCFullYear()),
+    month: parts.month || String(date.getUTCMonth() + 1).padStart(2, '0'),
+    day: parts.day || String(date.getUTCDate()).padStart(2, '0'),
+    hour: parts.hour === '24' ? '00' : (parts.hour || '00'),
+    minute: parts.minute || '00',
+    second: parts.second || '00',
+  };
+}
+
 function formatNfeDate(date: Date): string {
-  return date.toISOString().replace(/\.\d{3}Z$/, '-03:00');
+  const parts = getNfeDateParts(date);
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}-03:00`;
+}
+
+function normalizeTextKey(value: string): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function resolveMunicipalityCode(settings: any): string {
+  const raw = onlyDigits(settings?.codigo_municipio);
+  if (raw.length === 7) return raw;
+  const uf = String(settings?.endereco_uf || '').toUpperCase();
+  const city = normalizeTextKey(settings?.endereco_municipio);
+  return MUNICIPALITY_CODE_OVERRIDES[`${uf}|${city}`] || raw;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || 'Erro desconhecido');
 }

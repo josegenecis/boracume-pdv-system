@@ -52,7 +52,14 @@ interface Order {
   pickup_code?: string | null;
   scheduled_at?: string | null;
   integration_payload?: any;
+  variations?: any;
 }
+
+const isTableServiceOrder = (order: any) => {
+  const orderType = String(order?.order_type || '').toLowerCase();
+  const source = String(order?.variations?.source || order?.source || '').toLowerCase();
+  return orderType === 'dine_in' && (Boolean(order?.table_id) || source.includes('table'));
+};
 
 const isPdvCounterOrder = (order: any) => {
   const source = String(order?.variations?.source || order?.source || '').toUpperCase();
@@ -900,6 +907,18 @@ const Orders = () => {
     );
   };
 
+  const getOrderStatusBadge = (order: Order) => {
+    if (isTableServiceOrder(order)) {
+      if (order.status === 'in_delivery') {
+        return <Badge variant="outline" className="bg-purple-100 text-purple-800 border-purple-200">Levou para mesa</Badge>;
+      }
+      if (order.status === 'delivered' || order.status === 'completed') {
+        return <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-200">Mesa atendida</Badge>;
+      }
+    }
+    return getStatusBadge(order.status);
+  };
+
   const getOrderTypeIcon = (type: string) => {
     switch (type) {
       case 'delivery':
@@ -942,6 +961,7 @@ const Orders = () => {
     if (order.status === 'accepted' || order.status === 'preparing') return { label: 'Marcar pronto', status: 'ready', className: 'bg-[#003223] text-white hover:bg-[#0a4a34]' };
     if (order.status === 'ready') {
       if (order.order_type === 'delivery') return { label: 'Saiu para entrega', status: 'in_delivery', className: 'bg-[#FF6400] text-white hover:bg-[#E85C00]' };
+      if (isTableServiceOrder(order)) return { label: 'Levou para mesa', status: 'delivered', className: 'bg-[#003223] text-white hover:bg-[#0a4a34]' };
       return { label: 'Finalizar', status: 'delivered', className: 'bg-[#003223] text-white hover:bg-[#0a4a34]' };
     }
     if (order.status === 'in_delivery') return { label: 'Finalizar', status: 'delivered', className: 'bg-[#003223] text-white hover:bg-[#0a4a34]' };
@@ -970,7 +990,7 @@ const Orders = () => {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  {getStatusBadge(order.status)}
+                  {getOrderStatusBadge(order)}
                   <div className="text-[12px] font-bold text-slate-900">{formatCurrency(order.total)}</div>
                 </div>
               </div>
@@ -1255,7 +1275,7 @@ const Orders = () => {
                               <div className="text-sm text-muted-foreground truncate">{order.customer_name}</div>
                               <div className="text-sm text-muted-foreground">{formatCurrency(order.total)}</div>
                             </div>
-                            {getStatusBadge(order.status)}
+                            {getOrderStatusBadge(order)}
                           </div>
                         </CardContent>
                       </Card>
@@ -1473,7 +1493,7 @@ const Orders = () => {
                                         >
                                           <GripVertical className="h-4 w-4" />
                                         </button>
-                                        {getStatusBadge(order.status)}
+                                        {getOrderStatusBadge(order)}
                                         <div className="text-xs font-semibold">{formatCurrency(order.total)}</div>
                                       </div>
                                     </div>
@@ -1530,7 +1550,7 @@ const Orders = () => {
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
-                          {getStatusBadge(order.status)}
+                          {getOrderStatusBadge(order)}
                           <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
                             <span className="text-sm text-gray-600">
@@ -1681,7 +1701,7 @@ const Orders = () => {
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
-                          {getStatusBadge(order.status)}
+                          {getOrderStatusBadge(order)}
                           <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
                             <span className="text-sm text-gray-600">
@@ -1842,7 +1862,7 @@ const Orders = () => {
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
-                          {getStatusBadge(order.status)}
+                          {getOrderStatusBadge(order)}
                           <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
                             <span className="text-sm text-gray-600">
@@ -1873,11 +1893,15 @@ const Orders = () => {
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                requestInDelivery([order.id]);
+                                if (isTableServiceOrder(order)) {
+                                  updateOrderStatus(order.id, 'delivered');
+                                } else {
+                                  requestInDelivery([order.id]);
+                                }
                               }}
                               className="w-full sm:flex-1 bg-blue-600 hover:bg-blue-700"
                             >
-                              Saiu para entrega
+                              {isTableServiceOrder(order) ? 'Levou para mesa' : 'Saiu para entrega'}
                             </Button>
                           ) : (
                             <Button

@@ -4,6 +4,8 @@ export interface CertificateInfo {
   certificate: forge.pki.Certificate;
   privateKey: forge.pki.PrivateKey;
   certificatePem: string;
+  certificateChainPem: string;
+  certificateChainCount: number;
   privateKeyPem: string;
   serialNumber: string;
   validFrom: Date;
@@ -61,10 +63,14 @@ export function loadCertificateFromBase64(base64Data: string, password: string):
       throw new Error('Certificado ou chave privada nao encontrados no arquivo PKCS#12');
     }
 
+    const certificateChainPem = buildCertificateChainPem(certificate, certificateEntries.map((entry: any) => entry.certificate));
+
     return {
       certificate,
       privateKey,
       certificatePem: forge.pki.certificateToPem(certificate),
+      certificateChainPem,
+      certificateChainCount: countPemCertificates(certificateChainPem),
       privateKeyPem: forge.pki.privateKeyToPem(privateKey),
       serialNumber: certificate.serialNumber,
       validFrom: certificate.validity.notBefore,
@@ -74,7 +80,7 @@ export function loadCertificateFromBase64(base64Data: string, password: string):
       cnpj: selected?.cnpj || extractCnpjFromCertificate(certificate)
     };
   } catch (error) {
-    throw new Error(`Erro ao carregar certificado: ${error.message}`);
+    throw new Error(`Erro ao carregar certificado: ${getErrorMessage(error)}`);
   }
 }
 
@@ -151,6 +157,48 @@ function isCertificateAuthority(certificate: forge.pki.Certificate): boolean {
   );
 }
 
+function certKey(certificate: forge.pki.Certificate): string {
+  return `${certificate.serialNumber}|${attributesToText(certificate.subject.attributes)}`;
+}
+
+function namesMatch(a: forge.pki.Certificate['subject'], b: forge.pki.Certificate['issuer']): boolean {
+  return attributesToText(a.attributes) === attributesToText(b.attributes);
+}
+
+function buildCertificateChainPem(leaf: forge.pki.Certificate, certificates: forge.pki.Certificate[]): string {
+  const all = (certificates || []).filter(Boolean);
+  const byKey = new Map(all.map((cert) => [certKey(cert), cert]));
+  const ordered: forge.pki.Certificate[] = [leaf];
+  const used = new Set([certKey(leaf)]);
+  let current = leaf;
+
+  for (let i = 0; i < all.length; i++) {
+    const issuer = all.find((candidate) =>
+      !used.has(certKey(candidate)) && namesMatch(candidate.subject, current.issuer)
+    );
+    if (!issuer) break;
+    ordered.push(issuer);
+    used.add(certKey(issuer));
+    current = issuer;
+  }
+
+  for (const cert of all) {
+    const key = certKey(cert);
+    if (!used.has(key)) {
+      ordered.push(cert);
+      used.add(key);
+    }
+  }
+
+  return ordered
+    .map((cert) => forge.pki.certificateToPem(byKey.get(certKey(cert)) || cert))
+    .join('');
+}
+
+function countPemCertificates(value: string): number {
+  return (String(value || '').match(/-----BEGIN CERTIFICATE-----/g) || []).length;
+}
+
 function extractCnpjFromSubject(certificate: forge.pki.Certificate): string | undefined {
   const commonName = getAttributeValue(certificate, ['CN', 'commonName']);
   const commonNameCnpj = extractCnpjFromText(commonName);
@@ -171,4 +219,8 @@ function extractCnpjFromCertificate(certificate: forge.pki.Certificate): string 
   }
 
   return undefined;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || 'Erro desconhecido');
 }

@@ -24,6 +24,12 @@ interface Waiter {
   role: 'admin' | 'cashier';
   permissions: Record<string, boolean>;
   waiter_access?: boolean;
+  employment_type?: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'clt' | 'freelance';
+  salary_amount?: number | null;
+  hourly_rate?: number | null;
+  weekly_hours?: number | null;
+  hire_date?: string | null;
+  job_title?: string | null;
 }
 
 const WAITER_ACCESS_SCHEMA_MESSAGE =
@@ -84,6 +90,21 @@ type ServiceChargeSettings = {
   taxWithholdPercent: number;
 };
 
+const EMPLOYMENT_LABELS: Record<string, string> = {
+  hourly: 'Por hora',
+  daily: 'Diária',
+  weekly: 'Semanal',
+  monthly: 'Mensal fixo',
+  clt: 'CLT',
+  freelance: 'Freelancer',
+};
+
+const formatMoney = (value?: number | null) => {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) return '-';
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numeric);
+};
+
 const Garcons = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -115,7 +136,13 @@ const Garcons = () => {
     role: 'cashier',
     active: true,
     permissions: {},
-    waiter_access: false
+    waiter_access: false,
+    employment_type: 'monthly',
+    salary_amount: 0,
+    hourly_rate: 0,
+    weekly_hours: 44,
+    hire_date: '',
+    job_title: ''
   });
 
   const hasMissingColumnError = (error: any, columnName: string) => {
@@ -232,7 +259,13 @@ const Garcons = () => {
         role: 'cashier',
         active: true,
         permissions: { pos_access: true },
-        waiter_access: false
+        waiter_access: false,
+        employment_type: 'monthly',
+        salary_amount: 0,
+        hourly_rate: 0,
+        weekly_hours: 44,
+        hire_date: '',
+        job_title: ''
       });
     }
     setActiveTab('data');
@@ -259,6 +292,12 @@ const Garcons = () => {
         role: formData.role,
         active: formData.active,
         permissions,
+        employment_type: formData.employment_type || 'monthly',
+        salary_amount: Number(formData.salary_amount || 0),
+        hourly_rate: Number(formData.hourly_rate || 0),
+        weekly_hours: Number(formData.weekly_hours || 44),
+        hire_date: formData.hire_date || null,
+        job_title: String(formData.job_title || '').trim() || null,
         // Only include password if it was typed (for edits) or is new
         ...(formData.password ? { password: formData.password } : {})
       };
@@ -353,6 +392,12 @@ const Garcons = () => {
         role: formData.role,
         active: formData.active,
         permissions,
+        employment_type: formData.employment_type || 'monthly',
+        salary_amount: Number(formData.salary_amount || 0),
+        hourly_rate: Number(formData.hourly_rate || 0),
+        weekly_hours: Number(formData.weekly_hours || 44),
+        hire_date: formData.hire_date || null,
+        job_title: String(formData.job_title || '').trim() || null,
         ...(rawPassword ? { password: rawPassword } : {}),
       };
 
@@ -501,6 +546,7 @@ const Garcons = () => {
                 <TableHead>Email</TableHead>
                 <TableHead>CPF</TableHead>
                 <TableHead>Perfil</TableHead>
+                <TableHead>Contrato</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -535,6 +581,18 @@ const Garcons = () => {
                     </div>
                   </TableCell>
                   <TableCell>
+                    <div className="space-y-0.5">
+                      <div className="text-sm font-semibold text-gray-900">
+                        {EMPLOYMENT_LABELS[waiter.employment_type || 'monthly'] || 'Mensal fixo'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {waiter.employment_type === 'hourly'
+                          ? `${formatMoney(waiter.hourly_rate)}/h`
+                          : formatMoney(waiter.salary_amount)}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       waiter.active 
                         ? 'bg-green-100 text-green-800' 
@@ -558,7 +616,7 @@ const Garcons = () => {
               ))}
               {waiters.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     Nenhum usuário encontrado.
                   </TableCell>
                 </TableRow>
@@ -721,6 +779,82 @@ const Garcons = () => {
                       <span className="text-sm font-medium">
                         {formData.active ? 'Ativo - Pode acessar' : 'Inativo - Acesso bloqueado'}
                       </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-slate-50/70 p-4">
+                  <div className="mb-4">
+                    <h3 className="font-semibold text-gray-900">Contrato e pagamento</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Use para controlar custo da equipe, ponto e fechamento de salário.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Cargo/Função</Label>
+                      <Input
+                        placeholder="Ex: Garçom, caixa, cozinha"
+                        value={formData.job_title || ''}
+                        onChange={(event) => setFormData({ ...formData, job_title: event.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tipo de contratação</Label>
+                      <Select
+                        value={formData.employment_type || 'monthly'}
+                        onValueChange={(value: any) => setFormData({ ...formData, employment_type: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Mensal fixo</SelectItem>
+                          <SelectItem value="hourly">Por hora</SelectItem>
+                          <SelectItem value="daily">Diária</SelectItem>
+                          <SelectItem value="weekly">Semanal</SelectItem>
+                          <SelectItem value="clt">CLT</SelectItem>
+                          <SelectItem value="freelance">Freelancer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Salário/valor combinado</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.salary_amount ?? 0}
+                        onChange={(event) => setFormData({ ...formData, salary_amount: Number(event.target.value || 0) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Valor por hora</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.hourly_rate ?? 0}
+                        onChange={(event) => setFormData({ ...formData, hourly_rate: Number(event.target.value || 0) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Horas por semana</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={formData.weekly_hours ?? 44}
+                        onChange={(event) => setFormData({ ...formData, weekly_hours: Number(event.target.value || 0) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Data de admissão</Label>
+                      <Input
+                        type="date"
+                        value={formData.hire_date || ''}
+                        onChange={(event) => setFormData({ ...formData, hire_date: event.target.value })}
+                      />
                     </div>
                   </div>
                 </div>

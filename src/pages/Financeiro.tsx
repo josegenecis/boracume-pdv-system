@@ -38,7 +38,8 @@ import {
   RefreshCw,
   ReceiptText,
   ChevronRight,
-  XCircle
+  XCircle,
+  PackageCheck
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -1083,6 +1084,13 @@ const Financeiro = () => {
       className: 'border-[#003223]/10 bg-white text-[#003223]',
     },
     {
+      key: 'invoice-stock',
+      label: 'Nota + estoque',
+      icon: PackageCheck,
+      onClick: () => navigate('/despesas?smartInvoice=1'),
+      className: 'border-[#8CC850]/20 bg-[#F5FBED] text-[#245B2B]',
+    },
+    {
       key: 'refresh',
       label: 'Atualizar',
       icon: RefreshCw,
@@ -1217,6 +1225,15 @@ const Financeiro = () => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-white/20 bg-white/15 text-white hover:bg-white/25"
+            onClick={() => navigate('/despesas?smartInvoice=1')}
+          >
+            <PackageCheck className="mr-2 h-4 w-4" />
+            Nota + estoque
+          </Button>
             </div>
           </div>
         </CardContent>

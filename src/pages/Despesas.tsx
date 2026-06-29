@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { parseBRL } from '@/lib/currency';
+import { useLocation } from 'react-router-dom';
 
 interface Expense {
   id: string;
@@ -79,6 +80,8 @@ const EXPENSE_CATEGORIES = [
 export default function Despesas() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const location = useLocation();
+  const smartInvoiceRef = useRef<HTMLDivElement | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [filteredExpenses, setFilteredExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +118,15 @@ export default function Despesas() {
   useEffect(() => {
     filterExpenses();
   }, [expenses, searchTerm, selectedCategory, dateFrom, dateTo, showReversed]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('smartInvoice') !== '1') return;
+
+    window.setTimeout(() => {
+      smartInvoiceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+  }, [location.search]);
 
   const loadExpenses = async () => {
     try {
@@ -524,11 +536,11 @@ export default function Despesas() {
         </p>
       </div>
 
-      <Card className="border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50">
+      <Card ref={smartInvoiceRef} className="border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-emerald-950">
             <Sparkles className="h-5 w-5 text-orange-600" />
-            Nota inteligente por imagem
+            Nota inteligente para financeiro e estoque
           </CardTitle>
           <CardDescription>
             Envie uma nota fiscal, cupom ou recibo. A IA lê os itens, classifica por categoria/subcategoria e prepara o lançamento de despesa e estoque.

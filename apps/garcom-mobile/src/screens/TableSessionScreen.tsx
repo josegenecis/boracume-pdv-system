@@ -16,7 +16,7 @@ import { AccountCard } from '../components/AccountCard';
 import { AppSheet } from '../components/AppSheet';
 import { colors, radius, spacing } from '../config/theme';
 import { useAuthSession } from '../contexts/AuthSessionContext';
-import { formatCurrency, formatTime } from '../lib/format';
+import { formatCurrency, formatMinutes, formatTime, minutesSince } from '../lib/format';
 import { queryClient } from '../lib/queryClient';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import {
@@ -170,7 +170,7 @@ export function TableSessionScreen({ navigation, route }: Props) {
             <View>
               <Text style={styles.title}>Mesa {sessionQuery.data.tableNumber}</Text>
               <Text style={styles.subtitle}>
-                Aberta às {formatTime(sessionQuery.data.openedAt)} • {sessionQuery.data.guestCount} pessoas
+                Aberta às {formatTime(sessionQuery.data.openedAt)} • {formatMinutes(minutesSince(sessionQuery.data.openedAt))} • {sessionQuery.data.guestCount} pessoas
               </Text>
             </View>
             <Pressable

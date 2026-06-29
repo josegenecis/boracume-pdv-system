@@ -59,6 +59,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
     switch (type) {
       case 'delivery': return 'bg-blue-100 text-blue-800 border-blue-300';
       case 'pickup': return 'bg-green-100 text-green-800 border-green-300';
+      case 'dine_in': return 'bg-purple-100 text-purple-800 border-purple-300';
       case 'local': return 'bg-purple-100 text-purple-800 border-purple-300';
       default: return 'bg-gray-100 text-gray-800 border-gray-300';
     }
@@ -68,6 +69,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
     switch (type) {
       case 'delivery': return 'Delivery';
       case 'pickup': return 'Retirada';
+      case 'dine_in': return 'Mesa';
       case 'local': return 'Local';
       default: return type;
     }
@@ -81,7 +83,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
             #{order.order_number}
           </CardTitle>
           <div className="flex flex-col gap-1">
-            <OrderStatusBadge status={order.status} />
+            <OrderStatusBadge status={order.status} isTableOrder={order.order_type === 'dine_in'} />
             <Badge className={`text-xs ${getOrderTypeColor(order.order_type)}`} variant="outline">
               {getOrderTypeLabel(order.order_type)}
             </Badge>

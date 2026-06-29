@@ -14,6 +14,7 @@ interface PixSettingsRow {
   credentials: any
   webhook_secret: string
   enabled: boolean
+  mp_waiter_enabled?: boolean
 }
 
 const PixIntegrationSettings: React.FC = () => {
@@ -23,6 +24,7 @@ const PixIntegrationSettings: React.FC = () => {
   const [settings, setSettings] = useState<PixSettingsRow | null>(null)
   const [provider, setProvider] = useState('custom')
   const [apiKey, setApiKey] = useState('')
+  const [mpWaiterEnabled, setMpWaiterEnabled] = useState(false)
 
   const endpoint = useMemo(() => {
     const baseUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || 'https://auth.popsystem.com.br').replace(/\/+$/, '')
@@ -42,6 +44,7 @@ const PixIntegrationSettings: React.FC = () => {
         setSettings(data as PixSettingsRow)
         setProvider((data as any).provider || 'custom')
         setApiKey(((data as any).credentials?.api_key) || '')
+        setMpWaiterEnabled(Boolean((data as any).mp_waiter_enabled))
       }
     } catch (e) {
       // Tabela pode não existir ainda
@@ -72,6 +75,7 @@ const PixIntegrationSettings: React.FC = () => {
         credentials: { api_key: apiKey },
         webhook_secret: settings?.webhook_secret || generateSecret(),
         enabled: true,
+        mp_waiter_enabled: !!mpWaiterEnabled,
       }
       if (settings?.id) {
         const { error } = await supabase.from('pix_settings').update(payload).eq('id', settings.id)
@@ -131,6 +135,24 @@ const PixIntegrationSettings: React.FC = () => {
         <div className="space-y-2">
           <Label>Endpoint do Webhook</Label>
           <Input value={endpoint} readOnly />
+        </div>
+
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Label>Gerar QR Code Mercado Pago no App Garçom</Label>
+              <p className="mt-1 text-sm text-emerald-800">
+                Ative para o garçom receber PIX online pelo celular, web ou POS.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant={mpWaiterEnabled ? 'default' : 'outline'}
+              onClick={() => setMpWaiterEnabled((current) => !current)}
+            >
+              {mpWaiterEnabled ? 'Ativo' : 'Inativo'}
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-2">

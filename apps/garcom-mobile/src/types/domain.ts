@@ -1,4 +1,12 @@
-export type TableStatus = 'free' | 'occupied' | 'serving' | 'payment_pending';
+export type TableStatus =
+  | 'free'
+  | 'occupied'
+  | 'serving'
+  | 'preparing'
+  | 'ready'
+  | 'payment_pending'
+  | 'check_requested'
+  | 'partially_paid';
 export type SessionStatus = 'open' | 'serving' | 'payment_pending' | 'closed';
 export type AccountStatus = 'open' | 'paid';
 export type OrderItemStatus = 'draft' | 'sent' | 'cancelled';

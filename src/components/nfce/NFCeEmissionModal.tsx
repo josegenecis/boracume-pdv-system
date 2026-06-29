@@ -26,7 +26,7 @@ interface NFCeEmissionModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: Order | null;
-  onSuccess: () => void;
+  onSuccess: (nfceData?: any) => void | Promise<void>;
 }
 
 interface ConsumerData {
@@ -126,10 +126,20 @@ const NFCeEmissionModal: React.FC<NFCeEmissionModalProps> = ({
     try {
       setLoading(true);
 
-      // Chamar edge function para emitir NFC-e
-      const { data, error } = await supabase.functions.invoke('nfce-operations', {
-        body: {
-          operation: 'emitir',
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Login nao confirmado. Saia e entre novamente antes de emitir a NFC-e.');
+      }
+
+      const response = await fetch('/api/nfce/emit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
           order_id: order.id,
           consumer_data: consumerData.nome || consumerData.cpf_cnpj ? {
             nome: consumerData.nome || null,
@@ -137,17 +147,24 @@ const NFCeEmissionModal: React.FC<NFCeEmissionModalProps> = ({
             email: consumerData.email || null
           } : null,
           observacoes
-        }
+        }),
       });
 
-      if (error) throw error;
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.error || data?.message || 'Erro ao emitir cupom fiscal.');
+      }
+      if (!data?.success) {
+        throw new Error(data?.motivo || 'A NFC-e foi rejeitada pela Sefaz.');
+      }
 
       toast({
         title: "NFC-e emitida",
         description: `Cupom fiscal #${data.numero} emitido com sucesso.`,
       });
 
-      onSuccess();
+      await onSuccess(data);
       onClose();
     } catch (error: any) {
       console.error('Erro ao emitir NFC-e:', error);

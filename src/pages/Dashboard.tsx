@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
-import { Users, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight, Search, Sparkles, Activity, ArrowUpRight, CreditCard, Wallet, ChefHat } from 'lucide-react';
+import { Users, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight, Search, Activity, ArrowUpRight, CreditCard, Wallet, ChefHat, AlertTriangle, Megaphone, CalendarClock, UserCheck, UserX } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -42,6 +42,37 @@ interface Order {
   created_at: string;
 }
 
+interface LowStockProduct {
+  id: string;
+  name: string;
+  category?: string | null;
+  stock_quantity: number;
+  low_stock_threshold: number;
+}
+
+interface DormantCustomer {
+  key: string;
+  name: string;
+  phone?: string | null;
+  lastOrderAt: string;
+  daysWithoutOrder: number;
+}
+
+interface DueExpense {
+  id: string;
+  description: string;
+  amount: number;
+  dueDate: string;
+  category?: string | null;
+}
+
+interface AttendanceSummary {
+  total: number;
+  present: number;
+  absent: number;
+  pendingReview: number;
+}
+
 const normalizeItems = (value: any) => {
   if (Array.isArray(value)) return value;
   if (typeof value === 'string') {
@@ -68,6 +99,15 @@ const Dashboard = () => {
   });
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<LowStockProduct[]>([]);
+  const [dormantCustomers, setDormantCustomers] = useState<DormantCustomer[]>([]);
+  const [dueExpenses, setDueExpenses] = useState<DueExpense[]>([]);
+  const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({
+    total: 0,
+    present: 0,
+    absent: 0,
+    pendingReview: 0,
+  });
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -93,7 +133,8 @@ const Dashboard = () => {
       const dataPromise = Promise.all([
         fetchStats(),
         fetchRevenueData(),
-        fetchRecentOrders()
+        fetchRecentOrders(),
+        fetchOperationalInsights()
       ]);
       
       const timeoutPromise = new Promise((_, reject) => 
@@ -104,7 +145,7 @@ const Dashboard = () => {
       console.log('✅ [DASHBOARD] Dados carregados com sucesso');
     } catch (error) {
       console.error('❌ [DASHBOARD] Erro ao carregar dados do dashboard:', error);
-      console.error('❌ [DASHBOARD] Stack trace:', error.stack);
+      console.error('❌ [DASHBOARD] Stack trace:', (error as any)?.stack);
     } finally {
       console.log('🔍 [DASHBOARD] Finalizando loading...');
       setLoading(false);
@@ -262,6 +303,127 @@ const Dashboard = () => {
     setRecentOrders(orders);
   };
 
+  const fetchOperationalInsights = async () => {
+    if (!user?.id) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const inFiveDays = new Date(today);
+    inFiveDays.setDate(inFiveDays.getDate() + 5);
+    inFiveDays.setHours(23, 59, 59, 999);
+    const dormantSince = new Date(today);
+    dormantSince.setDate(dormantSince.getDate() - 120);
+
+    const [productsResult, ordersResult, expensesResult, waitersResult, timeClockResult] = await Promise.allSettled([
+      supabase
+        .from('products')
+        .select('id, name, category, track_stock, stock_quantity, low_stock_threshold, active')
+        .eq('user_id', user.id)
+        .eq('track_stock', true)
+        .limit(300),
+      supabase
+        .from('orders')
+        .select('customer_name, customer_phone, created_at, status, acceptance_status')
+        .eq('user_id', user.id)
+        .gte('created_at', dormantSince.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1200),
+      (supabase as any)
+        .from('expenses')
+        .select('*')
+        .eq('user_id', user.id)
+        .limit(500),
+      (supabase as any)
+        .from('waiters')
+        .select('id, name, active')
+        .eq('user_id', user.id)
+        .eq('active', true),
+      (supabase as any)
+        .from('employee_time_clock_events')
+        .select('waiter_id, event_type, status, occurred_at')
+        .eq('user_id', user.id)
+        .gte('occurred_at', today.toISOString())
+        .order('occurred_at', { ascending: false })
+        .limit(500),
+    ]);
+
+    if (productsResult.status === 'fulfilled' && !productsResult.value.error) {
+      const products = (productsResult.value.data || []) as any[];
+      setLowStockProducts(products
+        .filter((product) => product.active !== false)
+        .map((product) => ({
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          stock_quantity: Number(product.stock_quantity || 0),
+          low_stock_threshold: Number(product.low_stock_threshold || 0),
+        }))
+        .filter((product) => product.stock_quantity <= product.low_stock_threshold)
+        .sort((a, b) => a.stock_quantity - b.stock_quantity)
+        .slice(0, 5));
+    }
+
+    if (ordersResult.status === 'fulfilled' && !ordersResult.value.error) {
+      const customers = new Map<string, DormantCustomer>();
+      const now = Date.now();
+      ((ordersResult.value.data || []) as any[]).forEach((order) => {
+        if (String(order.status || '') === 'cancelled') return;
+        if (String(order.acceptance_status || '') === 'awaiting_pix_payment') return;
+        const phone = String(order.customer_phone || '').replace(/\D/g, '');
+        const name = String(order.customer_name || '').trim();
+        const key = phone || name.toLowerCase();
+        if (!key) return;
+        const createdAt = String(order.created_at || '');
+        const daysWithoutOrder = Math.floor((now - new Date(createdAt).getTime()) / 86400000);
+        if (daysWithoutOrder < 30) return;
+        if (!customers.has(key)) {
+          customers.set(key, {
+            key,
+            name: name || 'Cliente sem nome',
+            phone: phone || null,
+            lastOrderAt: createdAt,
+            daysWithoutOrder,
+          });
+        }
+      });
+      setDormantCustomers(Array.from(customers.values()).sort((a, b) => b.daysWithoutOrder - a.daysWithoutOrder).slice(0, 5));
+    }
+
+    if (expensesResult.status === 'fulfilled' && !expensesResult.value.error) {
+      const expenses = ((expensesResult.value.data || []) as any[])
+        .map((expense) => {
+          const dueDate = String(expense.due_date || expense.expense_date || expense.date || '').slice(0, 10);
+          return {
+            id: expense.id,
+            description: String(expense.description || 'Conta sem descrição'),
+            amount: Number(expense.amount || 0),
+            dueDate,
+            category: expense.category || null,
+            paid: Boolean(expense.paid_at || expense.paid || expense.status === 'paid'),
+          };
+        })
+        .filter((expense) => {
+          if (!expense.dueDate || expense.paid) return false;
+          const due = new Date(`${expense.dueDate}T12:00:00`);
+          return due >= today && due <= inFiveDays;
+        })
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+        .slice(0, 5);
+      setDueExpenses(expenses);
+    }
+
+    const waiters = waitersResult.status === 'fulfilled' && !waitersResult.value.error ? ((waitersResult.value.data || []) as any[]) : [];
+    const events = timeClockResult.status === 'fulfilled' && !timeClockResult.value.error ? ((timeClockResult.value.data || []) as any[]) : [];
+    const presentIds = new Set(events.filter((event) => event.event_type === 'clock_in' && event.status !== 'rejected').map((event) => event.waiter_id));
+    const pendingReview = events.filter((event) => event.status === 'pending_review').length;
+    setAttendanceSummary({
+      total: waiters.length,
+      present: presentIds.size,
+      absent: Math.max(0, waiters.length - presentIds.size),
+      pendingReview,
+    });
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -282,13 +444,6 @@ const Dashboard = () => {
       positive: true
     };
   };
-
-  const greeting = (() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Bom dia';
-    if (hour < 18) return 'Boa tarde';
-    return 'Boa noite';
-  })();
 
   const weeklyRevenueTotal = revenueData.reduce((sum, item) => sum + item.revenue, 0);
   const strongestRevenueDay = revenueData.reduce((best, item) => item.revenue > best.revenue ? item : best, revenueData[0] || { name: '—', revenue: 0 });
@@ -322,6 +477,41 @@ const Dashboard = () => {
     amount: order.total,
     status: order.status,
   }));
+  const dueTotal = dueExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const operationalCards = [
+    {
+      title: 'Estoque baixo',
+      value: lowStockProducts.length,
+      hint: lowStockProducts.length > 0 ? `${lowStockProducts[0].name} precisa de reposição` : 'Tudo dentro do mínimo',
+      icon: AlertTriangle,
+      tone: 'border-red-200 bg-red-50 text-red-700',
+      to: '/produtos',
+    },
+    {
+      title: 'Clientes sumidos',
+      value: dormantCustomers.length,
+      hint: dormantCustomers.length > 0 ? 'Prontos para campanha de retorno' : 'Sem clientes parados no radar',
+      icon: Megaphone,
+      tone: 'border-violet-200 bg-violet-50 text-violet-700',
+      to: '/marketing?tab=whatsapp-mass',
+    },
+    {
+      title: 'Contas a vencer',
+      value: formatCurrency(dueTotal),
+      hint: `${dueExpenses.length} conta(s) até os próximos 5 dias`,
+      icon: CalendarClock,
+      tone: 'border-amber-200 bg-amber-50 text-amber-700',
+      to: '/financeiro',
+    },
+    {
+      title: 'Ponto de hoje',
+      value: `${attendanceSummary.present}/${attendanceSummary.total}`,
+      hint: attendanceSummary.absent > 0 ? `${attendanceSummary.absent} sem ponto registrado` : 'Equipe registrada hoje',
+      icon: attendanceSummary.absent > 0 ? UserX : UserCheck,
+      tone: attendanceSummary.absent > 0 ? 'border-orange-200 bg-orange-50 text-orange-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      to: '/controle-ponto',
+    },
+  ];
 
   if (loading) {
     return (
@@ -417,11 +607,8 @@ const Dashboard = () => {
       <div className="space-y-4 md:hidden">
         <section className="rounded-[28px] border border-white/70 bg-white/90 p-4 shadow-[0_20px_50px_-36px_rgba(0,50,35,0.28)]">
           <div className="space-y-3">
-            <div className="inline-flex items-center rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#FF6400]">
-              Central PopSystem
-            </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">{greeting}, bora operar</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Painel Inicial</h1>
               <p className="mt-1 text-sm text-slate-500">
                 O PopSystem mobile agora prioriza as ações do dia: aceitar pedido, vender rápido e cuidar do caixa.
               </p>
@@ -496,6 +683,30 @@ const Dashboard = () => {
           </div>
         </section>
 
+        <section className="grid grid-cols-2 gap-3">
+          {operationalCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <button
+                key={card.title}
+                type="button"
+                onClick={() => navigate(card.to)}
+                className="rounded-[24px] border border-slate-200/80 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]"
+              >
+                <div className="flex items-center justify-between">
+                  <div className={`rounded-2xl border p-2 ${card.tone}`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-slate-400" />
+                </div>
+                <div className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{card.title}</div>
+                <div className="mt-1 text-xl font-bold text-slate-900">{card.value}</div>
+                <div className="mt-1 line-clamp-2 text-xs text-slate-500">{card.hint}</div>
+              </button>
+            );
+          })}
+        </section>
+
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Pedidos recentes</h2>
@@ -536,11 +747,7 @@ const Dashboard = () => {
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="space-y-2">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400] dark:border-[#FF6400]/25 dark:bg-[#FF6400]/10">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Central PopSystem
-                  </div>
-                  <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{greeting}, bora operar melhor hoje</h1>
+                  <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Painel Inicial</h1>
                   <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-400">
                     Um painel mais analítico para decisões rápidas sobre vendas, clientes, ticket e saúde da operação.
                   </p>
@@ -581,6 +788,30 @@ const Dashboard = () => {
                   <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{operationalHealth}%</div>
                   <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">{stats.pendingOrders} pedidos aguardando ação</div>
                 </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-4">
+                {operationalCards.map((card) => {
+                  const Icon = card.icon;
+                  return (
+                    <button
+                      key={card.title}
+                      type="button"
+                      onClick={() => navigate(card.to)}
+                      className="rounded-[24px] border border-[#003223]/8 bg-white p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-30px_rgba(0,50,35,0.35)] dark:border-white/10 dark:bg-[#0c1512]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className={`rounded-2xl border p-2 ${card.tone}`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-400" />
+                      </div>
+                      <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{card.title}</div>
+                      <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{card.value}</div>
+                      <div className="mt-2 min-h-[34px] text-xs text-slate-500 dark:text-slate-400">{card.hint}</div>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_320px]">

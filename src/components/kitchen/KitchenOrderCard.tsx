@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Clock, RotateCcw, Package, User, CheckCircle, Truck, Phone, MapPin } from 'lucide-react';
+import { formatElapsedSince } from '@/utils/elapsedTime';
 
 interface OrderItem {
   id: string;
@@ -88,18 +89,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
     onStatusChange(order.id, newStatus);
   };
 
-  // Calculate time passed since order was created
-  const getTimePassed = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = Math.floor((now.getTime() - date.getTime()) / 1000 / 60); // minutes
-
-    if (diff < 1) return 'Agora';
-    if (diff === 1) return '1 min';
-    return `${diff} min`;
-  };
-
-  const timePassed = getTimePassed(order.created_at);
+  const timePassed = formatElapsedSince(order.created_at);
   const isHighPriority = order.priority === 'high' || (items.length > 5);
 
   const getHeaderColor = (status: string) => {
@@ -116,7 +106,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
       case 'pending': return 'Pendente';
       case 'preparing': return 'Preparando';
       case 'ready': return 'Pronto';
-      case 'delivered': return 'Entregue';
+      case 'delivered': return order.order_type === 'dine_in' ? 'Levou para mesa' : 'Entregue';
       default: return status;
     }
   };
@@ -314,7 +304,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
                 onClick={() => handleStatusChange('delivered')}
               >
                 <Truck className="mr-2 h-4 w-4" />
-                Entregar
+                {order.order_type === 'dine_in' ? 'Levar à mesa' : 'Entregar'}
               </Button>
             </div>
           )}

@@ -84,6 +84,53 @@ type FiscalReadiness = {
 
 const onlyDigits = (value?: string) => String(value || '').replace(/\D/g, '');
 
+const normalizeTextKey = (value?: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+
+const resolveKnownMunicipalityCode = (settings: Pick<FiscalConfig, 'endereco_uf' | 'endereco_municipio' | 'codigo_municipio'>) => {
+  const raw = onlyDigits(settings.codigo_municipio);
+  if (raw.length === 7) return raw;
+  const uf = String(settings.endereco_uf || '').toUpperCase();
+  const city = normalizeTextKey(settings.endereco_municipio);
+  if (uf === 'CE' && city === 'FORTALEZA') return '2304400';
+  return raw;
+};
+
+const validateLocalFiscalSettings = (settings: FiscalConfig): string[] => {
+  const errors: string[] = [];
+  const uf = String(settings.endereco_uf || '').toUpperCase();
+  const codigoMunicipio = resolveKnownMunicipalityCode(settings);
+
+  if (!settings.cnpj || !settings.razao_social || !settings.endereco_logradouro) {
+    errors.push('Preencha CNPJ, razao social e logradouro.');
+  }
+
+  if (uf === 'CE') {
+    if (codigoMunicipio.length !== 7 || !codigoMunicipio.startsWith('23')) {
+      errors.push('Codigo do municipio do Ceara deve ser o codigo IBGE com 7 digitos. Fortaleza, por exemplo, e 2304400.');
+    }
+    if (!onlyDigits(settings.inscricao_estadual)) {
+      errors.push('Inscricao Estadual e obrigatoria para NFC-e no Ceara.');
+    }
+  }
+
+  if (settings.ativo) {
+    const cscId = String(settings.csc_id || '').trim();
+    if (!/^\d{1,6}$/.test(cscId)) {
+      errors.push('O CSC ID deve ser apenas o numero identificador do token, normalmente 1 ou 2. O codigo grande da Sefaz deve ficar em CSC Token.');
+    }
+    if (!String(settings.csc_token || '').trim()) {
+      errors.push('Informe o CSC Token fornecido pela Sefaz.');
+    }
+  }
+
+  return errors;
+};
+
 const formatCnpj = (value?: string) => {
   const digits = onlyDigits(value).slice(0, 14);
   if (digits.length !== 14) return digits;
@@ -251,6 +298,17 @@ const parseCertificateBase64 = (base64Data: string, password: string): ParsedCer
   };
 };
 
+type NfceCupomSummary = {
+  id: string;
+  numero: number;
+  serie: string;
+  status: string;
+  valor_total: number;
+  data_hora_emissao: string;
+  protocolo_autorizacao: string | null;
+  motivo_rejeicao: string | null;
+};
+
 const fetchCnpjRegistrationData = async (cnpj: string): Promise<CnpjRegistrationData | null> => {
   const digits = onlyDigits(cnpj);
   if (digits.length !== 14) return null;
@@ -322,12 +380,15 @@ const FiscalSettings: React.FC = () => {
   const [certificateAutofillLoading, setCertificateAutofillLoading] = useState(false);
   const [nfceNumeroRaw, setNfceNumeroRaw] = useState('1');
   const [readiness, setReadiness] = useState<FiscalReadiness | null>(null);
+  const [nfceCupons, setNfceCupons] = useState<NfceCupomSummary[]>([]);
+  const [loadingCupons, setLoadingCupons] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
   useEffect(() => {
     if (user) {
       loadFiscalSettings();
+      loadNfceCupons();
     }
   }, [user]);
 
@@ -362,7 +423,11 @@ const FiscalSettings: React.FC = () => {
           endereco_municipio: data.endereco_municipio || '',
           endereco_uf: data.endereco_uf || '',
           endereco_cep: data.endereco_cep || '',
-          codigo_municipio: data.codigo_municipio || '',
+          codigo_municipio: resolveKnownMunicipalityCode({
+            endereco_uf: data.endereco_uf || '',
+            endereco_municipio: data.endereco_municipio || '',
+            codigo_municipio: data.codigo_municipio || '',
+          } as FiscalConfig),
           nfce_serie: data.nfce_serie || '1',
           nfce_numero_atual: data.nfce_numero_atual || 1,
           certificado_a1_base64: data.certificado_a1_base64 || '',
@@ -382,6 +447,28 @@ const FiscalSettings: React.FC = () => {
         description: "Erro ao carregar configurações fiscais.",
         variant: "destructive"
       });
+    }
+  };
+
+  const loadNfceCupons = async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoadingCupons(true);
+      const { data, error } = await supabase
+        .from('nfce_cupons')
+        .select('id, numero, serie, status, valor_total, data_hora_emissao, protocolo_autorizacao, motivo_rejeicao')
+        .eq('user_id', user.id)
+        .order('data_hora_emissao', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setNfceCupons((data || []) as NfceCupomSummary[]);
+    } catch (error) {
+      console.error('Erro ao carregar últimas NFC-e:', error);
+      setNfceCupons([]);
+    } finally {
+      setLoadingCupons(false);
     }
   };
 
@@ -426,8 +513,8 @@ const FiscalSettings: React.FC = () => {
       ...prev,
       cnpj: info.cnpj ? formatCnpj(info.cnpj) : prev.cnpj,
       inscricao_estadual: safeRegistration?.inscricao_estadual || prev.inscricao_estadual,
-      razao_social: info.razaoSocial || safeRegistration?.razao_social || prev.razao_social,
-      nome_fantasia: info.nomeFantasia || safeRegistration?.nome_fantasia || prev.nome_fantasia || info.razaoSocial || '',
+      razao_social: safeRegistration?.razao_social || prev.razao_social,
+      nome_fantasia: safeRegistration?.nome_fantasia || prev.nome_fantasia || '',
       endereco_logradouro: safeRegistration?.logradouro || prev.endereco_logradouro,
       endereco_numero: safeRegistration?.numero || prev.endereco_numero,
       endereco_complemento: safeRegistration?.complemento || prev.endereco_complemento,
@@ -435,7 +522,7 @@ const FiscalSettings: React.FC = () => {
       endereco_municipio: safeRegistration?.municipio || prev.endereco_municipio,
       endereco_uf: safeRegistration?.uf || prev.endereco_uf,
       endereco_cep: safeRegistration?.cep || prev.endereco_cep,
-      codigo_municipio: safeRegistration?.codigo_municipio ? String(safeRegistration.codigo_municipio) : prev.codigo_municipio,
+      codigo_municipio: safeRegistration?.codigo_municipio ? onlyDigits(String(safeRegistration.codigo_municipio)) : prev.codigo_municipio,
     }));
   };
 
@@ -459,7 +546,7 @@ const FiscalSettings: React.FC = () => {
       if (!options.silent) {
         toast({
           title: "Dados preenchidos pelo certificado",
-          description: `${registration?.razao_social || info.razaoSocial || 'Empresa'}${info.cnpj ? ` - ${formatCnpj(info.cnpj)}` : ''}`,
+          description: `${registration?.razao_social || 'Empresa identificada'}${info.cnpj ? ` - ${formatCnpj(info.cnpj)}` : ''}`,
         });
       }
     } catch (error: any) {
@@ -480,11 +567,11 @@ const FiscalSettings: React.FC = () => {
     try {
       setLoading(true);
 
-      // Validação básica
-      if (!settings.cnpj || !settings.razao_social || !settings.endereco_logradouro) {
+      const validationErrors = validateLocalFiscalSettings(settings);
+      if (validationErrors.length) {
         toast({
-          title: "Erro",
-          description: "Preencha todos os campos obrigatórios.",
+          title: "Revise o cadastro fiscal",
+          description: validationErrors[0],
           variant: "destructive"
         });
         return false;
@@ -492,6 +579,10 @@ const FiscalSettings: React.FC = () => {
 
       const settingsData = {
         ...settings,
+        codigo_municipio: resolveKnownMunicipalityCode(settings),
+        cnpj: formatCnpj(settings.cnpj),
+        inscricao_estadual: onlyDigits(settings.inscricao_estadual),
+        endereco_cep: onlyDigits(settings.endereco_cep),
         user_id: user?.id,
         updated_at: new Date().toISOString()
       };
@@ -540,6 +631,16 @@ const FiscalSettings: React.FC = () => {
     try {
       setLoading(true);
 
+      const validationErrors = validateLocalFiscalSettings(settings);
+      if (validationErrors.length) {
+        toast({
+          title: "Revise o cadastro fiscal",
+          description: validationErrors[0],
+          variant: "destructive"
+        });
+        return;
+      }
+
       if (!settings.id) {
         const saved = await saveSettings();
         if (!saved) return;
@@ -574,17 +675,43 @@ const FiscalSettings: React.FC = () => {
   const testConnection = async () => {
     try {
       setLoading(true);
+
+      const validationErrors = validateLocalFiscalSettings(settings);
+      if (validationErrors.length) {
+        toast({
+          title: "Revise o cadastro fiscal",
+          description: validationErrors[0],
+          variant: "destructive"
+        });
+        return;
+      }
       
       if (!settings.id) {
         const saved = await saveSettings();
         if (!saved) return;
       }
 
-      const { data, error } = await supabase.functions.invoke('nfce-operations', {
-        body: { operation: 'testar_conexao' }
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Login nao confirmado. Saia e entre novamente antes de testar a Sefaz.');
+      }
+
+      const response = await fetch('/api/nfce/test-connection', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({}),
       });
 
-      if (error) throw error;
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.motivo || data?.message || 'Nao foi possivel testar a conexao com a Sefaz.');
+      }
       if (!data?.success) {
         throw new Error(data?.motivo || 'A Sefaz retornou falha no status do servico.');
       }
@@ -917,8 +1044,8 @@ const FiscalSettings: React.FC = () => {
                     <Label>Código do Município *</Label>
                     <Input
                       value={settings.codigo_municipio}
-                      onChange={(e) => setSettings(prev => ({ ...prev, codigo_municipio: e.target.value }))}
-                      placeholder="3550308"
+                      onChange={(e) => setSettings(prev => ({ ...prev, codigo_municipio: onlyDigits(e.target.value).slice(0, 7) }))}
+                      placeholder="2304400"
                       required
                     />
                   </div>
@@ -998,9 +1125,14 @@ const FiscalSettings: React.FC = () => {
                     <Label>CSC ID</Label>
                     <Input
                       value={settings.csc_id}
-                      onChange={(e) => setSettings(prev => ({ ...prev, csc_id: e.target.value }))}
-                      placeholder="000001"
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(e) => setSettings(prev => ({ ...prev, csc_id: onlyDigits(e.target.value).slice(0, 6) }))}
+                      placeholder="Ex.: 1"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Use apenas o identificador numerico do CSC.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -1032,15 +1164,68 @@ const FiscalSettings: React.FC = () => {
       {settings.ativo && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Últimas NFC-e Emitidas
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Últimas NFC-e Emitidas
+              </CardTitle>
+              <Button type="button" variant="outline" size="sm" onClick={loadNfceCupons} disabled={loadingCupons}>
+                {loadingCupons ? 'Atualizando...' : 'Atualizar'}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8 text-gray-500">
-              Nenhuma nota fiscal emitida ainda
-            </div>
+            {loadingCupons ? (
+              <div className="text-center py-8 text-gray-500">
+                Carregando NFC-e...
+              </div>
+            ) : nfceCupons.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                Nenhuma NFC-e emitida ainda. Finalize uma venda no PDV e confirme a emissão fiscal.
+              </div>
+            ) : (
+              <div className="divide-y rounded-lg border">
+                {nfceCupons.map((cupom) => {
+                  const statusClass =
+                    cupom.status === 'autorizado'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : cupom.status === 'rejeitado'
+                        ? 'bg-red-50 text-red-700 border-red-200'
+                        : cupom.status === 'cancelado'
+                          ? 'bg-slate-50 text-slate-700 border-slate-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200';
+
+                  return (
+                    <div key={cupom.id} className="grid gap-3 p-4 md:grid-cols-[1fr_auto_auto] md:items-center">
+                      <div>
+                        <div className="font-semibold text-primary">
+                          NFC-e {cupom.numero} / Série {cupom.serie}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {new Date(cupom.data_hora_emissao).toLocaleString('pt-BR')}
+                        </div>
+                        {cupom.protocolo_autorizacao && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Protocolo: {cupom.protocolo_autorizacao}
+                          </div>
+                        )}
+                        {cupom.motivo_rejeicao && (
+                          <div className="mt-1 text-xs text-red-600">
+                            {cupom.motivo_rejeicao}
+                          </div>
+                        )}
+                      </div>
+                      <div className={`w-fit rounded-full border px-3 py-1 text-sm font-semibold capitalize ${statusClass}`}>
+                        {cupom.status}
+                      </div>
+                      <div className="text-lg font-bold text-primary">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(cupom.valor_total || 0))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

@@ -16,6 +16,12 @@ import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from './ProductSelectionModal';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import { notifyOrderCreatedById } from '@/utils/orderNotifications';
+import {
+  fetchTableOrderFlowSettings,
+  filterItemsForTableManagerOrder,
+  getTableManagerOrderStatus,
+  shouldCreateTableManagerOrder,
+} from '@/utils/tableOrderFlow';
 
 interface CartItem {
   id: string;
@@ -26,6 +32,7 @@ interface CartItem {
   subtotal: number;
   options?: string[];
   notes?: string;
+  send_to_kds?: boolean;
 }
 
 interface Table {
@@ -65,7 +72,8 @@ const PDVForm: React.FC = () => {
         quantity,
         subtotal: product.price * quantity,
         options: selectedOptions.length > 0 ? selectedOptions : undefined,
-        notes: notes || undefined
+        notes: notes || undefined,
+        send_to_kds: product.send_to_kds === true
       };
       setCart([...cart, newItem]);
     }
@@ -123,8 +131,11 @@ const PDVForm: React.FC = () => {
         quantity: item.quantity,
         subtotal: item.subtotal,
         options: item.options || [],
-        notes: item.notes || ''
+        notes: item.notes || '',
+        send_to_kds: item.send_to_kds === true
       }));
+      const tableFlow = await fetchTableOrderFlowSettings(user?.id);
+      const managerItems = filterItemsForTableManagerOrder(orderItems, tableFlow);
 
       const { data: existingAccount } = await supabase
         .from('table_accounts')
@@ -162,9 +173,47 @@ const PDVForm: React.FC = () => {
         if (error) throw error;
       }
 
+      await supabase
+        .from('tables')
+        .update({ status: 'occupied' })
+        .eq('id', selectedTable);
+
+      if (shouldCreateTableManagerOrder(tableFlow) && managerItems.length > 0) {
+        const table = tables.find((item) => item.id === selectedTable);
+        const tableNumber = table?.table_number;
+        const orderStatus = getTableManagerOrderStatus(tableFlow);
+        const orderTotal = managerItems.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
+
+        const { error: orderError } = await supabase
+          .from('orders')
+          .insert({
+            user_id: user?.id,
+            order_number: `MESA-${tableNumber || 'PDV'}-${Date.now().toString().slice(-5)}`,
+            customer_name: tableNumber ? `Mesa ${tableNumber}` : 'Mesa',
+            customer_phone: null,
+            items: managerItems,
+            total: orderTotal,
+            payment_method: 'pendente',
+            order_type: 'dine_in',
+            table_id: selectedTable,
+            status: orderStatus.status,
+            acceptance_status: orderStatus.acceptance_status,
+            variations: {
+              source: 'PDV_LEGACY_TABLE',
+              table_order_flow: tableFlow.mode,
+              show_in_manager: tableFlow.showInManager,
+              auto_accept: tableFlow.autoAccept,
+            },
+          });
+
+        if (orderError) throw orderError;
+      }
+
       toast({
         title: "Sucesso!",
-        description: "Produtos adicionados à mesa com sucesso.",
+        description: managerItems.length > 0
+          ? "Produtos adicionados à mesa e enviados para preparo."
+          : "Produtos adicionados apenas à conta da mesa.",
       });
 
       setCart([]);

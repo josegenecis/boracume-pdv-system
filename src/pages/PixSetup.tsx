@@ -16,6 +16,7 @@ export default function PixSetup() {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState<boolean>(false);
   const [mpPdvEnabled, setMpPdvEnabled] = useState<boolean>(false);
+  const [mpWaiterEnabled, setMpWaiterEnabled] = useState<boolean>(false);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mpConnected, setMpConnected] = useState(false);
@@ -28,7 +29,7 @@ export default function PixSetup() {
         console.log('Carregando configurações Pix para usuário:', activeUserId);
         const { data, error } = await (supabase as any)
           .from('pix_settings')
-          .select('enabled, mp_pdv_enabled, mp_access_token, client_id, mp_expires_at')
+          .select('enabled, mp_pdv_enabled, mp_waiter_enabled, mp_access_token, client_id, mp_expires_at')
           .eq('user_id', activeUserId)
           .maybeSingle();
 
@@ -47,6 +48,7 @@ export default function PixSetup() {
         if (data) {
           setEnabled(!!data.enabled);
           setMpPdvEnabled(Boolean((data as any)?.mp_pdv_enabled));
+          setMpWaiterEnabled(Boolean((data as any)?.mp_waiter_enabled));
           setMpConnected(Boolean(data.mp_access_token || data.client_id));
           setMpExpiresAt(data.mp_expires_at || '');
         }
@@ -88,6 +90,7 @@ export default function PixSetup() {
           user_id: activeUserId,
           enabled: false,
           mp_pdv_enabled: false,
+          mp_waiter_enabled: false,
           mp_access_token: null,
           mp_refresh_token: null,
           mp_expires_at: null,
@@ -98,6 +101,7 @@ export default function PixSetup() {
       if (error) throw error;
       setEnabled(false);
       setMpPdvEnabled(false);
+      setMpWaiterEnabled(false);
       setMpConnected(false);
       setMpExpiresAt('');
       toast({ title: 'Mercado Pago desconectado', description: 'A conta foi removida do sistema com sucesso.' });
@@ -122,6 +126,7 @@ export default function PixSetup() {
         enabled: !!enabled,
         bank: 'mercadopago',
         mp_pdv_enabled: !!mpPdvEnabled,
+        mp_waiter_enabled: !!mpWaiterEnabled,
         updated_at: new Date().toISOString(),
       };
 
@@ -158,6 +163,7 @@ export default function PixSetup() {
             enabled: !!enabled,
             bank: 'mercadopago',
             mp_pdv_enabled: !!mpPdvEnabled,
+            mp_waiter_enabled: !!mpWaiterEnabled,
             updated_at: new Date().toISOString(),
           };
 
@@ -177,7 +183,7 @@ export default function PixSetup() {
       })();
     }, 400);
     return () => clearTimeout(timer);
-  }, [loaded, activeUserId, mpConnected, enabled, mpPdvEnabled]);
+  }, [loaded, activeUserId, mpConnected, enabled, mpPdvEnabled, mpWaiterEnabled]);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -231,7 +237,7 @@ export default function PixSetup() {
             </div>
 
             <div className="md:col-span-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="flex-1">
                   <Label>Ativar PIX (Mercado Pago)</Label>
                   <div className="mt-2 flex items-center gap-2">
@@ -245,6 +251,16 @@ export default function PixSetup() {
                     <Switch checked={mpPdvEnabled} onCheckedChange={setMpPdvEnabled} disabled={!mpConnected || !enabled} />
                     <span className="text-sm text-muted-foreground">{mpPdvEnabled ? 'Ativo' : 'Inativo'}</span>
                   </div>
+                </div>
+                <div className="flex-1">
+                  <Label>Gerar QR Code no App Garçom</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Switch checked={mpWaiterEnabled} onCheckedChange={setMpWaiterEnabled} disabled={!mpConnected || !enabled} />
+                    <span className="text-sm text-muted-foreground">{mpWaiterEnabled ? 'Ativo' : 'Inativo'}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Quando ativo, o garçom pode receber PIX online por QR Code no celular ou no app web.
+                  </p>
                 </div>
               </div>
               {!mpConnected ? (
