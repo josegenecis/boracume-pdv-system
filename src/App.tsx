@@ -73,6 +73,7 @@ import CustomerView from '@/pages/CustomerView';
 import DebugPix from '@/pages/DebugPix';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Marketing from '@/pages/Marketing';
+import SystemAdminDashboard from '@/pages/SystemAdminDashboard';
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import TableOrderFlowSettings from '@/components/settings/TableOrderFlowSettings';
 import './App.css';
@@ -102,6 +103,7 @@ function AppContent() {
       <Route path="/track/:orderId" element={<OrderTracking />} />
       <Route path="/mp/return" element={<MercadoPagoReturn />} />
       <Route path="/mp/callback" element={<MpCallback />} />
+      <Route path="/admin-popsystem" element={<SystemAdminDashboard />} />
       
       {/* Rotas do Garçom */}
       <Route path="/waiter-login" element={<WaiterLogin />} />

@@ -124,3 +124,8 @@ entrypoint = "./functions/orders-update-status/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/pix-webhook/index.ts"
+
+[functions.admin-dashboard]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/admin-dashboard/index.ts"
