@@ -58,6 +58,101 @@ function maxDateIso(...values: unknown[]) {
   return max ? new Date(max).toISOString() : null;
 }
 
+const BRAZIL_UF = new Set([
+  "AC",
+  "AL",
+  "AP",
+  "AM",
+  "BA",
+  "CE",
+  "DF",
+  "ES",
+  "GO",
+  "MA",
+  "MT",
+  "MS",
+  "MG",
+  "PA",
+  "PB",
+  "PR",
+  "PE",
+  "PI",
+  "RJ",
+  "RN",
+  "RS",
+  "RO",
+  "RR",
+  "SC",
+  "SP",
+  "SE",
+  "TO",
+]);
+
+function cleanText(value: unknown) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function extractLocation(address: unknown) {
+  const text = cleanText(address);
+  if (!text) return { city: "Não informado", state: "NI" };
+
+  const parts = text.split(",").map((part) => cleanText(part)).filter(Boolean);
+  const stateMatch = text.toUpperCase().match(/(?:^|[\s,/-])([A-Z]{2})(?:$|[\s,/-])/);
+  const state = stateMatch && BRAZIL_UF.has(stateMatch[1]) ? stateMatch[1] : "NI";
+
+  let city = "";
+  if (state !== "NI") {
+    const stateIndex = parts.findIndex((part) => part.toUpperCase() === state || part.toUpperCase().endsWith(` ${state}`));
+    if (stateIndex > 0) city = parts[stateIndex - 1];
+    if (!city) {
+      const beforeState = text.slice(0, text.toUpperCase().lastIndexOf(state)).split(",").map((part) => cleanText(part)).filter(Boolean);
+      city = beforeState[beforeState.length - 1] || "";
+    }
+  }
+
+  if (!city && parts.length >= 2) city = parts[parts.length - 2];
+  if (!city) city = "Não informado";
+
+  return {
+    city: city.slice(0, 48),
+    state,
+  };
+}
+
+function groupCount<T>(items: T[], keyGetter: (item: T) => string) {
+  const map = new Map<string, number>();
+  for (const item of items) {
+    const key = keyGetter(item) || "Não informado";
+    map.set(key, (map.get(key) || 0) + 1);
+  }
+  return Array.from(map.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+}
+
+function dayKey(value: unknown) {
+  const ms = dateMs(value);
+  if (!ms) return "";
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function buildDailySeries(days: number, date = new Date(), rows: any[], dateField: string, label: string) {
+  const dates = Array.from({ length: days }, (_, index) => {
+    const day = addDays(date, index - days + 1);
+    return day.toISOString().slice(0, 10);
+  });
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = dayKey(row?.[dateField]);
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return dates.map((dateKey) => ({
+    date: dateKey.slice(5).split("-").reverse().join("/"),
+    [label]: counts.get(dateKey) || 0,
+  }));
+}
+
 function stableStringify(value: unknown) {
   return JSON.stringify(value);
 }
@@ -179,6 +274,8 @@ function toClientRow(params: {
     restaurantName: params.profile.restaurant_name || "Restaurante sem nome",
     email: params.profile.email || params.authUser?.email || "",
     phone: params.profile.phone || "",
+    address: params.profile.address || "",
+    ...extractLocation(params.profile.address),
     createdAt: params.profile.created_at,
     updatedAt: params.profile.updated_at || null,
     lastSignInAt: params.authUser?.last_sign_in_at || null,
@@ -235,7 +332,7 @@ serve(async (req) => {
       nfceResp,
     ] = await Promise.all([
       listAuthUsers(supabase),
-      supabase.from("profiles").select("id, restaurant_name, email, phone, created_at, updated_at").order("created_at", { ascending: false }).limit(5000),
+      supabase.from("profiles").select("id, restaurant_name, email, phone, address, created_at, updated_at").order("created_at", { ascending: false }).limit(5000),
       supabase.from("subscriptions").select("id, user_id, status, plan_id, trial_start, trial_end, current_period_start, current_period_end, created_at, updated_at").limit(5000),
       supabase.from("subscription_plans").select("id, name, price").limit(100),
       supabase.from("orders").select("id, user_id, status, created_at, order_type").gte("created_at", thirtyDaysAgo.toISOString()).limit(20000),
@@ -373,6 +470,25 @@ serve(async (req) => {
       .sort((a: any, b: any) => dateMs(b.lastAccessAt) - dateMs(a.lastAccessAt))
       .slice(0, 12);
 
+    const cityHeatmap = groupCount(clients, (client: any) => `${client.city}/${client.state}`).slice(0, 16);
+    const stateHeatmap = groupCount(clients, (client: any) => client.state || "NI").slice(0, 12);
+    const statusBreakdown = [
+      { label: "Ativos", value: activeClients.length },
+      { label: "Teste", value: trialClients.length },
+      { label: "Inadimplentes", value: delinquentClients.length },
+      { label: "Sem assinatura", value: clients.filter((client: any) => client.subscriptionStatus === "sem_assinatura").length },
+    ];
+    const activityBreakdown = [
+      { label: "Hoje", value: accessedToday.length },
+      { label: "7 dias", value: accessed7Days.length },
+      { label: "30 dias", value: accessed30Days.length },
+      { label: "Sem 30 dias", value: noAccess30Days.length },
+      { label: "Nunca", value: neverAccessed.length },
+    ];
+    const signupTrend = buildDailySeries(14, now, clients, "createdAt", "cadastros");
+    const accessTrend = buildDailySeries(14, now, clients.filter((client: any) => client.lastAccessAt), "lastAccessAt", "acessos");
+    const orderTrend = buildDailySeries(14, now, orders, "created_at", "pedidos");
+
     return json({
       ok: true,
       token: await createToken(user.email),
@@ -411,6 +527,15 @@ serve(async (req) => {
           .slice(0, 20),
         neverAccessed: neverAccessed.slice(0, 20),
         paidThisMonth: paidThisMonth.slice(0, 20),
+      },
+      analytics: {
+        cityHeatmap,
+        stateHeatmap,
+        statusBreakdown,
+        activityBreakdown,
+        signupTrend,
+        accessTrend,
+        orderTrend,
       },
     });
   } catch (error) {

@@ -7,7 +7,9 @@ import {
   CheckCircle2,
   DollarSign,
   LogOut,
+  MapPin,
   MessageCircle,
+  PhoneCall,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -15,6 +17,20 @@ import {
   UserCheck,
   Users,
 } from 'lucide-react';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,6 +47,9 @@ interface AdminClientRow {
   restaurantName: string;
   email?: string;
   phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
   createdAt?: string;
   updatedAt?: string | null;
   lastSignInAt?: string | null;
@@ -50,6 +69,15 @@ interface AdminClientRow {
   reasons?: string[];
 }
 
+interface ChartPoint {
+  label?: string;
+  value?: number;
+  date?: string;
+  cadastros?: number;
+  acessos?: number;
+  pedidos?: number;
+}
+
 interface AdminDashboardData {
   generatedAt: string;
   metrics: MetricMap;
@@ -64,6 +92,15 @@ interface AdminDashboardData {
     neverAccessed: AdminClientRow[];
     paidThisMonth: AdminClientRow[];
   };
+  analytics?: {
+    cityHeatmap: ChartPoint[];
+    stateHeatmap: ChartPoint[];
+    statusBreakdown: ChartPoint[];
+    activityBreakdown: ChartPoint[];
+    signupTrend: ChartPoint[];
+    accessTrend: ChartPoint[];
+    orderTrend: ChartPoint[];
+  };
 }
 
 const SESSION_KEY = 'popsystem-internal-admin-token';
@@ -77,6 +114,23 @@ const formatNumber = (value?: number) =>
 const formatPercent = (value?: number, total?: number) => {
   if (!total) return '0%';
   return `${Math.round((Number(value || 0) / Number(total || 1)) * 100)}%`;
+};
+
+const POP_COLORS = ['#004b36', '#85c441', '#ff5b00', '#0ea5e9', '#ef4444', '#64748b'];
+
+const normalizePhoneForWhatsApp = (phone?: string) => {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55')) return digits;
+  if (digits.length >= 10) return `55${digits}`;
+  return digits;
+};
+
+const whatsappLink = (client: AdminClientRow) => {
+  const phone = normalizePhoneForWhatsApp(client.phone);
+  if (!phone || phone.length < 12) return '';
+  const message = encodeURIComponent(`Olá, tudo bem? Aqui é da PopSystem. Vi que o ${client.restaurantName} está sem usar o sistema e quero te ajudar a deixar tudo rodando certinho.`);
+  return `https://wa.me/${phone}?text=${message}`;
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -164,11 +218,13 @@ function ClientList({
   description,
   clients,
   emptyText,
+  showWhatsAppAction = false,
 }: {
   title: string;
   description: string;
   clients: AdminClientRow[];
   emptyText: string;
+  showWhatsAppAction?: boolean;
 }) {
   return (
     <Card className="rounded-lg border-slate-200 shadow-sm">
@@ -186,10 +242,26 @@ function ClientList({
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-slate-950">{client.restaurantName}</p>
                   <p className="truncate text-sm text-slate-500">{client.email || client.phone || 'Sem contato cadastrado'}</p>
+                  {(client.city || client.state) && (
+                    <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-400">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {client.city || 'Cidade não informada'} / {client.state || 'NI'}
+                    </p>
+                  )}
                 </div>
-                <Badge className={statusClassName(client.subscriptionStatus)} variant="outline">
-                  {normalizeStatusLabel(client.subscriptionStatus)}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  {showWhatsAppAction && whatsappLink(client) && (
+                    <a href={whatsappLink(client)} target="_blank" rel="noreferrer">
+                      <Button size="sm" className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold hover:bg-emerald-700">
+                        <PhoneCall className="mr-1.5 h-3.5 w-3.5" />
+                        WhatsApp
+                      </Button>
+                    </a>
+                  )}
+                  <Badge className={statusClassName(client.subscriptionStatus)} variant="outline">
+                    {normalizeStatusLabel(client.subscriptionStatus)}
+                  </Badge>
+                </div>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600 sm:grid-cols-4">
                 <span>{lastAccessLabel(client.lastAccessAt)}</span>
@@ -214,6 +286,77 @@ function ClientList({
   );
 }
 
+function ChartCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="rounded-lg border-slate-200 shadow-sm">
+      <CardHeader className="p-5 pb-2">
+        <CardTitle className="text-lg text-slate-950">{title}</CardTitle>
+        <p className="text-sm text-slate-500">{description}</p>
+      </CardHeader>
+      <CardContent className="h-[290px] p-5 pt-2">{children}</CardContent>
+    </Card>
+  );
+}
+
+function HeatmapList({
+  title,
+  description,
+  items,
+}: {
+  title: string;
+  description: string;
+  items: ChartPoint[];
+}) {
+  const max = Math.max(...items.map((item) => Number(item.value || 0)), 1);
+  return (
+    <Card className="rounded-lg border-slate-200 shadow-sm">
+      <CardHeader className="p-5 pb-3">
+        <CardTitle className="flex items-center gap-2 text-lg text-slate-950">
+          <MapPin className="h-5 w-5 text-orange-600" />
+          {title}
+        </CardTitle>
+        <p className="text-sm text-slate-500">{description}</p>
+      </CardHeader>
+      <CardContent className="grid gap-3 p-5 pt-0 sm:grid-cols-2">
+        {items.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-500 sm:col-span-2">
+            Sem dados de localização ainda.
+          </div>
+        ) : (
+          items.map((item, index) => {
+            const intensity = Math.max(0.16, Number(item.value || 0) / max);
+            return (
+              <div
+                key={`${title}-${item.label}-${index}`}
+                className="rounded-lg border border-emerald-100 p-4"
+                style={{ backgroundColor: `rgba(0, 75, 54, ${0.06 + intensity * 0.18})` }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm font-bold text-slate-950">{item.label}</span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 shadow-sm">
+                    {formatNumber(item.value)}
+                  </span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
+                  <div className="h-full rounded-full bg-orange-500" style={{ width: `${Math.round((Number(item.value || 0) / max) * 100)}%` }} />
+                </div>
+              </div>
+            );
+          })
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SystemAdminDashboard() {
   const [email, setEmail] = useState('admin@popsystem.com.br');
   const [password, setPassword] = useState('');
@@ -224,6 +367,7 @@ export default function SystemAdminDashboard() {
 
   const metrics = data?.metrics || {};
   const lists = data?.lists;
+  const analytics = data?.analytics;
 
   const accessHealth = useMemo(() => formatPercent(metrics.accessed7Days, metrics.totalClients), [metrics.accessed7Days, metrics.totalClients]);
 
@@ -347,8 +491,8 @@ export default function SystemAdminDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <main className="min-h-screen bg-[#f5f7f3]">
+      <header className="sticky top-0 z-20 border-b border-emerald-950/10 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-orange-600">Painel interno</p>
@@ -369,6 +513,35 @@ export default function SystemAdminDashboard() {
       </header>
 
       <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 lg:px-8">
+        <section className="rounded-lg bg-[#003d2e] p-6 text-white shadow-sm">
+          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-emerald-100">
+                <Activity className="h-4 w-4" />
+                Visão executiva
+              </div>
+              <h2 className="mt-4 text-3xl font-bold">Base, uso e risco em tempo real</h2>
+              <p className="mt-3 max-w-2xl text-emerald-50/85">
+                Acompanhe onde a PopSystem está crescendo, quais clientes estão ativos, quem precisa de contato e quais regiões concentram mais uso.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase text-emerald-100">Uso em 7 dias</p>
+                <p className="mt-2 text-3xl font-bold">{accessHealth}</p>
+              </div>
+              <div className="rounded-lg bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase text-emerald-100">Sem acesso</p>
+                <p className="mt-2 text-3xl font-bold">{formatNumber(metrics.noAccess7Days)}</p>
+              </div>
+              <div className="rounded-lg bg-orange-500 p-4 text-white">
+                <p className="text-xs font-semibold uppercase text-orange-50">Ação hoje</p>
+                <p className="mt-2 text-3xl font-bold">{formatNumber((lists?.attention || []).length)}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="Clientes cadastrados" value={formatNumber(metrics.totalClients)} detail={`${formatNumber(metrics.newToday)} hoje, ${formatNumber(metrics.newMonth)} no mês`} icon={Users} tone="blue" />
           <MetricCard title="Acessaram hoje" value={formatNumber(metrics.accessedToday)} detail={`${accessHealth} acessaram nos últimos 7 dias`} icon={Activity} tone="emerald" />
@@ -382,12 +555,78 @@ export default function SystemAdminDashboard() {
           <MetricCard title="WhatsApp conectado" value={formatNumber(metrics.whatsappConfigured)} detail={`${formatNumber(metrics.nfceRejectedMonth)} NFC-e rejeitadas no mês`} icon={MessageCircle} tone="blue" />
         </section>
 
+        <section className="grid gap-6 xl:grid-cols-3">
+          <ChartCard title="Cadastros recentes" description="Novos restaurantes entrando na base nos últimos 14 dias.">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={analytics?.signupTrend || []} margin={{ left: -20, right: 8, top: 10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="cadastrosGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#85c441" stopOpacity={0.45} />
+                    <stop offset="95%" stopColor="#85c441" stopOpacity={0.04} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#64748b" />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="#64748b" />
+                <Tooltip />
+                <Area type="monotone" dataKey="cadastros" stroke="#004b36" strokeWidth={3} fill="url(#cadastrosGradient)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
+          <ChartCard title="Atividade no sistema" description="Últimos acessos registrados por dia.">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={analytics?.accessTrend || []} margin={{ left: -20, right: 8, top: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#64748b" />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="#64748b" />
+                <Tooltip />
+                <Bar dataKey="acessos" radius={[6, 6, 0, 0]} fill="#ff5b00" />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
+          <ChartCard title="Status da carteira" description="Distribuição dos clientes por situação comercial.">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={analytics?.statusBreakdown || []}
+                  dataKey="value"
+                  nameKey="label"
+                  innerRadius={58}
+                  outerRadius={92}
+                  paddingAngle={3}
+                >
+                  {(analytics?.statusBreakdown || []).map((entry, index) => (
+                    <Cell key={`status-${entry.label}`} fill={POP_COLORS[index % POP_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+          <HeatmapList
+            title="Mapa de calor por estado"
+            description="Onde a PopSystem tem mais restaurantes cadastrados."
+            items={analytics?.stateHeatmap || []}
+          />
+          <HeatmapList
+            title="Mapa de calor por cidade"
+            description="Cidades com maior concentração de clientes na base."
+            items={analytics?.cityHeatmap || []}
+          />
+        </section>
+
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <ClientList
             title="Clientes que precisam de ação"
             description="Prioridade para suporte, financeiro e sucesso do cliente."
             clients={lists?.attention || []}
             emptyText="Nenhum alerta crítico agora."
+            showWhatsAppAction
           />
 
           <Card className="rounded-lg border-slate-200 shadow-sm">
@@ -457,12 +696,14 @@ export default function SystemAdminDashboard() {
             description="Clientes que podem estar travados, desmotivados ou precisando de suporte."
             clients={lists?.inactiveByAccess || []}
             emptyText="Todos acessaram recentemente."
+            showWhatsAppAction
           />
           <ClientList
             title="Nunca acessaram"
             description="Cadastros que precisam de ativação ou primeiro contato."
             clients={lists?.neverAccessed || []}
             emptyText="Nenhum cliente sem primeiro acesso."
+            showWhatsAppAction
           />
         </section>
 
