@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
-const BLOCKED_EMAIL = 'altavariedades@outlook.com';
+const BLOCKED_EMAILS: string[] = [];
 const SUPPORT_PHONE = '5585992918273';
 const SUPPORT_MESSAGE = 'Ola, preciso regularizar a licenca do PopSystem.';
 
@@ -37,7 +37,7 @@ const LicenseExpiredLock: React.FC = () => {
   const location = useLocation();
 
   const email = String(user?.email || '').trim().toLowerCase();
-  const shouldBlock = !loading && email === BLOCKED_EMAIL && !isPublicRoute(location.pathname);
+  const shouldBlock = !loading && BLOCKED_EMAILS.includes(email) && !isPublicRoute(location.pathname);
 
   if (!shouldBlock) return null;
 
