@@ -66,15 +66,19 @@ serve(async (req) => {
     }
     if (!plan) throw new Error("Plano não encontrado no banco.");
 
+    const appOrigin = req.headers.get("origin") || Deno.env.get("PUBLIC_WEB_BASE_URL") || "https://popsystem.com.br";
+
     // Create subscription session
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       customer: customerId,
+      client_reference_id: user.id,
       line_items: [{
         quantity: 1,
       }],
       mode: "subscription",
-      success_url: `${req.headers.get("origin")}/subscription?success=true`,
-      cancel_url: `${req.headers.get("origin")}/subscription?canceled=true`,
+      success_url: `${appOrigin}/subscription?success=true`,
+      cancel_url: `${appOrigin}/subscription?canceled=true`,
+      allow_promotion_codes: true,
       metadata: {
         user_id: user.id,
         plan_id: normalizedPlanId.toString()
@@ -87,10 +91,26 @@ serve(async (req) => {
       }
     };
 
-    // Use stripe_price_id if available, otherwise fallback to dynamic price
+    let shouldUseDynamicPrice = true;
+
     if (plan.stripe_price_id) {
-      sessionConfig.line_items[0].price = plan.stripe_price_id;
-    } else {
+      try {
+        const configuredPrice = await stripe.prices.retrieve(plan.stripe_price_id);
+        if (configuredPrice?.active) {
+          sessionConfig.line_items[0].price = plan.stripe_price_id;
+          shouldUseDynamicPrice = false;
+        }
+      } catch (priceError) {
+        console.warn("Configured Stripe price is not available for this account, falling back to dynamic price:", {
+          planId: normalizedPlanId,
+          stripePriceId: plan.stripe_price_id,
+          message: (priceError as Error)?.message,
+        });
+      }
+    }
+
+    // Use a dynamic price when no reusable price is configured for the current Stripe account.
+    if (shouldUseDynamicPrice) {
       sessionConfig.line_items[0].price_data = {
         currency: "brl",
         product_data: { 

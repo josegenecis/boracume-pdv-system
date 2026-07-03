@@ -223,11 +223,11 @@ const TableManager: React.FC = () => {
   }
 
   return (
-    <div className={isMobile ? 'space-y-3' : 'space-y-6'}>
+    <div className={isMobile ? 'space-y-3' : 'space-y-4'}>
       <div className={`flex ${isMobile ? 'items-center justify-end' : 'items-center justify-between'}`}>
         {!isMobile && (
           <div>
-            <h2 className="text-2xl font-bold">Operacao de Mesas</h2>
+            <h2 className="text-xl font-bold">Operacao de Mesas</h2>
             <p className="text-sm text-muted-foreground">Abra, acompanhe, transfira e feche contas sem sair do salao.</p>
           </div>
         )}
@@ -293,29 +293,29 @@ const TableManager: React.FC = () => {
 
       {!isMobile && (
         <>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-2 md:grid-cols-3">
             <Card className="border-emerald-100 bg-emerald-50/60">
-              <CardContent className="p-4">
+              <CardContent className="p-3">
                 <div className="text-sm text-emerald-700">Mesas livres</div>
-                <div className="mt-1 text-3xl font-black text-emerald-900">{availableCount}</div>
+                <div className="mt-1 text-2xl font-black text-emerald-900">{availableCount}</div>
               </CardContent>
             </Card>
             <Card className="border-amber-100 bg-amber-50/70">
-              <CardContent className="p-4">
+              <CardContent className="p-3">
                 <div className="text-sm text-amber-700">Em atendimento</div>
-                <div className="mt-1 text-3xl font-black text-amber-900">{occupiedCount}</div>
+                <div className="mt-1 text-2xl font-black text-amber-900">{occupiedCount}</div>
               </CardContent>
             </Card>
             <Card className="border-slate-200 bg-slate-50">
-              <CardContent className="p-4">
+              <CardContent className="p-3">
                 <div className="text-sm text-slate-600">Reservadas</div>
-                <div className="mt-1 text-3xl font-black text-slate-900">{reservedCount}</div>
+                <div className="mt-1 text-2xl font-black text-slate-900">{reservedCount}</div>
               </CardContent>
             </Card>
           </div>
 
-          <div className="mb-4 rounded-xl border border-boracume-orange/20 bg-boracume-orange/5 p-4">
-            <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 rounded-xl border border-boracume-orange/20 bg-boracume-orange/5 p-3">
+            <div className="mb-1 flex items-center gap-2">
               <MousePointer size={16} className="text-boracume-orange" />
               <span className="font-semibold text-boracume-dark-green">Fluxo rapido de operacao:</span>
             </div>

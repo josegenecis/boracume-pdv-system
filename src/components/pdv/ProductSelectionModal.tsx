@@ -11,6 +11,7 @@ import ProductVariationSelector from './ProductVariationSelector';
 import type { PizzaCategoryConfig } from '@/lib/pizza-pricing';
 import { prefetchSimpleVariations, type Variation } from '@/hooks/useSimpleVariations';
 import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
+import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 
 interface Product {
   id: string;
@@ -23,6 +24,29 @@ interface Product {
   stock_quantity: number;
   low_stock_threshold: number;
 }
+
+const ProductThumb: React.FC<{ product: Product; className?: string; iconClassName?: string }> = ({
+  product,
+  className = 'h-full w-full object-cover',
+  iconClassName = 'h-5 w-5 text-slate-400',
+}) => {
+  const [failed, setFailed] = useState(false);
+  const src = normalizeImageUrlForDisplay(product.image_url);
+
+  if (!src || failed) {
+    return <Package className={iconClassName} />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt={product.name}
+      className={className}
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+};
 
 interface CategoryConfig extends PizzaCategoryConfig {
   id: string;
@@ -282,13 +306,9 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                     }`}
                     onClick={() => handleProductSelect(product)}
                   >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-slate-50">
-                      {product.image_url ? (
-                        <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <Package className="h-5 w-5 text-slate-400" />
-                      )}
-                    </div>
+	                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-slate-50">
+	                      <ProductThumb product={product} />
+	                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-[#082F23]">{product.name}</div>
                       {product.description ? (
@@ -318,14 +338,14 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                   className={`cursor-pointer hover:shadow-lg transition-shadow ${isLowStock ? 'animate-stock-pulse border-red-500' : ''}`}
                   onClick={() => handleProductSelect(product)}
                 >
-                  <CardContent className="p-4">
-                    {product.image_url && (
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="w-full h-32 object-cover rounded-md mb-3"
-                      />
-                    )}
+	                  <CardContent className="p-4">
+	                    <div className="mb-3 flex h-32 w-full items-center justify-center overflow-hidden rounded-md bg-slate-50">
+	                      <ProductThumb
+	                        product={product}
+	                        className="h-full w-full object-cover"
+	                        iconClassName="h-8 w-8 text-slate-300"
+	                      />
+	                    </div>
                     <div className="space-y-2">
                       <h3 className="font-semibold text-sm">{product.name}</h3>
                       {product.description && (

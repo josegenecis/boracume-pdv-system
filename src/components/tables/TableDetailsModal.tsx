@@ -7,10 +7,9 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { Switch } from '@/components/ui/switch';
-import { Users, Clock, ArrowRightLeft, Printer, WalletCards, ReceiptText } from 'lucide-react';
+import { Users, Clock, ArrowRightLeft, Printer, WalletCards, ReceiptText, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +17,7 @@ import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrde
 import { getOpenCashRegisterSession } from '@/utils/cashSession';
 import { PrinterService } from '@/utils/printerService';
 import { parseBRL } from '@/lib/currency';
+import { emitNfceForOrder, isFiscalEmissionActiveForUser } from '@/utils/nfceClient';
 
 interface Table {
   id: string;
@@ -61,7 +61,32 @@ const generateOrderNumber = () => {
   return `${formattedDate}-${randomNumber.toString().padStart(3, '0')}`;
 };
 
-const normalizeCheckoutPaymentMethod = (value?: string | null): 'pix' | 'cartao' | 'dinheiro' => {
+type CheckoutPaymentMethod = 'pix' | 'cartao' | 'dinheiro';
+
+interface PaymentLine {
+  id: string;
+  method: CheckoutPaymentMethod;
+  amount: string;
+  received?: string;
+}
+
+const PAYMENT_METHOD_LABELS: Record<CheckoutPaymentMethod, string> = {
+  pix: 'PIX',
+  cartao: 'Cartao',
+  dinheiro: 'Dinheiro',
+};
+
+const currencyDigitsFromNumber = (value: number) =>
+  String(Math.max(0, Math.round((Number(value) || 0) * 100)));
+
+const createPaymentLine = (method: CheckoutPaymentMethod, amount = 0): PaymentLine => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  method,
+  amount: currencyDigitsFromNumber(amount),
+  received: method === 'dinheiro' ? currencyDigitsFromNumber(amount) : '',
+});
+
+const normalizeCheckoutPaymentMethod = (value?: string | null): CheckoutPaymentMethod => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'pix') return 'pix';
   if (['cartao', 'cartao_credito', 'cartao_debito', 'card', 'credito', 'debito'].includes(normalized)) return 'cartao';
@@ -69,7 +94,7 @@ const normalizeCheckoutPaymentMethod = (value?: string | null): 'pix' | 'cartao'
   return 'pix';
 };
 
-const mapPaymentMethodToWaiterPayment = (value: 'pix' | 'cartao' | 'dinheiro') => {
+const mapPaymentMethodToWaiterPayment = (value: CheckoutPaymentMethod) => {
   if (value === 'cartao') return 'card';
   if (value === 'dinheiro') return 'cash';
   return 'pix';
@@ -96,10 +121,11 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const [currentOrder, setCurrentOrder] = useState<TableOrder | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedTransferTable, setSelectedTransferTable] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cartao' | 'dinheiro'>('pix');
+  const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>('pix');
+  const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
+  const [paymentSplitTouched, setPaymentSplitTouched] = useState(false);
   const [checkoutDiscount, setCheckoutDiscount] = useState('');
   const [checkoutSurcharge, setCheckoutSurcharge] = useState('');
-  const [cashReceived, setCashReceived] = useState('');
   const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
   const [serviceChargeAutoApply, setServiceChargeAutoApply] = useState(false);
   const [serviceChargeAccepted, setServiceChargeAccepted] = useState(false);
@@ -121,7 +147,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       setLoading(true);
       setCheckoutDiscount('');
       setCheckoutSurcharge('');
-      setCashReceived('');
+      setPaymentLines([]);
+      setPaymentSplitTouched(false);
       await loadServiceChargeSettings();
 
       const { data: accountData, error: accountError } = await supabase
@@ -386,8 +413,93 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const checkoutTotal = currentOrder
     ? Math.max(0, Number(currentOrder.total || 0) + checkoutSurchargeValue - checkoutDiscountValue + serviceChargeAmount)
     : 0;
-  const cashReceivedValue = parseBRL(cashReceived);
-  const changeAmount = paymentMethod === 'dinheiro' ? Math.max(0, cashReceivedValue - checkoutTotal) : 0;
+  const normalizedPaymentLines = paymentLines
+    .map((line) => ({
+      ...line,
+      amountValue: parseBRL(line.amount),
+      receivedValue: parseBRL(line.received || line.amount),
+    }))
+    .filter((line) => line.amountValue > 0.009);
+  const paymentPaidTotal = normalizedPaymentLines.reduce((sum, line) => sum + line.amountValue, 0);
+  const cashPaymentTotal = normalizedPaymentLines
+    .filter((line) => line.method === 'dinheiro')
+    .reduce((sum, line) => sum + line.amountValue, 0);
+  const cashReceivedTotal = normalizedPaymentLines
+    .filter((line) => line.method === 'dinheiro')
+    .reduce((sum, line) => sum + line.receivedValue, 0);
+  const changeAmount = cashPaymentTotal > 0 ? Math.max(0, cashReceivedTotal - cashPaymentTotal) : 0;
+  const paymentRemainingValue = Math.max(0, checkoutTotal - paymentPaidTotal);
+  const paymentOverflowValue = Math.max(0, paymentPaidTotal - checkoutTotal);
+  const hasSplitPayment = normalizedPaymentLines.length > 1;
+  const orderPaymentMethod = hasSplitPayment
+    ? 'misto'
+    : normalizedPaymentLines[0]?.method || paymentMethod;
+  const paymentSummaryLabel = hasSplitPayment
+    ? 'multiplas formas'
+    : PAYMENT_METHOD_LABELS[(normalizedPaymentLines[0]?.method || paymentMethod) as CheckoutPaymentMethod];
+
+  useEffect(() => {
+    if (!currentOrder) return;
+    if (paymentSplitTouched) return;
+    setPaymentLines([createPaymentLine(paymentMethod, checkoutTotal)]);
+  }, [currentOrder?.id, checkoutTotal, paymentMethod, paymentSplitTouched]);
+
+  const updatePaymentLine = (id: string, patch: Partial<PaymentLine>) => {
+    setPaymentSplitTouched(true);
+    setPaymentLines((prev) =>
+      prev.map((line) => {
+        if (line.id !== id) return line;
+        const next = { ...line, ...patch };
+        if (patch.method) {
+          next.received = patch.method === 'dinheiro' ? next.received || next.amount : '';
+          setPaymentMethod(patch.method);
+        }
+        return next;
+      })
+    );
+  };
+
+  const addPaymentLine = () => {
+    setPaymentSplitTouched(true);
+    setPaymentLines((prev) => [
+      ...prev,
+      createPaymentLine('pix', paymentRemainingValue > 0.009 ? paymentRemainingValue : 0),
+    ]);
+  };
+
+  const removePaymentLine = (id: string) => {
+    setPaymentSplitTouched(true);
+    setPaymentLines((prev) => {
+      const next = prev.filter((line) => line.id !== id);
+      return next.length > 0 ? next : [createPaymentLine(paymentMethod, checkoutTotal)];
+    });
+  };
+
+  const buildWaiterPaymentRows = (params: {
+    sessionId: string;
+    accountId: string;
+    remainingAmount: number;
+  }) => {
+    let remaining = Math.max(0, params.remainingAmount);
+
+    return normalizedPaymentLines
+      .map((line, index) => {
+        const amount = index === normalizedPaymentLines.length - 1
+          ? remaining
+          : Math.min(line.amountValue, remaining);
+        remaining = Math.max(0, remaining - amount);
+
+        if (amount <= 0.009) return null;
+        return {
+          user_id: user?.id,
+          session_id: params.sessionId,
+          account_id: params.accountId,
+          method: mapPaymentMethodToWaiterPayment(line.method),
+          amount: Number(amount.toFixed(2)),
+        };
+      })
+      .filter(Boolean);
+  };
 
   const handleFinishOrder = async () => {
     if (!table || !currentOrder) return;
@@ -407,9 +519,35 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
       let printableOrder: any = null;
       const paymentTimestamp = new Date().toISOString();
-      const waiterPaymentMethod = mapPaymentMethodToWaiterPayment(paymentMethod);
       const adjustedTotal = checkoutTotal;
-      if (paymentMethod === 'dinheiro' && cashReceived && cashReceivedValue + 0.009 < adjustedTotal) {
+      if (normalizedPaymentLines.length === 0) {
+        toast({
+          title: 'Informe o pagamento',
+          description: 'Adicione pelo menos uma forma de pagamento para fechar a mesa.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (paymentPaidTotal + 0.009 < adjustedTotal) {
+        toast({
+          title: 'Pagamento incompleto',
+          description: `Ainda falta ${formatCurrency(adjustedTotal - paymentPaidTotal)} para fechar a mesa.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (paymentOverflowValue > 0.009 && cashPaymentTotal <= 0) {
+        toast({
+          title: 'Valor acima do total',
+          description: 'Valor acima do total só deve acontecer quando houver dinheiro e troco.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (cashPaymentTotal > 0 && cashReceivedTotal + 0.009 < cashPaymentTotal) {
         toast({
           title: 'Valor insuficiente',
           description: 'O valor recebido em espécie é menor que o total da mesa.',
@@ -432,8 +570,22 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           auto_apply: serviceChargeAutoApply,
         },
         total: adjustedTotal,
-        cash_received: paymentMethod === 'dinheiro' ? cashReceivedValue : null,
-        change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
+        cash_received: cashPaymentTotal > 0 ? cashReceivedTotal : null,
+        change_amount: cashPaymentTotal > 0 ? changeAmount : null,
+      };
+      const paymentSplitPayload = {
+        enabled: hasSplitPayment,
+        total: adjustedTotal,
+        paid_total: paymentPaidTotal,
+        remaining: Math.max(0, adjustedTotal - paymentPaidTotal),
+        cash_received: cashPaymentTotal > 0 ? cashReceivedTotal : null,
+        change_amount: cashPaymentTotal > 0 ? changeAmount : null,
+        lines: normalizedPaymentLines.map((line) => ({
+          method: line.method,
+          label: PAYMENT_METHOD_LABELS[line.method],
+          amount: Number(line.amountValue.toFixed(2)),
+          received: line.method === 'dinheiro' ? Number(line.receivedValue.toFixed(2)) : null,
+        })),
       };
 
       if (currentOrder.source === 'table_accounts') {
@@ -467,16 +619,17 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           const { error: batchUpdateError } = await supabase
             .from('orders')
             .update({
-              payment_method: paymentMethod,
+              payment_method: orderPaymentMethod,
+              items: currentOrder.items,
               total: adjustedTotal,
               discount: checkoutDiscountValue,
-              change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
+              change_amount: cashPaymentTotal > 0 ? changeAmount : null,
               cash_register_session_id: openCashSession.id,
               status: 'completed',
               acceptance_status: 'accepted',
               updated_at: paymentTimestamp,
-              variations: { financial_adjustments: financialAdjustments },
-            })
+              variations: { financial_adjustments: financialAdjustments, payment_split: paymentSplitPayload },
+            } as any)
             .in('id', relatedOrderIds);
 
           if (batchUpdateError) throw batchUpdateError;
@@ -493,8 +646,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             order_type: 'dine_in',
             status: 'completed',
             acceptance_status: 'accepted',
-            payment_method: paymentMethod,
-            change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
+            payment_method: orderPaymentMethod,
+            change_amount: cashPaymentTotal > 0 ? changeAmount : null,
             cash_register_session_id: openCashSession.id,
             estimated_time: '15-20 min',
             session_id: currentOrder.session_id || null,
@@ -503,6 +656,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
               source: 'table_account_closure',
               original_account_id: currentOrder.id,
               financial_adjustments: financialAdjustments,
+              payment_split: paymentSplitPayload,
             },
           };
 
@@ -529,15 +683,14 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           const remainingAmount = Math.max(adjustedTotal - paidAmount, 0);
 
           if (remainingAmount > 0.009) {
+            const paymentRowsToInsert = buildWaiterPaymentRows({
+              sessionId: currentOrder.session_id,
+              accountId,
+              remainingAmount,
+            });
             const { error: paymentInsertError } = await supabase
               .from('payments')
-              .insert({
-                user_id: user?.id,
-                session_id: currentOrder.session_id,
-                account_id: accountId,
-                method: waiterPaymentMethod,
-                amount: remainingAmount,
-              });
+              .insert(paymentRowsToInsert as any);
 
             if (paymentInsertError) throw paymentInsertError;
           }
@@ -559,24 +712,29 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           order_type: 'dine_in',
           status: 'completed',
           acceptance_status: 'accepted',
-          payment_method: paymentMethod,
-          change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
+          payment_method: orderPaymentMethod,
+          change_amount: cashPaymentTotal > 0 ? changeAmount : null,
+          variations: {
+            ...((finalizedOrders[finalizedOrders.length - 1] as any)?.variations || {}),
+            financial_adjustments: financialAdjustments,
+            payment_split: paymentSplitPayload,
+          },
           created_at: currentOrder.created_at,
         };
       } else {
         const { data: updatedOrder, error: orderUpdateError } = await supabase
-          .from('orders')
-          .update({
-            payment_method: paymentMethod,
+            .from('orders')
+            .update({
+            payment_method: orderPaymentMethod,
             total: adjustedTotal,
             discount: checkoutDiscountValue,
-            change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
+            change_amount: cashPaymentTotal > 0 ? changeAmount : null,
             cash_register_session_id: openCashSession.id,
             status: 'completed',
             acceptance_status: 'accepted',
             updated_at: paymentTimestamp,
-            variations: { financial_adjustments: financialAdjustments },
-          })
+            variations: { financial_adjustments: financialAdjustments, payment_split: paymentSplitPayload },
+          } as any)
           .eq('id', currentOrder.id)
           .eq('user_id', user?.id)
           .select()
@@ -598,15 +756,14 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           const remainingAmount = Math.max(adjustedTotal - paidAmount, 0);
 
           if (remainingAmount > 0.009) {
+            const paymentRowsToInsert = buildWaiterPaymentRows({
+              sessionId: (updatedOrder as any).session_id,
+              accountId: (updatedOrder as any).account_id,
+              remainingAmount,
+            });
             const { error: paymentInsertError } = await supabase
               .from('payments')
-              .insert({
-                user_id: user?.id,
-                session_id: (updatedOrder as any).session_id,
-                account_id: (updatedOrder as any).account_id,
-                method: waiterPaymentMethod,
-                amount: remainingAmount,
-              });
+              .insert(paymentRowsToInsert as any);
 
             if (paymentInsertError) throw paymentInsertError;
           }
@@ -659,8 +816,29 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       if (tableError) throw tableError;
 
       if (printableOrder) {
+        let orderToPrint = printableOrder;
+        const fiscalActive = await isFiscalEmissionActiveForUser(user?.id);
+
+        if (fiscalActive) {
+          try {
+            toast({
+              title: 'Emitindo NFC-e',
+              description: 'Fiscal ativo: gerando o cupom fiscal da mesa.',
+            });
+            const nfceData = await emitNfceForOrder(printableOrder, printableOrder.customer_name ? { nome: printableOrder.customer_name } : null);
+            orderToPrint = { ...printableOrder, nfce: nfceData };
+          } catch (fiscalError) {
+            console.error('Falha ao emitir NFC-e da mesa:', fiscalError);
+            toast({
+              title: 'Mesa fechada, mas a NFC-e falhou',
+              description: fiscalError instanceof Error ? fiscalError.message : 'Nao foi possivel emitir a NFC-e da mesa.',
+              variant: 'destructive'
+            });
+          }
+        }
+
         try {
-          await PrinterService.printOrder(printableOrder);
+          await PrinterService.printOrder(orderToPrint);
         } catch (printError) {
           console.warn('Falha ao imprimir cupom da mesa:', printError);
           toast({
@@ -678,7 +856,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
       toast({
         title: "Conta encerrada",
-        description: `Mesa ${table.table_number} fechada com pagamento em ${paymentMethod === 'cartao' ? 'cartão' : paymentMethod}.`,
+        description: `Mesa ${table.table_number} fechada com pagamento em ${paymentSummaryLabel}.`,
       });
 
       onRefresh();
@@ -734,7 +912,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[calc(100vh-1rem)] overflow-y-auto p-4 sm:p-5">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users size={20} />
@@ -981,51 +1159,105 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <Label className="text-xs uppercase tracking-[0.16em] text-slate-500">Pagamento</Label>
-                    <RadioGroup
-                      value={paymentMethod}
-                      onValueChange={(value) => {
-                        const nextMethod = value as 'pix' | 'cartao' | 'dinheiro';
-                        setPaymentMethod(nextMethod);
-                        if (nextMethod !== 'dinheiro') setCashReceived('');
-                      }}
-                      className="grid gap-2"
-                    >
-                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2">
-                        <RadioGroupItem value="pix" />
-                        <span className="text-sm font-medium">PIX</span>
-                      </label>
-                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2">
-                        <RadioGroupItem value="cartao" />
-                        <span className="text-sm font-medium">Cartão</span>
-                      </label>
-                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2">
-                        <RadioGroupItem value="dinheiro" />
-                        <span className="text-sm font-medium">Dinheiro</span>
-                      </label>
-                    </RadioGroup>
-                  </div>
-
-                  {paymentMethod === 'dinheiro' && (
-                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-900">
-                          Valor recebido em espécie
-                        </Label>
-                        <CurrencyTextInput
-                          value={cashReceived}
-                          onValueChange={setCashReceived}
-                          placeholder="R$ 0,00"
-                          className="bg-white"
-                        />
-                      </div>
-                      <div className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
-                        <span className="font-medium text-slate-600">Troco</span>
-                        <span className="text-lg font-bold text-emerald-700">{formatCurrency(changeAmount)}</span>
-                      </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label className="text-xs uppercase tracking-[0.16em] text-slate-500">Pagamento</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addPaymentLine}
+                        className="h-8 gap-1.5 rounded-full px-3 text-xs"
+                      >
+                        <Plus size={14} />
+                        Outra forma
+                      </Button>
                     </div>
-                  )}
+
+                    <div className="space-y-2">
+                      {paymentLines.map((line, index) => (
+                        <div key={line.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                                Forma
+                              </Label>
+                              <Select
+                                value={line.method}
+                                onValueChange={(value) => updatePaymentLine(line.id, { method: value as CheckoutPaymentMethod })}
+                              >
+                                <SelectTrigger className="h-10 rounded-lg bg-white text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="pix">PIX</SelectItem>
+                                  <SelectItem value="cartao">Cartão</SelectItem>
+                                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                                Valor
+                              </Label>
+                              <CurrencyTextInput
+                                value={line.amount}
+                                onValueChange={(value) => updatePaymentLine(line.id, { amount: value })}
+                                placeholder="R$ 0,00"
+                                className="h-10 bg-white"
+                              />
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              disabled={paymentLines.length === 1}
+                              onClick={() => removePaymentLine(line.id)}
+                              className="mt-5 h-10 w-10 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                              aria-label={`Remover pagamento ${index + 1}`}
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </div>
+
+                          {line.method === 'dinheiro' && (
+                            <div className="mt-3 space-y-1 rounded-lg border border-emerald-100 bg-emerald-50/70 p-2">
+                              <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-900">
+                                Valor recebido em dinheiro
+                              </Label>
+                              <CurrencyTextInput
+                                value={line.received || ''}
+                                onValueChange={(value) => updatePaymentLine(line.id, { received: value })}
+                                placeholder="R$ 0,00"
+                                className="h-10 bg-white"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Informado</span>
+                        <span className="font-bold text-[#082F23]">{formatCurrency(paymentPaidTotal)}</span>
+                      </div>
+                      {paymentRemainingValue > 0.009 && (
+                        <div className="mt-1 flex justify-between text-amber-700">
+                          <span>Falta</span>
+                          <span className="font-bold">{formatCurrency(paymentRemainingValue)}</span>
+                        </div>
+                      )}
+                      {cashPaymentTotal > 0 && (
+                        <div className="mt-2 flex items-center justify-between rounded-lg bg-white px-3 py-2">
+                          <span className="font-medium text-slate-600">Troco</span>
+                          <span className="text-lg font-bold text-emerald-700">{formatCurrency(changeAmount)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
                   <Button
                     onClick={handleFinishOrder}

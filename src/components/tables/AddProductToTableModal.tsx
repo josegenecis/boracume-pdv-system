@@ -26,6 +26,14 @@ interface Product {
   description?: string;
   weight_based?: boolean;
   send_to_kds?: boolean;
+  fiscal_ncm?: string | null;
+  fiscal_cfop?: string | null;
+  fiscal_csosn?: string | null;
+  fiscal_cst_pis?: string | null;
+  fiscal_cst_cofins?: string | null;
+  fiscal_origem?: string | null;
+  fiscal_cest?: string | null;
+  fiscal_beneficio?: string | null;
 }
 
 interface CartItem extends Product {
@@ -203,7 +211,15 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         options: item.options || [],
         variations: item.variations || [],
         notes: item.notes || '',
-        send_to_kds: item.send_to_kds === true
+        send_to_kds: item.send_to_kds === true,
+        fiscal_ncm: item.fiscal_ncm || null,
+        fiscal_cfop: item.fiscal_cfop || null,
+        fiscal_csosn: item.fiscal_csosn || null,
+        fiscal_cst_pis: item.fiscal_cst_pis || null,
+        fiscal_cst_cofins: item.fiscal_cst_cofins || null,
+        fiscal_origem: item.fiscal_origem || null,
+        fiscal_cest: item.fiscal_cest || null,
+        fiscal_beneficio: item.fiscal_beneficio || null,
       }));
 
       const tableFlow = await fetchTableOrderFlowSettings(user.id);
@@ -352,7 +368,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[calc(100vh-1rem)] overflow-y-auto p-4 sm:p-5">
           <DialogHeader>
             <DialogTitle>
               Adicionar Produtos - Mesa {table.table_number}

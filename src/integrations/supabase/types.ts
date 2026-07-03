@@ -1419,6 +1419,7 @@ export type Database = {
           id: number
           name: string
           price: number
+          stripe_price_id: string | null
         }
         Insert: {
           description: string
@@ -1426,6 +1427,7 @@ export type Database = {
           id?: number
           name: string
           price: number
+          stripe_price_id?: string | null
         }
         Update: {
           description?: string
@@ -1433,6 +1435,7 @@ export type Database = {
           id?: number
           name?: string
           price?: number
+          stripe_price_id?: string | null
         }
         Relationships: []
       }

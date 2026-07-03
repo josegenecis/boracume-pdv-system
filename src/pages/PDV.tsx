@@ -63,6 +63,30 @@ interface Product {
   fiscal_beneficio?: string | null;
 }
 
+const ProductCardImage: React.FC<{ product: Product }> = ({ product }) => {
+  const [failed, setFailed] = useState(false);
+  const src = normalizeImageUrlForDisplay(product.image_url);
+
+  if (!src || failed) {
+    return (
+      <div id={`product-img-${product.id}`} className="flex h-full w-full items-center justify-center">
+        <Store className="h-5 w-5 text-gray-300" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      id={`product-img-${product.id}`}
+      src={src}
+      alt={product.name}
+      className="h-full w-full object-contain object-center transition-transform duration-300 group-hover:scale-105"
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+};
+
 interface CategoryConfig extends PizzaCategoryConfig {
   id: string;
   name: string;
@@ -2607,22 +2631,7 @@ const PDV = () => {
                                 onClick={() => handleProductClick(product)}
                               >
                                 <div className="relative mx-1.5 mt-1.5 min-h-0 flex-1 overflow-hidden rounded-[12px] bg-gray-100">
-                                  {normalizeImageUrlForDisplay(product.image_url) ? (
-                                    <img
-                                      id={`product-img-${product.id}`}
-                                      src={normalizeImageUrlForDisplay(product.image_url)}
-                                      alt={product.name}
-                                      className="h-full w-full object-contain object-center transition-transform duration-300 group-hover:scale-105"
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <div
-                                      id={`product-img-${product.id}`}
-                                      className="flex h-full w-full items-center justify-center"
-                                    >
-                                      <Store className="h-5 w-5 text-gray-300" />
-                                    </div>
-                                  )}
+                                  <ProductCardImage product={product} />
                                   <div className="absolute right-1 top-1 rounded-full border border-[#003223]/10 bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
                                     {formatCurrency(product.price)}{product.weight_based ? '/kg' : ''}
                                   </div>
