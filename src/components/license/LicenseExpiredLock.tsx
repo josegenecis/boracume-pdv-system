@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
-const BLOCKED_EMAIL = 'teste02@gmail.com';
+const BLOCKED_EMAIL = 'altavariedades@outlook.com';
 const SUPPORT_PHONE = '5585992918273';
 const SUPPORT_MESSAGE = 'Ola, preciso regularizar a licenca do PopSystem.';
 
