@@ -369,7 +369,7 @@ const Dashboard = () => {
     const [productsResult, ordersResult, expensesResult, waitersResult, timeClockResult] = await Promise.allSettled([
       supabase
         .from('products')
-        .select('id, name, category, track_stock, stock_quantity, low_stock_threshold, active')
+        .select('id, name, category, track_stock, stock_quantity, low_stock_threshold, available, is_available')
         .eq('user_id', user.id)
         .eq('track_stock', true)
         .limit(300),
@@ -402,7 +402,7 @@ const Dashboard = () => {
     if (productsResult.status === 'fulfilled' && !productsResult.value.error) {
       const products = (productsResult.value.data || []) as any[];
       setLowStockProducts(products
-        .filter((product) => product.active !== false)
+        .filter((product) => product.available !== false && product.is_available !== false)
         .map((product) => ({
           id: product.id,
           name: product.name,
