@@ -5,19 +5,11 @@ import { Button } from '@/components/ui/button';
 import Logo from '@/components/Logo';
 import { useToast } from '@/hooks/use-toast';
 import {
-  authenticateEmployeeFaceio,
-  enrollEmployeeFaceio,
-  extractFaceioFacialId,
-  isFaceioDuplicateError,
-  prepareFaceio,
-  restartFaceioSession,
-} from '@/services/faceioClient';
-import {
   getTimeClockStatus,
   loadWaiterWebSession,
   logoutWaiterWeb,
   punchTimeClock,
-  saveWaiterFaceioEnrollment,
+  saveWaiterSimpleFaceEnrollment,
   TimeClockEventType,
   TimeClockStatus,
   WaiterWebStoredSession,
@@ -60,9 +52,17 @@ type FaceCapturePayload = {
 };
 
 const faceChallenges = [
-  'Centralize o rosto e pisque antes da captura.',
-  'Centralize o rosto e vire levemente para a direita.',
-  'Centralize o rosto e aproxime um pouco da camera.',
+  'Centralize o rosto e olhe para a camera.',
+  'Aproxime o rosto da camera.',
+  'Afaste um pouco o rosto.',
+  'Vire levemente o rosto para a direita.',
+  'Vire levemente o rosto para a esquerda.',
+];
+
+const dailyFaceChallenges = [
+  'Centralize o rosto e olhe para a camera.',
+  'Aproxime um pouco o rosto.',
+  'Vire levemente o rosto para confirmar a prova de vida.',
 ];
 
 const getDeviceFingerprint = () => {
@@ -101,17 +101,24 @@ export default function EmployeeTimeClock() {
   const [faceConsent, setFaceConsent] = useState(false);
   const [faceCapture, setFaceCapture] = useState<FaceCapturePayload | null>(null);
   const [capturingFace, setCapturingFace] = useState(false);
+  const [enrollingFace, setEnrollingFace] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [faceError, setFaceError] = useState('');
-  const [faceioBusy, setFaceioBusy] = useState(false);
-  const [faceioDuplicateDetected, setFaceioDuplicateDetected] = useState(false);
 
-  const useFaceio = Boolean(
+  const useSimpleFaceLiveness = Boolean(
     timeClock?.settings.requireFaceLiveness &&
     (
-      String(timeClock.settings.faceLivenessMode || '').toLowerCase() === 'faceio' ||
-      String(timeClock.settings.faceProvider || '').toLowerCase() === 'faceio'
+      String(timeClock.settings.faceLivenessMode || '').toLowerCase() === 'simple_liveness' ||
+      String(timeClock.settings.faceProvider || '').toLowerCase() === 'simple_liveness' ||
+      String(timeClock.settings.faceLivenessMode || '').toLowerCase() === 'manual_review' ||
+      String(timeClock.settings.faceProvider || '').toLowerCase() === 'manual_review'
     ),
+  );
+
+  const simpleFaceProfile = session?.profile.localFaceProfile || {};
+  const hasSimpleFaceEnrollment = Boolean(
+    session?.profile.localFaceEnrolledAt ||
+      (typeof simpleFaceProfile === 'object' && String((simpleFaceProfile as any).enrollmentId || '').trim()),
   );
 
   const stopCamera = () => {
@@ -158,116 +165,10 @@ export default function EmployeeTimeClock() {
     };
   }, [navigate]);
 
-  useEffect(() => {
-    if (!useFaceio) return;
-    void prepareFaceio().catch((error) => {
-      setFaceError(String(error?.message || 'Nao foi possivel preparar o FACEIO neste navegador.'));
-    });
-  }, [useFaceio]);
-
   const handleLogout = async () => {
     stopCamera();
     await logoutWaiterWeb();
     navigate('/funcionario-login', { replace: true });
-  };
-
-  const handleFaceioEnroll = async () => {
-    if (!session) return;
-    setFaceioBusy(true);
-    setFaceError('');
-    setFaceioDuplicateDetected(false);
-    try {
-      const response = await enrollEmployeeFaceio({
-        employeeId: session.profile.id,
-        restaurantId: session.profile.restaurantId,
-        name: session.profile.name,
-        cpf: session.profile.cpf,
-        source: 'popsystem_time_clock',
-      });
-      const facialId = extractFaceioFacialId(response);
-      if (!facialId) throw new Error('O FACEIO nao retornou o facialId do funcionario.');
-      const updatedSession = await saveWaiterFaceioEnrollment({ facialId, enrollmentPayload: response });
-      setSession(updatedSession);
-      toast({
-        title: 'Biometria cadastrada',
-        description: 'O rosto deste funcionario foi vinculado ao ponto.',
-      });
-    } catch (error: any) {
-      const message = String(error?.message || 'Nao foi possivel cadastrar a biometria facial.');
-      if (isFaceioDuplicateError(error)) {
-        setFaceioDuplicateDetected(true);
-        setFaceError('Este rosto ja existe no FACEIO. Vou abrir a validacao facial para vincular ao funcionario.');
-        toast({
-          title: 'Rosto ja cadastrado',
-          description: 'Aguarde a proxima tela da camera para validar e vincular.',
-        });
-        await restartFaceioSession();
-        await new Promise((resolve) => window.setTimeout(resolve, 2300));
-        await handleFaceioLinkExisting();
-        return;
-      }
-      setFaceError(message);
-      toast({ title: 'Erro no FACEIO', description: message, variant: 'destructive' });
-    } finally {
-      setFaceioBusy(false);
-    }
-  };
-
-  const handleFaceioLinkExisting = async () => {
-    if (!session) return;
-    setFaceioBusy(true);
-    setFaceError('');
-    try {
-      const response = await authenticateEmployeeFaceio({
-        employeeId: session.profile.id,
-        restaurantId: session.profile.restaurantId,
-        name: session.profile.name,
-        cpf: session.profile.cpf,
-        source: 'popsystem_time_clock_link_existing_face',
-      });
-      const facialId = extractFaceioFacialId(response);
-      if (!facialId) throw new Error('O FACEIO nao retornou o facialId autenticado.');
-      const updatedSession = await saveWaiterFaceioEnrollment({
-        facialId,
-        enrollmentPayload: {
-          linkedFromExistingFace: true,
-          response,
-        },
-      });
-      setSession(updatedSession);
-      setFaceioDuplicateDetected(false);
-      toast({
-        title: 'Biometria vinculada',
-        description: 'O rosto existente no FACEIO foi vinculado a este funcionario.',
-      });
-    } catch (error: any) {
-      const message = String(error?.message || 'Nao foi possivel vincular a biometria existente.');
-      setFaceError(message);
-      toast({ title: 'Erro no FACEIO', description: message, variant: 'destructive' });
-    } finally {
-      setFaceioBusy(false);
-    }
-  };
-
-  const authenticateFaceioForPunch = async () => {
-    if (!session) throw new Error('Sessao do funcionario nao encontrada.');
-    const response = await authenticateEmployeeFaceio({
-      employeeId: session.profile.id,
-      restaurantId: session.profile.restaurantId,
-      source: 'popsystem_time_clock',
-      eventType: timeClock?.nextEventType,
-    });
-    const facialId = extractFaceioFacialId(response);
-    if (!facialId) throw new Error('O FACEIO nao retornou o facialId autenticado.');
-
-    return {
-      status: 'verified' as const,
-      facialId,
-      confidence: Number((response as any)?.confidence || (response as any)?.confidenceScore || 0) || null,
-      auditId: String((response as any)?.auditId || (response as any)?.transactionId || (response as any)?.sessionId || ''),
-      response,
-      verifiedAt: new Date().toISOString(),
-    };
   };
 
   const detectFace = async (canvas: HTMLCanvasElement) => {
@@ -328,10 +229,11 @@ export default function EmployeeTimeClock() {
     return Math.max(0, Math.min(1, centerMove + sizeMove));
   };
 
-  const startFaceCapture = async () => {
+  const startFaceCapture = async (mode: 'enrollment' | 'punch' = 'punch') => {
     setFaceError('');
     setFaceCapture(null);
-    setCapturingFace(true);
+    setCapturingFace(mode === 'punch');
+    setEnrollingFace(mode === 'enrollment');
     try {
       if (!faceConsent) {
         throw new Error('Confirme o uso da camera e da prova de vida para continuar.');
@@ -351,22 +253,29 @@ export default function EmployeeTimeClock() {
         await videoRef.current.play();
       }
 
-      const challengePrompt = faceChallenges[Math.floor(Math.random() * faceChallenges.length)];
+      const steps = mode === 'enrollment' ? faceChallenges : dailyFaceChallenges;
+      const challengePrompt = mode === 'enrollment'
+        ? 'Cadastro facial: siga os passos de prova de vida.'
+        : 'Prova de vida diária: confirme seu rosto para bater o ponto.';
       const challengeId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      toast({ title: 'Prova de vida', description: challengePrompt });
+      toast({ title: mode === 'enrollment' ? 'Cadastro facial' : 'Prova de vida', description: steps[0] });
 
       await new Promise((resolve) => setTimeout(resolve, 700));
-      const first = await captureFrame('inicio');
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      const second = await captureFrame('desafio');
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      const third = await captureFrame('confirmacao');
-      const frames = [first.frame, second.frame, third.frame];
+      const captured = [];
+      let detectorAvailable = false;
+      for (const step of steps) {
+        toast({ title: mode === 'enrollment' ? 'Cadastro facial' : 'Prova de vida', description: step });
+        await new Promise((resolve) => setTimeout(resolve, mode === 'enrollment' ? 900 : 750));
+        const frame = await captureFrame(step);
+        detectorAvailable = detectorAvailable || frame.detectorAvailable;
+        captured.push(frame);
+      }
+      const frames = captured.map((item) => item.frame);
       const detectedFrames = frames.filter((frame) => frame.faceDetected).length;
       const movementScore = buildMovementScore(frames);
-      const detectorAvailable = first.detectorAvailable || second.detectorAvailable || third.detectorAvailable;
+      const enoughSteps = frames.length >= (mode === 'enrollment' ? 5 : 3);
 
-      setFaceCapture({
+      const payload = {
         challengeId,
         challengePrompt,
         privacyAcknowledgedAt: new Date().toISOString(),
@@ -376,29 +285,57 @@ export default function EmployeeTimeClock() {
           faceDetectorAvailable: detectorAvailable,
           detectedFrames,
           movementScore,
-          browserLivenessPassed: detectorAvailable ? detectedFrames >= 2 && movementScore >= 0.04 : false,
+          browserLivenessPassed: detectorAvailable ? detectedFrames >= 2 && movementScore >= 0.04 : enoughSteps,
         },
-      });
+      };
+
+      setFaceCapture(payload);
       stopCamera();
+      if (mode === 'enrollment' && session) {
+        const enrollmentId = `${session.profile.id}-${challengeId}`;
+        const updatedSession = await saveWaiterSimpleFaceEnrollment({
+          enrollmentId,
+          enrollmentPayload: {
+            enrollmentId,
+            employeeId: session.profile.id,
+            employeeName: session.profile.name,
+            restaurantId: session.profile.restaurantId,
+            capturedAt: new Date().toISOString(),
+            challenge: payload,
+            device: {
+              fingerprint: getDeviceFingerprint(),
+              platform: navigator.platform,
+              language: navigator.language,
+              userAgent: navigator.userAgent,
+            },
+          },
+        });
+        setSession(updatedSession);
+        toast({
+          title: 'Cadastro facial concluido',
+          description: 'Este funcionario ja pode bater ponto com prova de vida.',
+        });
+      }
     } catch (error: any) {
       setFaceError(error?.message || 'Nao foi possivel concluir a prova de vida.');
       stopCamera();
     } finally {
       setCapturingFace(false);
+      setEnrollingFace(false);
     }
   };
 
   const handlePunch = async () => {
     if (!timeClock) return;
-    if (useFaceio && !session?.profile.faceioFacialId) {
+    if (useSimpleFaceLiveness && !hasSimpleFaceEnrollment) {
       toast({
-        title: 'Biometria nao cadastrada',
-        description: 'Cadastre o rosto neste aparelho antes de bater o ponto.',
+        title: 'Cadastro facial pendente',
+        description: 'Cadastre o rosto com prova de vida antes da primeira batida de ponto.',
         variant: 'destructive',
       });
       return;
     }
-    if (timeClock.settings.requireFaceLiveness && !useFaceio && !faceCapture) {
+    if (timeClock.settings.requireFaceLiveness && !faceCapture) {
       toast({
         title: 'Prova de vida obrigatoria',
         description: 'Capture a biometria facial antes de bater o ponto.',
@@ -408,7 +345,6 @@ export default function EmployeeTimeClock() {
     }
     setPunching(true);
     try {
-      const faceioVerification = useFaceio ? await authenticateFaceioForPunch() : undefined;
       const position = timeClock.settings.requireLocation ? await getCurrentPosition() : null;
       const response = await punchTimeClock({
         eventType: timeClock.nextEventType,
@@ -420,9 +356,9 @@ export default function EmployeeTimeClock() {
         deviceMetadata: {
           language: navigator.language,
           platform: navigator.platform,
+          simpleFaceEnrolledAt: session?.profile.localFaceEnrolledAt || null,
         },
-        faceCapture: !useFaceio ? faceCapture || undefined : undefined,
-        faceioVerification,
+        faceCapture: faceCapture || undefined,
       });
 
       setTimeClock(response.status);
@@ -514,19 +450,19 @@ export default function EmployeeTimeClock() {
           </div>
         </div>
 
-        {useFaceio && (
+        {timeClock.settings.requireFaceLiveness && (
           <div className="mt-5 rounded-[22px] border border-[#E2E7DD] bg-white p-4 shadow-[0_20px_60px_-45px_rgba(0,50,35,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold">Biometria FACEIO</h2>
+                <h2 className="text-base font-bold">Cadastro facial</h2>
                 <p className="mt-1 text-sm leading-5 text-slate-500">
-                  {session.profile.faceioFacialId
-                    ? 'Ao registrar o ponto, o FACEIO abre a câmera e valida o rosto automaticamente.'
-                    : 'Cadastre o rosto uma vez para liberar as batidas com prova de vida.'}
+                  {hasSimpleFaceEnrollment
+                    ? 'Rosto cadastrado. Na batida diaria, abra a camera e confirme a prova de vida.'
+                    : 'No primeiro acesso, cadastre o rosto seguindo os passos de prova de vida.'}
                 </p>
               </div>
-              <div className={`rounded-full px-3 py-1 text-xs font-bold ${session.profile.faceioFacialId ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                {session.profile.faceioFacialId ? 'Cadastrada' : 'Cadastrar'}
+              <div className={`rounded-full px-3 py-1 text-xs font-bold ${hasSimpleFaceEnrollment ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                {hasSimpleFaceEnrollment ? 'Cadastrado' : 'Pendente'}
               </div>
             </div>
 
@@ -534,38 +470,49 @@ export default function EmployeeTimeClock() {
               <div className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{faceError}</div>
             )}
 
-            {!session.profile.faceioFacialId && (
-              <div className="mt-4 space-y-2">
-                <Button
-                  className="h-12 w-full rounded-2xl bg-[#FF6400] font-bold text-white hover:bg-[#E25A00]"
-                  disabled={faceioBusy || punching}
-                  onClick={() => void handleFaceioEnroll()}
-                >
-                  <ShieldCheck className="mr-2 h-4 w-4" />
-                  {faceioBusy ? 'Abrindo FACEIO...' : 'Cadastrar biometria facial'}
-                </Button>
-                {faceioDuplicateDetected && (
-                  <Button
-                    variant="outline"
-                    className="h-12 w-full rounded-2xl border-[#003223]/20 font-bold text-[#003223]"
-                    disabled={faceioBusy || punching}
-                    onClick={() => void handleFaceioLinkExisting()}
-                  >
-                    Vincular rosto já cadastrado
-                  </Button>
+            {!hasSimpleFaceEnrollment && (
+              <div className="mt-4 overflow-hidden rounded-[22px] bg-[#06271D]">
+                <video ref={videoRef} className={`${cameraActive ? 'block' : 'hidden'} aspect-[4/5] w-full scale-x-[-1] object-cover`} muted playsInline />
+                {!cameraActive && (
+                  <div className="flex aspect-[4/5] flex-col items-center justify-center gap-3 text-white/70">
+                    <Camera className="h-10 w-10 text-white/50" />
+                    <span className="px-6 text-center text-sm">A camera abre aqui para cadastrar o rosto com prova de vida.</span>
+                  </div>
                 )}
+                <canvas ref={canvasRef} className="hidden" />
               </div>
+            )}
+
+            <label className="mt-4 flex items-start gap-3 rounded-2xl bg-[#F8FAF7] p-3 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={faceConsent}
+                onChange={(event) => setFaceConsent(event.target.checked)}
+                className="mt-1 h-4 w-4 accent-[#063B2A]"
+              />
+              <span>{timeClock.settings.policyNotice || 'Autorizo o uso da camera e da prova de vida somente para validar o controle de ponto.'}</span>
+            </label>
+
+            {!hasSimpleFaceEnrollment && (
+              <Button
+                className="mt-4 h-12 w-full rounded-2xl bg-[#FF6400] font-bold text-white hover:bg-[#E25A00]"
+                disabled={enrollingFace || punching}
+                onClick={() => void startFaceCapture('enrollment')}
+              >
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                {enrollingFace ? 'Cadastrando rosto...' : 'Cadastrar rosto com prova de vida'}
+              </Button>
             )}
           </div>
         )}
 
-        {timeClock.settings.requireFaceLiveness && !useFaceio && (
+        {timeClock.settings.requireFaceLiveness && hasSimpleFaceEnrollment && (
           <div className="mt-5 rounded-[28px] border border-[#E2E7DD] bg-white p-4 shadow-[0_20px_60px_-45px_rgba(0,50,35,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold">Prova de vida facial</h2>
+                <h2 className="text-lg font-bold">Prova de vida diaria</h2>
                 <p className="mt-1 text-sm leading-5 text-slate-500">
-                  A camera registra somente a evidencia desta batida. O responsavel revisa quando nao houver provedor facial conectado.
+                  Abra a camera antes de bater o ponto. O sistema guarda a evidencia desta batida.
                 </p>
               </div>
               <div className={`rounded-full px-3 py-1 text-xs font-bold ${faceCapture ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
@@ -602,7 +549,7 @@ export default function EmployeeTimeClock() {
               variant="outline"
               className="mt-4 h-12 w-full rounded-2xl border-[#DCE6DF] bg-white font-bold"
               disabled={capturingFace || punching}
-              onClick={() => void startFaceCapture()}
+              onClick={() => void startFaceCapture('punch')}
             >
               <Camera className="mr-2 h-4 w-4" />
               {capturingFace ? 'Capturando...' : faceCapture ? 'Refazer prova de vida' : 'Capturar prova de vida'}

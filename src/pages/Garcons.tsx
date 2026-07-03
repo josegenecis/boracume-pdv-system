@@ -627,16 +627,16 @@ const Garcons = () => {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[92dvh] max-w-2xl flex-col overflow-hidden p-0">
+          <DialogHeader className="shrink-0 px-6 pt-6">
             <DialogTitle>{formData.id ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
             <DialogDescription>
               Preencha os dados abaixo para {formData.id ? 'editar' : 'criar'} o acesso.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4">
-            <div className="flex border-b mb-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-2 pt-4">
+            <div className="mb-6 flex border-b">
               <button
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'data' 
@@ -661,7 +661,7 @@ const Garcons = () => {
 
             {activeTab === 'data' ? (
               <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="name">Nome Completo *</Label>
                     <div className="relative">
@@ -704,7 +704,7 @@ const Garcons = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="pin">PIN de Acesso (PDV) *</Label>
                     <div className="relative">
@@ -750,7 +750,7 @@ const Garcons = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="grid gap-4 pt-2 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Perfil de Acesso</Label>
                     <Select 
@@ -876,7 +876,7 @@ const Garcons = () => {
                 </div>
               </div>
             ) : (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 h-[400px] overflow-y-auto pr-2">
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                 {formData.role === 'admin' && (
                   <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded-md flex items-start gap-3">
                     <Shield className="w-5 h-5 mt-0.5" />
@@ -925,7 +925,7 @@ const Garcons = () => {
             )}
           </div>
 
-          <DialogFooter className="mt-6 pt-4 border-t">
+          <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSaveUser} disabled={loading} className="min-w-[120px]">
               {loading ? 'Salvando...' : 'Salvar Usuário'}

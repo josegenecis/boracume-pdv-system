@@ -33,12 +33,14 @@ interface ProductSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddToCart: (product: Product, quantity: number, variations?: any[], notes?: string, variationPrice?: number) => void;
+  layout?: 'grid' | 'list';
 }
 
 const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   isOpen,
   onClose,
-  onAddToCart
+  onAddToCart,
+  layout = 'grid',
 }) => {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
@@ -266,6 +268,44 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
               <p className="text-muted-foreground">
                 {searchTerm ? 'Nenhum produto encontrado' : 'Nenhum produto disponível'}
               </p>
+            </div>
+          ) : layout === 'list' ? (
+            <div className="divide-y rounded-xl border bg-white">
+              {filteredProducts.map((product) => {
+                const isLowStock = product.track_stock && product.stock_quantity <= product.low_stock_threshold;
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#F8FAF8] ${
+                      isLowStock ? 'bg-red-50/60' : ''
+                    }`}
+                    onClick={() => handleProductSelect(product)}
+                  >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-slate-50">
+                      {product.image_url ? (
+                        <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <Package className="h-5 w-5 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-[#082F23]">{product.name}</div>
+                      {product.description ? (
+                        <div className="truncate text-xs text-slate-500">{product.description}</div>
+                      ) : null}
+                    </div>
+                    {isLowStock ? (
+                      <Badge variant="destructive" className="hidden shrink-0 text-xs sm:inline-flex">
+                        Estoque baixo
+                      </Badge>
+                    ) : null}
+                    <div className="shrink-0 rounded-full bg-[#F0F7E8] px-3 py-1 text-sm font-bold text-[#0B5137]">
+                      R$ {Number(product.price || 0).toFixed(2)}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

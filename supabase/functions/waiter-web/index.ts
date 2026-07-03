@@ -189,6 +189,45 @@ async function analyzeTimeClockFaceCapture(settings: any, waiterSession: any, bo
     storedRawImage: false,
   }
 
+  if (settings.faceLivenessMode === 'simple_liveness' || settings.faceProvider === 'simple_liveness') {
+    const localFaceProfile = waiterSession.profile?.localFaceProfile && typeof waiterSession.profile.localFaceProfile === 'object'
+      ? waiterSession.profile.localFaceProfile
+      : null
+    const enrollmentId = String(localFaceProfile?.enrollmentId || '').slice(0, 240)
+    const enrolledAt = String(waiterSession.profile?.localFaceEnrolledAt || localFaceProfile?.enrolledAt || '')
+    const hasEnrollment = Boolean(enrollmentId || enrolledAt)
+    const minimumFrames = evidenceFrames.length >= 3
+    const livenessPassed = minimumFrames && (browserLivenessPassed || detectedFrames >= 1 || movementScore >= 0.02)
+    const faceStatus = hasEnrollment && livenessPassed ? 'verified' : 'failed'
+
+    return {
+      faceProvider: 'simple_liveness',
+      faceStatus,
+      faceScore: livenessPassed ? Math.max(0.65, Math.min(0.98, movementScore || 0.7)) : null,
+      faceReferenceId: enrollmentId || null,
+      faceLivenessPassed: livenessPassed,
+      faceChallengeId: baseEvidence.challengeId,
+      faceChallengePrompt: baseEvidence.challengePrompt,
+      privacyAcknowledgedAt: capture.privacyAcknowledgedAt || null,
+      evidence: {
+        ...baseEvidence,
+        hasEnrollment,
+        enrollmentIdSha256: enrollmentId ? await sha256Hex(enrollmentId) : null,
+        enrolledAt: enrolledAt || null,
+      },
+      providerPayload: {
+        provider: 'popsystem_simple_liveness',
+        enrollmentId: enrollmentId || null,
+        status: faceStatus,
+      },
+      reviewReason: faceStatus === 'verified'
+        ? ''
+        : !hasEnrollment
+          ? 'Funcionario ainda nao concluiu o cadastro facial inicial.'
+          : 'Prova de vida facial incompleta. Refaca a captura antes de bater o ponto.',
+    }
+  }
+
   if (settings.faceLivenessMode === 'provider_webhook') {
     const providerUrl = Deno.env.get('TIME_CLOCK_FACE_PROVIDER_URL') || ''
     const providerToken = Deno.env.get('TIME_CLOCK_FACE_PROVIDER_TOKEN') || ''
@@ -1420,8 +1459,8 @@ async function getTimeClockSettings(supabase: any, restaurantId: string) {
     restaurantLatitude: toNumberOrNull(data?.restaurant_latitude),
     restaurantLongitude: toNumberOrNull(data?.restaurant_longitude),
     allowedRadiusMeters: Math.max(20, Number(data?.allowed_radius_meters ?? 120)),
-    faceProvider: String(data?.face_provider || (data?.face_liveness_mode === 'faceio' ? 'faceio' : 'manual_review')),
-    faceLivenessMode: String(data?.face_liveness_mode || (data?.face_provider === 'faceio' ? 'faceio' : 'manual_review')),
+    faceProvider: String(data?.face_provider || (data?.face_liveness_mode === 'faceio' ? 'faceio' : 'simple_liveness')),
+    faceLivenessMode: String(data?.face_liveness_mode || (data?.face_provider === 'faceio' ? 'faceio' : 'simple_liveness')),
     faceMinScore: Math.max(0.1, Math.min(0.99, Number(data?.face_min_score ?? 0.75))),
     faceStoreEvidence: data?.face_store_evidence === true,
     facePolicyVersion: String(data?.face_policy_version || '2026-05-lgpd-v1'),

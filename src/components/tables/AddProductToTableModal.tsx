@@ -488,6 +488,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         isOpen={showProductModal}
         onClose={() => setShowProductModal(false)}
         onAddToCart={addToCart}
+        layout="list"
       />
     </>
   );

@@ -74,8 +74,11 @@ import DebugPix from '@/pages/DebugPix';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Marketing from '@/pages/Marketing';
 import SystemAdminDashboard from '@/pages/SystemAdminDashboard';
+import ChecklistPublic from '@/pages/ChecklistPublic';
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import TableOrderFlowSettings from '@/components/settings/TableOrderFlowSettings';
+import { useGlobalOrderAutoAccept } from '@/hooks/useGlobalOrderAutoAccept';
+import LicenseExpiredLock from '@/components/license/LicenseExpiredLock';
 import './App.css';
 import './styles/responsive.css';
 
@@ -97,6 +100,7 @@ function AppContent() {
     <Routes>
       {/* Rotas públicas para o menu digital - aceita ambos os formatos */}
       <Route path="/menu/:userId" element={<MenuDigital />} />
+      <Route path="/checklist/:token" element={<ChecklistPublic />} />
       <Route path="/menu-digital" element={<MenuDigital />} />
       <Route path="/totem/:userId" element={<Totem />} />
       <Route path="/totem" element={<Totem />} />
@@ -277,6 +281,11 @@ function CashDrawerShortcut() {
   return null;
 }
 
+function GlobalOrderAutoAccept() {
+  useGlobalOrderAutoAccept();
+  return null;
+}
+
 function App() {
   return (
     <HelmetProvider>
@@ -290,6 +299,8 @@ function App() {
                     <FeatureGateProvider>
                       <HardwareAutoConnect />
                       <CashDrawerShortcut />
+                      <GlobalOrderAutoAccept />
+                      <LicenseExpiredLock />
                       <AppContent />
                       <GlobalNotificationSystem />
                       <SonnerToaster />

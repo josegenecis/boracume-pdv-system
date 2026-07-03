@@ -29,7 +29,7 @@ Deno.serve(async (req: Request) => {
       const supabase = createServiceClient()
       const { data, error } = await supabase
         .from('waiters')
-        .select('id, user_id, name, role, permissions, active, password, cpf, faceio_facial_id')
+        .select('id, user_id, name, role, permissions, active, password, cpf, faceio_facial_id, local_face_enrolled_at, local_face_profile')
         .eq('cpf', cpf)
         .eq('active', true)
         .maybeSingle()
@@ -80,6 +80,8 @@ Deno.serve(async (req: Request) => {
             role: data.role || 'cashier',
             permissions,
             faceioFacialId: data.faceio_facial_id || null,
+            localFaceEnrolledAt: data.local_face_enrolled_at || null,
+            localFaceProfile: data.local_face_profile || null,
           },
         },
       })
@@ -130,6 +132,49 @@ Deno.serve(async (req: Request) => {
           profile: {
             ...session.profile,
             faceioFacialId: facialId,
+          },
+        },
+      })
+    }
+
+    if (action === 'save_simple_face_enrollment') {
+      const session = await getWaiterSession(req)
+      const enrollmentId = String(body?.enrollmentId || '').trim().slice(0, 240)
+      if (!enrollmentId) {
+        return fail('Nao foi possivel identificar o cadastro facial.', 400)
+      }
+
+      const enrollmentPayload = body?.enrollmentPayload && typeof body.enrollmentPayload === 'object'
+        ? body.enrollmentPayload
+        : {}
+      const enrolledAt = new Date().toISOString()
+      const localFaceProfile = {
+        enrollmentId,
+        enrolledAt,
+        mode: 'simple_liveness',
+        provider: 'popsystem_simple_liveness',
+        payload: enrollmentPayload,
+      }
+
+      const { error } = await session.supabase
+        .from('waiters')
+        .update({
+          local_face_enrolled_at: enrolledAt,
+          local_face_profile: localFaceProfile,
+        })
+        .eq('id', session.profile.id)
+        .eq('user_id', session.profile.restaurantId)
+
+      if (error) return fail(error.message, 400)
+
+      return ok({
+        session: {
+          token: session.rawToken,
+          expiresAt: session.expiresAt,
+          profile: {
+            ...session.profile,
+            localFaceEnrolledAt: enrolledAt,
+            localFaceProfile,
           },
         },
       })

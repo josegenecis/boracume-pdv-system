@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
+import { Switch } from '@/components/ui/switch';
 import { Users, Clock, ArrowRightLeft, Printer, WalletCards, ReceiptText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -99,6 +100,11 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const [checkoutDiscount, setCheckoutDiscount] = useState('');
   const [checkoutSurcharge, setCheckoutSurcharge] = useState('');
   const [cashReceived, setCashReceived] = useState('');
+  const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
+  const [serviceChargeAutoApply, setServiceChargeAutoApply] = useState(false);
+  const [serviceChargeAccepted, setServiceChargeAccepted] = useState(false);
+  const [serviceChargePercentage, setServiceChargePercentage] = useState(10);
+  const [serviceChargeTaxWithhold, setServiceChargeTaxWithhold] = useState(0);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -116,6 +122,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       setCheckoutDiscount('');
       setCheckoutSurcharge('');
       setCashReceived('');
+      await loadServiceChargeSettings();
 
       const { data: accountData, error: accountError } = await supabase
         .from('table_accounts')
@@ -206,6 +213,38 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadServiceChargeSettings = async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await (supabase as any)
+        .from('waiter_service_charge_settings')
+        .select('enabled, auto_apply, percentage, tax_withhold_percent')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
+      const enabled = Boolean(data?.enabled);
+      const autoApply = Boolean(data?.auto_apply);
+      const percentage = Math.min(30, Math.max(0, Number(data?.percentage ?? 10)));
+      const taxWithhold = Math.min(100, Math.max(0, Number(data?.tax_withhold_percent ?? 0)));
+
+      setServiceChargeEnabled(enabled && percentage > 0);
+      setServiceChargeAutoApply(autoApply);
+      setServiceChargeAccepted(enabled && autoApply && percentage > 0);
+      setServiceChargePercentage(percentage || 10);
+      setServiceChargeTaxWithhold(taxWithhold);
+    } catch (error) {
+      console.warn('Nao foi possivel carregar taxa de servico da mesa:', error);
+      setServiceChargeEnabled(false);
+      setServiceChargeAutoApply(false);
+      setServiceChargeAccepted(false);
+      setServiceChargePercentage(10);
+      setServiceChargeTaxWithhold(0);
     }
   };
 
@@ -339,8 +378,13 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
   const checkoutDiscountValue = parseBRL(checkoutDiscount);
   const checkoutSurchargeValue = parseBRL(checkoutSurcharge);
+  const serviceChargeAmount = currentOrder && serviceChargeEnabled && serviceChargeAccepted
+    ? Number(((Math.max(0, Number(currentOrder.total || 0) + checkoutSurchargeValue - checkoutDiscountValue) * serviceChargePercentage) / 100).toFixed(2))
+    : 0;
+  const serviceChargeTaxAmount = Number(((serviceChargeAmount * serviceChargeTaxWithhold) / 100).toFixed(2));
+  const serviceChargeNetAmount = Math.max(0, Number((serviceChargeAmount - serviceChargeTaxAmount).toFixed(2)));
   const checkoutTotal = currentOrder
-    ? Math.max(0, Number(currentOrder.total || 0) + checkoutSurchargeValue - checkoutDiscountValue)
+    ? Math.max(0, Number(currentOrder.total || 0) + checkoutSurchargeValue - checkoutDiscountValue + serviceChargeAmount)
     : 0;
   const cashReceivedValue = parseBRL(cashReceived);
   const changeAmount = paymentMethod === 'dinheiro' ? Math.max(0, cashReceivedValue - checkoutTotal) : 0;
@@ -378,6 +422,15 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
         subtotal: Number(currentOrder.total || 0),
         discount: checkoutDiscountValue,
         surcharge: checkoutSurchargeValue,
+        service_charge: {
+          enabled: serviceChargeEnabled && serviceChargeAccepted,
+          percentage: serviceChargePercentage,
+          amount: serviceChargeAmount,
+          tax_withhold_percent: serviceChargeTaxWithhold,
+          tax_amount: serviceChargeTaxAmount,
+          waiter_net_amount: serviceChargeNetAmount,
+          auto_apply: serviceChargeAutoApply,
+        },
         total: adjustedTotal,
         cash_received: paymentMethod === 'dinheiro' ? cashReceivedValue : null,
         change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
@@ -387,7 +440,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
         const accountId = currentOrder.account_id || currentOrder.id;
         let finalizedOrders: any[] = [];
 
-        if (accountId && (checkoutDiscountValue > 0 || checkoutSurchargeValue > 0)) {
+        if (accountId && (checkoutDiscountValue > 0 || checkoutSurchargeValue > 0 || serviceChargeAmount > 0)) {
           const { error: accountTotalError } = await supabase
             .from('table_accounts')
             .update({ total: adjustedTotal, updated_at: paymentTimestamp } as any)
@@ -875,6 +928,12 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                         )}
                       </div>
                     )}
+                    {serviceChargeAmount > 0 && (
+                      <div className="mt-2 flex justify-between border-t pt-2 text-xs font-semibold text-amber-700">
+                        <span>10% do garçom</span>
+                        <span>{formatCurrency(serviceChargeAmount)}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -887,6 +946,40 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                       <CurrencyTextInput value={checkoutSurcharge} onValueChange={setCheckoutSurcharge} placeholder="R$ 0,00" />
                     </div>
                   </div>
+
+                  {serviceChargeEnabled && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <Label className="text-sm font-semibold text-[#082F23]">
+                            Cobrar {serviceChargePercentage}% do garçom?
+                          </Label>
+                          <p className="mt-1 text-xs leading-5 text-amber-800">
+                            {serviceChargeAutoApply
+                              ? 'A regra da mesa deixou marcado automaticamente. Desmarque se o cliente não aceitar.'
+                              : 'Marque aqui somente se o cliente autorizar no fechamento.'}
+                          </p>
+                        </div>
+                        <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
+                      </div>
+                      {serviceChargeAccepted && (
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                          <div className="rounded-lg bg-white/80 p-2">
+                            <div className="text-slate-500">Taxa</div>
+                            <div className="font-bold text-[#082F23]">{formatCurrency(serviceChargeAmount)}</div>
+                          </div>
+                          <div className="rounded-lg bg-white/80 p-2">
+                            <div className="text-slate-500">Retenção</div>
+                            <div className="font-bold text-red-700">{formatCurrency(serviceChargeTaxAmount)}</div>
+                          </div>
+                          <div className="rounded-lg bg-white/80 p-2">
+                            <div className="text-slate-500">Garçom</div>
+                            <div className="font-bold text-emerald-700">{formatCurrency(serviceChargeNetAmount)}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label className="text-xs uppercase tracking-[0.16em] text-slate-500">Pagamento</Label>

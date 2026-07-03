@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
-import { Users, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight, Search, Activity, ArrowUpRight, CreditCard, Wallet, ChefHat, AlertTriangle, Megaphone, CalendarClock, UserCheck, UserX } from 'lucide-react';
+import OperationalChecklistDialog from '@/components/dashboard/OperationalChecklistDialog';
+import { Users, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight, Search, Activity, ArrowUpRight, CreditCard, Wallet, ChefHat, AlertTriangle, CalendarClock, UserCheck, UserX, ClipboardCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -73,6 +74,13 @@ interface AttendanceSummary {
   pendingReview: number;
 }
 
+interface ChecklistSummary {
+  enabled: boolean;
+  completed: boolean;
+  completedCount: number;
+  totalTasks: number;
+}
+
 const normalizeItems = (value: any) => {
   if (Array.isArray(value)) return value;
   if (typeof value === 'string') {
@@ -108,9 +116,52 @@ const Dashboard = () => {
     absent: 0,
     pendingReview: 0,
   });
+  const [checklistSummary, setChecklistSummary] = useState<ChecklistSummary>({
+    enabled: false,
+    completed: false,
+    completedCount: 0,
+    totalTasks: 0,
+  });
+  const [checklistOpen, setChecklistOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  const fetchChecklistSummary = useCallback(async () => {
+    if (!user?.id) return;
+
+    const businessDate = new Date().toISOString().slice(0, 10);
+    const [settingsResult, tasksResult, runResult] = await Promise.allSettled([
+      (supabase as any)
+        .from('restaurant_checklist_settings')
+        .select('enabled')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      (supabase as any)
+        .from('restaurant_checklist_tasks')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('active', true),
+      (supabase as any)
+        .from('restaurant_checklist_runs')
+        .select('status, checked_task_ids')
+        .eq('user_id', user.id)
+        .eq('business_date', businessDate)
+        .maybeSingle(),
+    ]);
+
+    const settings = settingsResult.status === 'fulfilled' && !settingsResult.value.error ? settingsResult.value.data : null;
+    const tasks = tasksResult.status === 'fulfilled' && !tasksResult.value.error ? (tasksResult.value.data || []) : [];
+    const run = runResult.status === 'fulfilled' && !runResult.value.error ? runResult.value.data : null;
+    const checkedIds = Array.isArray(run?.checked_task_ids) ? run.checked_task_ids : [];
+
+    setChecklistSummary({
+      enabled: Boolean(settings?.enabled),
+      completed: run?.status === 'completed',
+      completedCount: checkedIds.length,
+      totalTasks: tasks.length || 6,
+    });
+  }, [user?.id]);
 
   useEffect(() => {
     console.log('🔍 [DASHBOARD] useEffect executado, user:', user?.id);
@@ -134,7 +185,8 @@ const Dashboard = () => {
         fetchStats(),
         fetchRevenueData(),
         fetchRecentOrders(),
-        fetchOperationalInsights()
+        fetchOperationalInsights(),
+        fetchChecklistSummary()
       ]);
       
       const timeoutPromise = new Promise((_, reject) => 
@@ -150,7 +202,7 @@ const Dashboard = () => {
       console.log('🔍 [DASHBOARD] Finalizando loading...');
       setLoading(false);
     }
-  }, [user]);
+  }, [user, fetchChecklistSummary]);
 
 
   const fetchStats = async () => {
@@ -478,7 +530,16 @@ const Dashboard = () => {
     status: order.status,
   }));
   const dueTotal = dueExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const operationalCards = [
+  const checklistNeedsAction = checklistSummary.enabled && !checklistSummary.completed;
+  const operationalCards: Array<{
+    title: string;
+    value: string | number;
+    hint: string;
+    icon: React.ComponentType<{ className?: string }>;
+    tone: string;
+    to: string;
+    onClick?: () => void;
+  }> = [
     {
       title: 'Estoque baixo',
       value: lowStockProducts.length,
@@ -488,12 +549,21 @@ const Dashboard = () => {
       to: '/produtos',
     },
     {
-      title: 'Clientes sumidos',
-      value: dormantCustomers.length,
-      hint: dormantCustomers.length > 0 ? 'Prontos para campanha de retorno' : 'Sem clientes parados no radar',
-      icon: Megaphone,
-      tone: 'border-violet-200 bg-violet-50 text-violet-700',
-      to: '/marketing?tab=whatsapp-mass',
+      title: 'Checklist do turno',
+      value: checklistSummary.enabled
+        ? checklistSummary.completed
+          ? 'Concluído'
+          : `${checklistSummary.completedCount}/${checklistSummary.totalTasks}`
+        : 'Inativo',
+      hint: checklistSummary.enabled
+        ? checklistSummary.completed
+          ? 'Conferência do dia registrada'
+          : 'Concluir antes de liberar o turno'
+        : 'Ative para exigir conferência diária',
+      icon: ClipboardCheck,
+      tone: checklistNeedsAction ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      to: '/dashboard',
+      onClick: () => setChecklistOpen(true),
     },
     {
       title: 'Contas a vencer',
@@ -690,7 +760,7 @@ const Dashboard = () => {
               <button
                 key={card.title}
                 type="button"
-                onClick={() => navigate(card.to)}
+                onClick={() => card.onClick ? card.onClick() : navigate(card.to)}
                 className="rounded-[24px] border border-slate-200/80 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]"
               >
                 <div className="flex items-center justify-between">
@@ -797,7 +867,7 @@ const Dashboard = () => {
                     <button
                       key={card.title}
                       type="button"
-                      onClick={() => navigate(card.to)}
+                      onClick={() => card.onClick ? card.onClick() : navigate(card.to)}
                       className="rounded-[24px] border border-[#003223]/8 bg-white p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-30px_rgba(0,50,35,0.35)] dark:border-white/10 dark:bg-[#0c1512]"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -997,6 +1067,12 @@ const Dashboard = () => {
         <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">Pedidos Recentes</h2>
         <RecentOrdersTable orders={recentOrders} />
       </div>
+
+      <OperationalChecklistDialog
+        open={checklistOpen}
+        onOpenChange={setChecklistOpen}
+        onUpdated={fetchChecklistSummary}
+      />
     </div>
   );
 };

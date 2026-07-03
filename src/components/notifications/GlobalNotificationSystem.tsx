@@ -26,6 +26,8 @@ const isPdvCounterOrder = (order: any) => {
   return order?.order_type === 'counter' && source === 'PDV';
 };
 
+const getAutoAcceptKey = (userId?: string) => `orders_auto_accept:${userId || 'local'}`;
+
 const isTableServiceOrder = (order: any) => {
   const orderType = String(order?.order_type || '').toLowerCase();
   const source = String(order?.variations?.source || order?.source || '').toLowerCase();
@@ -75,6 +77,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const pendingOrdersRef = useRef<PendingOrder[]>([]);
   const pollingRef = useRef<number | null>(null);
   const visibleOrders = pendingOrders.filter((order) => !dismissedOrders.has(order.id));
+  const isAutoAcceptEnabled = () => Boolean(user?.id && localStorage.getItem(getAutoAcceptKey(user.id)) === 'true');
 
   useEffect(() => {
     isOnOrdersPageRef.current = isOnOrdersPage;
@@ -119,6 +122,7 @@ const GlobalNotificationSystem: React.FC = () => {
   };
 
   const handleIncomingOrderAlert = async (order: PendingOrder) => {
+    if (isAutoAcceptEnabled()) return;
     if (soundEnabledRef.current) {
       soundNotifications.startPersistentAlert(POPSYSTEM_ORDER_SOUND_TYPE);
     }
@@ -188,6 +192,13 @@ const GlobalNotificationSystem: React.FC = () => {
     };
 
     const loadPendingOrders = async (): Promise<PendingOrder[]> => {
+      if (isAutoAcceptEnabled()) {
+        setPendingOrders([]);
+        setIsVisible(false);
+        soundNotifications.stopAllSounds();
+        return [];
+      }
+
       const { data, error } = await supabase
         .from('orders')
         .select('id, order_number, customer_name, order_type, total, created_at, acceptance_status, status, variations')
@@ -224,6 +235,7 @@ const GlobalNotificationSystem: React.FC = () => {
         },
         async (payload) => {
           const newOrder = payload.new as PendingOrder;
+          if (isAutoAcceptEnabled()) return;
           if (isPdvCounterOrder(newOrder)) return;
           if (isTableServiceOrder(newOrder)) {
             if (shouldAutoPrintTableServiceOrder(newOrder)) {
@@ -262,6 +274,10 @@ const GlobalNotificationSystem: React.FC = () => {
         },
         async (payload) => {
           const updatedOrder = payload.new as PendingOrder;
+          if (isAutoAcceptEnabled()) {
+            setPendingOrders((prev) => prev.filter((order) => order.id !== updatedOrder.id));
+            return;
+          }
           if (isPdvCounterOrder(updatedOrder)) {
             setPendingOrders((prev) => prev.filter((order) => order.id !== updatedOrder.id));
             return;
@@ -328,8 +344,18 @@ const GlobalNotificationSystem: React.FC = () => {
         loadPendingOrders();
       }
     };
+    const handleAutoAcceptChanged = () => {
+      if (isAutoAcceptEnabled()) {
+        setPendingOrders([]);
+        setIsVisible(false);
+        soundNotifications.stopAllSounds();
+      } else {
+        loadPendingOrders();
+      }
+    };
 
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('orders-auto-accept-changed', handleAutoAcceptChanged);
 
     if (pollingRef.current) window.clearInterval(pollingRef.current);
     pollingRef.current = window.setInterval(async () => {
@@ -346,6 +372,7 @@ const GlobalNotificationSystem: React.FC = () => {
       supabase.removeChannel(channel);
       soundNotifications.stopAllSounds();
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('orders-auto-accept-changed', handleAutoAcceptChanged);
       if (pollingRef.current) window.clearInterval(pollingRef.current);
       pollingRef.current = null;
     };

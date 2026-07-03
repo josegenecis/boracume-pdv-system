@@ -117,7 +117,6 @@ const Orders = () => {
   const { sendToKitchen } = useKitchenIntegration();
   const realtimeOkRef = useRef(false);
   const hasLoadedOrdersRef = useRef(false);
-  const autoAcceptingRef = useRef<Set<string>>(new Set());
 
   const normalizeItems = (value: any) => {
     if (Array.isArray(value)) return value;
@@ -239,21 +238,20 @@ const Orders = () => {
     setAutoAcceptEnabled(localStorage.getItem(getAutoAcceptKey(user.id)) === 'true');
   }, [user?.id]);
 
-  useEffect(() => {
-    if (!user?.id || !autoAcceptEnabled) return;
-
-    const targets = orders.filter((order) => {
-      const pending = order.acceptance_status === 'pending_acceptance' || order.status === 'pending';
-      return pending && !autoAcceptingRef.current.has(order.id);
+  const toggleAutoAccept = () => {
+    const next = !autoAcceptEnabled;
+    setAutoAcceptEnabled(next);
+    if (user?.id) {
+      localStorage.setItem(getAutoAcceptKey(user.id), String(next));
+      window.dispatchEvent(new CustomEvent('orders-auto-accept-changed', { detail: { enabled: next } }));
+    }
+    toast({
+      title: next ? 'Aceite automático ligado' : 'Aceite automático desligado',
+      description: next
+        ? 'Novos pedidos serão aceitos, impressos e avisados automaticamente em qualquer tela.'
+        : 'Novos pedidos voltarão a aguardar confirmação manual.',
     });
-
-    targets.forEach((order) => {
-      autoAcceptingRef.current.add(order.id);
-      void updateOrderStatus(order.id, 'preparing', { silent: true }).finally(() => {
-        autoAcceptingRef.current.delete(order.id);
-      });
-    });
-  }, [orders, autoAcceptEnabled, user?.id]);
+  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -1352,15 +1350,7 @@ const Orders = () => {
               <Button
                 variant={autoAcceptEnabled ? 'default' : 'outline'}
                 className={autoAcceptEnabled ? 'bg-[#8CC850] text-[#003223] hover:bg-[#79b541]' : ''}
-                onClick={() => {
-                  const next = !autoAcceptEnabled;
-                  setAutoAcceptEnabled(next);
-                  if (user?.id) localStorage.setItem(getAutoAcceptKey(user.id), String(next));
-                  toast({
-                    title: next ? 'Aceite automático ligado' : 'Aceite automático desligado',
-                    description: next ? 'Novos pedidos serão aceitos e enviados para preparo automaticamente.' : 'Novos pedidos voltarão a aguardar confirmação manual.',
-                  });
-                }}
+                onClick={toggleAutoAccept}
               >
                 {autoAcceptEnabled ? 'Aceitar pedidos automático' : 'Aceitar pedidos automático'}
               </Button>
@@ -1421,15 +1411,7 @@ const Orders = () => {
             <Button
               variant={autoAcceptEnabled ? 'default' : 'outline'}
               className={`mt-3 h-10 rounded-2xl text-xs ${autoAcceptEnabled ? 'bg-[#8CC850] text-[#003223] hover:bg-[#79b541]' : 'bg-white'}`}
-              onClick={() => {
-                const next = !autoAcceptEnabled;
-                setAutoAcceptEnabled(next);
-                if (user?.id) localStorage.setItem(getAutoAcceptKey(user.id), String(next));
-                toast({
-                  title: next ? 'Aceite automático ligado' : 'Aceite automático desligado',
-                  description: next ? 'Novos pedidos serão aceitos automaticamente.' : 'Confirmação manual reativada.',
-                });
-              }}
+              onClick={toggleAutoAccept}
             >
               {autoAcceptEnabled ? 'Aceitar pedidos automático' : 'Ligar aceite automático'}
             </Button>

@@ -28,7 +28,7 @@ type TimeClockSettings = {
   overtime_tolerance_minutes: number;
   workdays: number[];
   face_provider: string;
-  face_liveness_mode: 'manual_review' | 'provider_webhook' | 'faceio';
+  face_liveness_mode: 'manual_review' | 'provider_webhook' | 'faceio' | 'simple_liveness';
   face_min_score: number;
   face_store_evidence: boolean;
   face_policy_version: string;
@@ -93,8 +93,8 @@ const defaultSettings: TimeClockSettings = {
   minimum_break_minutes: 60,
   overtime_tolerance_minutes: 10,
   workdays: [1, 2, 3, 4, 5, 6],
-  face_provider: 'manual_review',
-  face_liveness_mode: 'manual_review',
+  face_provider: 'simple_liveness',
+  face_liveness_mode: 'simple_liveness',
   face_min_score: 0.75,
   face_store_evidence: false,
   face_policy_version: '2026-05-lgpd-v1',
@@ -598,15 +598,15 @@ export default function ControlePonto() {
                     onValueChange={(value) => setSettings((current) => ({
                       ...current,
                       face_liveness_mode: value as TimeClockSettings['face_liveness_mode'],
-                      face_provider: value === 'provider_webhook' ? 'provider_webhook' : value === 'faceio' ? 'faceio' : 'manual_review',
+                      face_provider: value === 'provider_webhook' ? 'provider_webhook' : value === 'simple_liveness' ? 'simple_liveness' : 'manual_review',
                     }))}
                   >
                     <SelectTrigger className="h-11 rounded-2xl">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="simple_liveness">Cadastro facial simples</SelectItem>
                       <SelectItem value="manual_review">Revisão manual</SelectItem>
-                      <SelectItem value="faceio">Reconhecimento facial automático</SelectItem>
                       <SelectItem value="provider_webhook">Validação facial externa</SelectItem>
                     </SelectContent>
                   </Select>
@@ -623,8 +623,8 @@ export default function ControlePonto() {
                     <Label>Provedor facial</Label>
                     <Input
                       value={settings.face_provider}
-                      onChange={(event) => setSettings((current) => ({ ...current, face_provider: event.target.value || 'manual_review' }))}
-                      placeholder="manual_review, provider_webhook, unico, caf..."
+                      onChange={(event) => setSettings((current) => ({ ...current, face_provider: event.target.value || 'simple_liveness' }))}
+                      placeholder="simple_liveness ou provider_webhook"
                       className="h-11 rounded-2xl"
                     />
                   </div>

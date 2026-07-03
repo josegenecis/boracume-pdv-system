@@ -9,6 +9,8 @@ const isPdvCounterOrder = (order: any) => {
   return order?.order_type === 'counter' && source === 'PDV';
 };
 
+const getAutoAcceptKey = (userId?: string) => `orders_auto_accept:${userId || 'local'}`;
+
 export const useOrderNotifications = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -62,7 +64,9 @@ export const useOrderNotifications = () => {
           // Force reload of settings to ensure fresh state if needed, or rely on state
           // We rely on state 'enabled' here. 
           
-          if (enabled) {
+          const autoAcceptEnabled = localStorage.getItem(getAutoAcceptKey(user.id)) === 'true';
+
+          if (enabled && !autoAcceptEnabled) {
             // Reproduzir som de notificação
             try {
               console.log('🎵 Tentando reproduzir Toque PopSystem');
@@ -76,11 +80,13 @@ export const useOrderNotifications = () => {
           }
 
           // Mostrar toast
-          toast({
-            title: "Novo Pedido!",
-            description: `Pedido #${payload.new.order_number} recebido`,
-            duration: 10000, // Longer duration
-          });
+          if (!autoAcceptEnabled) {
+            toast({
+              title: "Novo Pedido!",
+              description: `Pedido #${payload.new.order_number} recebido`,
+              duration: 10000, // Longer duration
+            });
+          }
         }
       )
       .subscribe((status) => {
