@@ -171,7 +171,7 @@ export function CheckoutModal({
   const addSplitMethod = () => {
     const next = PAYMENT_OPTIONS.find((option) => parseBRL(paymentAmounts[option.value] || '') <= 0.009);
     if (!next) return;
-    onPaymentAmountChange(next.value, remaining > 0.009 ? String(Math.round(remaining * 100)) : '');
+    onPaymentAmountChange(next.value, remaining > 0.009 ? formatCurrency(remaining) : '');
   };
 
   return (
@@ -404,7 +404,7 @@ function CashPayment({
           <CurrencyTextInput
             value={cashReceived}
             onValueChange={(value) => onCashReceivedChange?.(value)}
-            placeholder={String(Math.round(total * 100))}
+            placeholder={formatCurrency(total)}
             className="mt-1 h-14 bg-white text-xl font-black"
           />
         </div>
