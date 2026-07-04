@@ -454,6 +454,39 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     return acc;
   }, {} as CheckoutPaymentAmounts);
   const checkoutCashReceived = paymentLines.find((line) => line.method === 'dinheiro')?.received || '';
+  const serviceChargeControl = serviceChargeEnabled ? (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <Label className="text-sm font-semibold text-[#082F23]">
+            Cobrar {serviceChargePercentage}% do garçom?
+          </Label>
+          <p className="mt-0.5 text-xs leading-5 text-amber-800">
+            {serviceChargeAutoApply
+              ? 'A regra da mesa deixou marcado automaticamente. Desmarque se o cliente não aceitar.'
+              : 'Opcional no fechamento. Marque somente se o cliente autorizar.'}
+          </p>
+        </div>
+        <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
+      </div>
+      {serviceChargeAccepted && (
+        <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+          <div className="rounded-lg bg-white/80 p-2">
+            <div className="text-slate-500">Taxa</div>
+            <div className="font-bold text-[#082F23]">{formatCurrency(serviceChargeAmount)}</div>
+          </div>
+          <div className="rounded-lg bg-white/80 p-2">
+            <div className="text-slate-500">Retenção</div>
+            <div className="font-bold text-red-700">{formatCurrency(serviceChargeTaxAmount)}</div>
+          </div>
+          <div className="rounded-lg bg-white/80 p-2">
+            <div className="text-slate-500">Garçom</div>
+            <div className="font-bold text-emerald-700">{formatCurrency(serviceChargeNetAmount)}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  ) : null;
 
   useEffect(() => {
     if (!currentOrder) return;
@@ -1223,39 +1256,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
         onConfirm={handleFinishOrder}
         processing={loading}
         modeVariant={checkoutSettings.mode}
-        advancedContent={serviceChargeEnabled ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <Label className="text-sm font-semibold text-[#082F23]">
-                  Cobrar {serviceChargePercentage}% do garçom?
-                </Label>
-                <p className="mt-1 text-xs leading-5 text-amber-800">
-                  {serviceChargeAutoApply
-                    ? 'A regra da mesa deixou marcado automaticamente. Desmarque se o cliente não aceitar.'
-                    : 'Marque aqui somente se o cliente autorizar no fechamento.'}
-                </p>
-              </div>
-              <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
-            </div>
-            {serviceChargeAccepted && (
-              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                <div className="rounded-lg bg-white/80 p-2">
-                  <div className="text-slate-500">Taxa</div>
-                  <div className="font-bold text-[#082F23]">{formatCurrency(serviceChargeAmount)}</div>
-                </div>
-                <div className="rounded-lg bg-white/80 p-2">
-                  <div className="text-slate-500">Retenção</div>
-                  <div className="font-bold text-red-700">{formatCurrency(serviceChargeTaxAmount)}</div>
-                </div>
-                <div className="rounded-lg bg-white/80 p-2">
-                  <div className="text-slate-500">Garçom</div>
-                  <div className="font-bold text-emerald-700">{formatCurrency(serviceChargeNetAmount)}</div>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : null}
+        inlineContent={serviceChargeControl}
       />
     </>
   );

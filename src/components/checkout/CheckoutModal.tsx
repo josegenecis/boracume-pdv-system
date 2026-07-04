@@ -37,6 +37,18 @@ const CARD_OPTIONS: Array<{ value: CheckoutPaymentMethod; label: string }> = [
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 
+const parsePaymentValue = (value: string | number | null | undefined) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const rawValue = String(value || '').trim();
+  const parsedValue = parseBRL(rawValue);
+
+  if (/^\d{3,}$/.test(rawValue)) {
+    return parsedValue / 100;
+  }
+
+  return parsedValue;
+};
+
 interface CheckoutModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -63,6 +75,7 @@ interface CheckoutModalProps {
   cpfValue?: string;
   onCpfChange?: (value: string) => void;
   modeVariant?: 'express' | 'complete';
+  inlineContent?: React.ReactNode;
   extraFields?: React.ReactNode;
   advancedContent?: React.ReactNode;
 }
@@ -93,6 +106,7 @@ export function CheckoutModal({
   cpfValue = '',
   onCpfChange,
   modeVariant = 'complete',
+  inlineContent,
   extraFields,
   advancedContent,
 }: CheckoutModalProps) {
@@ -102,16 +116,18 @@ export function CheckoutModal({
   const [cpfOpen, setCpfOpen] = useState(false);
 
   const manualTotal = useMemo(
-    () => PAYMENT_OPTIONS.reduce((sum, option) => sum + parseBRL(paymentAmounts[option.value] || ''), 0),
+    () => PAYMENT_OPTIONS.reduce((sum, option) => sum + parsePaymentValue(paymentAmounts[option.value] || ''), 0),
     [paymentAmounts],
   );
   const hasManualSplit = manualTotal > 0.009;
   const paidTotal = hasManualSplit ? manualTotal : total;
   const remaining = Math.max(0, total - paidTotal);
-  const cashPortion = hasManualSplit ? parseBRL(paymentAmounts.dinheiro || '') : paymentMethod === 'dinheiro' ? total : 0;
-  const cashReceivedValue = parseBRL(cashReceived);
+  const cashPortion = hasManualSplit ? parsePaymentValue(paymentAmounts.dinheiro || '') : paymentMethod === 'dinheiro' ? total : 0;
+  const cashReceivedValue = parsePaymentValue(cashReceived);
   const changeAmount = cashPortion > 0 ? Math.max(0, cashReceivedValue - cashPortion) : 0;
   const canConfirm = !processing && total > 0 && (!hasManualSplit || remaining <= 0.009);
+  const activePaymentCount = PAYMENT_OPTIONS.filter((option) => parsePaymentValue(paymentAmounts[option.value] || '') > 0.009).length;
+  const shouldShowSummary = advancedOpen || mode === 'cash' || (mode === 'split' && (activePaymentCount > 1 || remaining > 0.009 || paidTotal - total > 0.009));
 
   useEffect(() => {
     if (!open) return;
@@ -162,14 +178,14 @@ export function CheckoutModal({
   const updateSplitAmount = (method: CheckoutPaymentMethod, value: string) => {
     onPaymentAmountChange(method, value);
     if (method === 'dinheiro' && onCashReceivedChange) {
-      const received = parseBRL(cashReceived);
-      const amount = parseBRL(value);
+      const received = parsePaymentValue(cashReceived);
+      const amount = parsePaymentValue(value);
       if (!cashReceived || received + 0.009 < amount) onCashReceivedChange(value);
     }
   };
 
   const addSplitMethod = () => {
-    const next = PAYMENT_OPTIONS.find((option) => parseBRL(paymentAmounts[option.value] || '') <= 0.009);
+    const next = PAYMENT_OPTIONS.find((option) => parsePaymentValue(paymentAmounts[option.value] || '') <= 0.009);
     if (!next) return;
     onPaymentAmountChange(next.value, remaining > 0.009 ? formatCurrency(remaining) : '');
   };
@@ -179,9 +195,9 @@ export function CheckoutModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           hideClose
-          className="flex max-h-[96vh] w-[min(96vw,860px)] max-w-none flex-col overflow-hidden rounded-3xl border-[#FF6400]/10 bg-[#FFFDF9] p-0 shadow-2xl"
+          className="flex max-h-[98vh] w-[min(98vw,1040px)] max-w-none flex-col overflow-hidden rounded-3xl border-[#FF6400]/10 bg-[#FFFDF9] p-0 shadow-2xl"
         >
-          <DialogHeader className="shrink-0 border-b border-[#003223]/10 px-6 py-4">
+          <DialogHeader className="shrink-0 border-b border-[#003223]/10 px-6 py-2.5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <DialogTitle className="text-2xl font-black text-[#003223]">{title}</DialogTitle>
@@ -194,7 +210,7 @@ export function CheckoutModal({
             <CheckoutHeader total={total} />
           </DialogHeader>
 
-          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+          <div className="flex-1 space-y-3 overflow-y-auto px-6 py-3">
             {mode === 'main' && (
               <PaymentSelector
                 onPix={() => selectSinglePayment('pix', 'pix')}
@@ -246,6 +262,8 @@ export function CheckoutModal({
               />
             )}
 
+            {inlineContent}
+
             {modeVariant === 'complete' && (
               <AdvancedOptions
                 open={advancedOpen}
@@ -261,7 +279,7 @@ export function CheckoutModal({
               />
             )}
 
-            {(advancedOpen || mode === 'split' || mode === 'cash') && (
+            {shouldShowSummary && (
               <PaymentSummary
                 subtotal={subtotal}
                 deliveryFee={deliveryFee}
@@ -314,9 +332,9 @@ export function CheckoutModal({
 
 function CheckoutHeader({ total }: { total: number }) {
   return (
-    <div className="mt-4 rounded-3xl border border-[#003223]/10 bg-white p-4 text-center shadow-sm">
+    <div className="mt-2 rounded-3xl border border-[#003223]/10 bg-white p-2.5 text-center shadow-sm">
       <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Total</div>
-      <div className="mt-1 text-4xl font-black text-[#003223] sm:text-5xl">{formatCurrency(total)}</div>
+      <div className="mt-0.5 text-4xl font-black text-[#003223] sm:text-5xl">{formatCurrency(total)}</div>
     </div>
   );
 }
@@ -443,20 +461,20 @@ function SplitPayment({
   onAddMethod: () => void;
   onBack: () => void;
 }) {
-  const activeMethods = PAYMENT_OPTIONS.filter((option) => parseBRL(paymentAmounts[option.value] || '') > 0.009);
+  const activeMethods = PAYMENT_OPTIONS.filter((option) => parsePaymentValue(paymentAmounts[option.value] || '') > 0.009);
   const methodsToRender = activeMethods.length > 0 ? activeMethods : [{ value: 'pix' as CheckoutPaymentMethod, label: 'PIX' }];
 
   return (
-    <div className="rounded-2xl border border-[#003223]/10 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-[#003223]/10 bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2">
         <Button variant="ghost" className="h-8 px-2 text-xs" onClick={onBack}>Voltar</Button>
         <div className="text-right text-xs font-bold text-slate-500">
           {formatCurrency(paidTotal)} de {formatCurrency(total)}
         </div>
       </div>
-      <div className="mt-3 space-y-3">
+      <div className="mt-2 space-y-2">
         {methodsToRender.map((option) => (
-          <div key={option.value} className="rounded-xl border border-slate-200 bg-[#FFFDF9] p-3">
+          <div key={option.value} className="rounded-xl border border-slate-200 bg-[#FFFDF9] p-2.5">
             <div className="grid gap-2 sm:grid-cols-[180px_1fr]">
               <Select
                 value={option.value}
@@ -503,7 +521,7 @@ function SplitPayment({
           </div>
         ))}
       </div>
-      <Button variant="outline" className="mt-3 h-11 w-full rounded-xl font-black" onClick={onAddMethod}>
+      <Button variant="outline" className="mt-2 h-11 w-full rounded-xl font-black" onClick={onAddMethod}>
         Adicionar outra forma
       </Button>
       {remaining > 0.009 && (
@@ -619,7 +637,7 @@ function PaymentSummary({
   changeAmount?: number;
 }) {
   return (
-    <div className="rounded-2xl border border-[#003223]/10 bg-white p-4 text-sm shadow-sm">
+    <div className="rounded-2xl border border-[#003223]/10 bg-white p-3 text-sm shadow-sm">
       {typeof subtotal === 'number' && (
         <div className="flex justify-between text-slate-500">
           <span>Subtotal</span>
@@ -664,7 +682,7 @@ function PaymentSummary({
           )}
         </div>
       )}
-      <div className="mt-3 flex justify-between border-t pt-3 text-xl font-black text-gray-950">
+      <div className="mt-2 flex justify-between border-t pt-2 text-xl font-black text-gray-950">
         <span>Total</span>
         <span>{formatCurrency(total)}</span>
       </div>
@@ -686,7 +704,7 @@ function FooterActions({
   onConfirm: () => void;
 }) {
   return (
-    <div className="flex flex-col-reverse gap-3 border-t border-[#003223]/10 bg-white px-6 py-4 sm:flex-row sm:justify-end">
+    <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-[#003223]/10 bg-white px-6 py-3 sm:flex-row sm:justify-end">
       <Button variant="outline" onClick={onBack} className="h-12 rounded-xl px-8 font-black">
         Voltar
       </Button>

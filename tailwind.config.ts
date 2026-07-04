@@ -125,7 +125,7 @@ export default {
 				'fade-in': 'fade-in 0.3s ease-out',
 				'fade-out': 'fade-out 0.3s ease-out',
 				'slide-in': 'slide-in 0.3s ease-out',
-				'stock-pulse': 'stock-pulse 1s ease-in-out infinite'
+				'stock-pulse': 'stock-pulse 2s ease-in-out infinite'
 			},
 			fontFamily: {
 				'sora': ['Sora', 'sans-serif'],
