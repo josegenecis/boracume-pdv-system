@@ -129,6 +129,12 @@ export function CheckoutModal({
   const activePaymentCount = PAYMENT_OPTIONS.filter((option) => parsePaymentValue(paymentAmounts[option.value] || '') > 0.009).length;
   const shouldShowSummary = advancedOpen || mode === 'cash' || (mode === 'split' && (activePaymentCount > 1 || remaining > 0.009 || paidTotal - total > 0.009));
 
+  function selectSinglePayment(method: CheckoutPaymentMethod, nextMode: 'main' | 'pix' | 'cash') {
+    onClearSplit();
+    onPaymentMethodChange(method);
+    setMode(nextMode);
+  }
+
   useEffect(() => {
     if (!open) return;
     const handler = (event: KeyboardEvent) => {
@@ -168,12 +174,6 @@ export function CheckoutModal({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [canConfirm, modeVariant, onConfirm, onOpenChange, open]);
-
-  const selectSinglePayment = (method: CheckoutPaymentMethod, nextMode: 'main' | 'pix' | 'cash') => {
-    onClearSplit();
-    onPaymentMethodChange(method);
-    setMode(nextMode);
-  };
 
   const updateSplitAmount = (method: CheckoutPaymentMethod, value: string) => {
     onPaymentAmountChange(method, value);
