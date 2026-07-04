@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: 'esnext',
+    minify: false,
     sourcemap: false,
     rollupOptions: {
       output: {

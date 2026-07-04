@@ -84,6 +84,12 @@ const formatPaymentAmount = (value: number) => {
   return numericValue > 0.009 ? formatBRL(numericValue) : '';
 };
 
+const parseCheckoutAmount = (value?: string) => {
+  const raw = String(value || '').trim();
+  const parsed = parseBRL(raw);
+  return /^\d{3,}$/.test(raw) ? parsed / 100 : parsed;
+};
+
 const createPaymentLine = (method: CheckoutPaymentMethod, amount = 0): PaymentLine => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
   method,
@@ -428,8 +434,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const normalizedPaymentLines = paymentLines
     .map((line) => ({
       ...line,
-      amountValue: parseBRL(line.amount),
-      receivedValue: parseBRL(line.received || line.amount),
+      amountValue: parseCheckoutAmount(line.amount),
+      receivedValue: parseCheckoutAmount(line.received || line.amount),
     }))
     .filter((line) => line.amountValue > 0.009);
   const paymentPaidTotal = normalizedPaymentLines.reduce((sum, line) => sum + line.amountValue, 0);
