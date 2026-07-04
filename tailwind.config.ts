@@ -110,12 +110,12 @@ export default {
 				},
 				'stock-pulse': {
 					'0%, 100%': {
-						boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.26), 0 0 8px rgba(239, 68, 68, 0.14)',
-						opacity: '1'
+						boxShadow: '0 0 0 1px rgba(239, 68, 68, 0.35), 0 0 0 rgba(239, 68, 68, 0)',
+						borderColor: 'rgba(239, 68, 68, 0.55)'
 					},
 					'50%': {
-						boxShadow: '0 0 0 1px rgba(239, 68, 68, 0.08), 0 0 2px rgba(239, 68, 68, 0.04)',
-						opacity: '0.82'
+						boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.16), 0 0 14px rgba(239, 68, 68, 0.22)',
+						borderColor: 'rgba(239, 68, 68, 1)'
 					}
 				}
 			},
@@ -125,7 +125,7 @@ export default {
 				'fade-in': 'fade-in 0.3s ease-out',
 				'fade-out': 'fade-out 0.3s ease-out',
 				'slide-in': 'slide-in 0.3s ease-out',
-				'stock-pulse': 'stock-pulse 2s ease-in-out infinite'
+				'stock-pulse': 'stock-pulse 1s ease-in-out infinite'
 			},
 			fontFamily: {
 				'sora': ['Sora', 'sans-serif'],

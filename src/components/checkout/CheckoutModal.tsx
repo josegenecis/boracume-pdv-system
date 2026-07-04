@@ -177,8 +177,11 @@ export function CheckoutModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto rounded-3xl border-[#FF6400]/10 bg-[#FFFDF9] p-0 shadow-2xl">
-          <DialogHeader className="border-b border-[#003223]/10 px-6 py-5">
+        <DialogContent
+          hideClose
+          className="flex max-h-[96vh] w-[min(96vw,860px)] max-w-none flex-col overflow-hidden rounded-3xl border-[#FF6400]/10 bg-[#FFFDF9] p-0 shadow-2xl"
+        >
+          <DialogHeader className="shrink-0 border-b border-[#003223]/10 px-6 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <DialogTitle className="text-2xl font-black text-[#003223]">{title}</DialogTitle>
@@ -191,7 +194,7 @@ export function CheckoutModal({
             <CheckoutHeader total={total} />
           </DialogHeader>
 
-          <div className="space-y-4 px-6 py-5">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
             {mode === 'main' && (
               <PaymentSelector
                 onPix={() => selectSinglePayment('pix', 'pix')}
@@ -311,9 +314,9 @@ export function CheckoutModal({
 
 function CheckoutHeader({ total }: { total: number }) {
   return (
-    <div className="mt-5 rounded-3xl border border-[#003223]/10 bg-white p-5 text-center shadow-sm">
+    <div className="mt-4 rounded-3xl border border-[#003223]/10 bg-white p-4 text-center shadow-sm">
       <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Total</div>
-      <div className="mt-1 text-5xl font-black text-[#003223]">{formatCurrency(total)}</div>
+      <div className="mt-1 text-4xl font-black text-[#003223] sm:text-5xl">{formatCurrency(total)}</div>
     </div>
   );
 }

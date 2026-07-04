@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import { getOpenCashRegisterSession } from '@/utils/cashSession';
 import { PrinterService } from '@/utils/printerService';
-import { parseBRL } from '@/lib/currency';
+import { formatBRL, parseBRL } from '@/lib/currency';
 import { emitNfceForOrder, isFiscalEmissionActiveForUser } from '@/utils/nfceClient';
 import { useCheckoutSettings } from '@/hooks/useCheckoutSettings';
 
@@ -79,14 +79,16 @@ const PAYMENT_METHOD_LABELS: Record<CheckoutPaymentMethod, string> = {
   dinheiro: 'Dinheiro',
 };
 
-const currencyDigitsFromNumber = (value: number) =>
-  String(Math.max(0, Math.round((Number(value) || 0) * 100)));
+const formatPaymentAmount = (value: number) => {
+  const numericValue = Number(value) || 0;
+  return numericValue > 0.009 ? formatBRL(numericValue) : '';
+};
 
 const createPaymentLine = (method: CheckoutPaymentMethod, amount = 0): PaymentLine => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
   method,
-  amount: currencyDigitsFromNumber(amount),
-  received: method === 'dinheiro' ? currencyDigitsFromNumber(amount) : '',
+  amount: formatPaymentAmount(amount),
+  received: method === 'dinheiro' ? formatPaymentAmount(amount) : '',
 });
 
 const normalizeCheckoutPaymentMethod = (value?: string | null): CheckoutPaymentMethod => {
