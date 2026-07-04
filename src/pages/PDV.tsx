@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
+import CheckoutModal, { CheckoutPaymentMethod } from '@/components/checkout/CheckoutModal';
 import TableManager from '@/components/tables/TableManager';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -32,6 +33,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import { useNavigate } from 'react-router-dom';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { parseBRL } from '@/lib/currency';
+import { useCheckoutSettings } from '@/hooks/useCheckoutSettings';
 import { prefetchSimpleVariations, type Variation } from '@/hooks/useSimpleVariations';
 import type { PizzaCategoryConfig } from '@/lib/pizza-pricing';
 import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
@@ -127,7 +129,7 @@ interface Table {
   status: string;
 }
 
-type PdvPaymentMethod = 'pix' | 'cartao_credito' | 'cartao_debito' | 'dinheiro';
+type PdvPaymentMethod = CheckoutPaymentMethod;
 
 type PdvPaymentAmounts = Record<PdvPaymentMethod, string>;
 
@@ -135,6 +137,8 @@ const PDV_PAYMENT_METHODS: Array<{ value: PdvPaymentMethod; label: string }> = [
   { value: 'pix', label: 'PIX' },
   { value: 'cartao_credito', label: 'Crédito' },
   { value: 'cartao_debito', label: 'Débito' },
+  { value: 'cartao_voucher', label: 'Voucher' },
+  { value: 'cartao_outros', label: 'Outros' },
   { value: 'dinheiro', label: 'Dinheiro' },
 ];
 
@@ -142,6 +146,8 @@ const emptyPdvPaymentAmounts = (): PdvPaymentAmounts => ({
   pix: '',
   cartao_credito: '',
   cartao_debito: '',
+  cartao_voucher: '',
+  cartao_outros: '',
   dinheiro: '',
 });
 
@@ -149,6 +155,8 @@ const getPaymentMethodLabel = (method: PdvPaymentMethod | string) => {
   if (method === 'pix_online') return 'PIX online';
   if (method === 'pix_entrega') return 'PIX na entrega';
   if (method === 'cartao' || method === 'card') return 'Cartão';
+  if (method === 'cartao_voucher') return 'Voucher';
+  if (method === 'cartao_outros') return 'Outros';
   return PDV_PAYMENT_METHODS.find((option) => option.value === method)?.label || String(method || '-');
 };
 
@@ -251,6 +259,7 @@ const PDV = () => {
   const { user } = useAuth();
   const { isMobile } = useSidebar();
   const { settings: tefSettings } = useTefSettings();
+  const { settings: checkoutSettings } = useCheckoutSettings();
   const navigate = useNavigate();
 
   // Refs for animation
@@ -2291,161 +2300,6 @@ const PDV = () => {
     { value: 'dine_in', label: 'Mesa' },
   ];
 
-  const renderPaymentControls = (compact = false) => {
-    const inputClassName = compact ? 'h-12 text-lg font-semibold' : 'h-7 text-[11px]';
-    const labelClassName = compact
-      ? 'text-[10px] font-bold uppercase tracking-[0.14em]'
-      : 'text-[9px] font-semibold uppercase tracking-[0.12em]';
-    const selectedAmount = paymentAmounts[paymentMethod];
-    const displayedPaymentAmount = selectedAmount || formatCurrency(getFinalTotal());
-    const splitActive = hasManualPaymentSplit();
-    const remaining = getPaymentRemaining();
-    const paidTotal = getPaymentPaidTotal();
-    const cashPortion = getCashPaymentPortion();
-    const cashChange = getCashChangeValue();
-
-    return (
-      <div className={compact ? 'space-y-3' : 'space-y-1.5'}>
-        <div className={compact ? 'grid grid-cols-4 gap-2 rounded-2xl bg-[#F5EBE1]/70 p-1.5' : 'grid grid-cols-4 gap-1.5'}>
-          {PDV_PAYMENT_METHODS.map((method) => (
-            <Button
-              key={method.value}
-              type="button"
-              size={compact ? undefined : 'sm'}
-              variant={paymentMethod === method.value ? 'default' : 'outline'}
-              className={compact ? 'h-11 rounded-xl text-sm font-bold' : 'h-7 rounded-lg text-[11px]'}
-              onClick={() => {
-                setSelectedPaymentMethod(method.value);
-                if (method.value !== 'cartao_credito' && method.value !== 'cartao_debito') setTefData(null);
-                if (method.value === 'cartao_credito' || method.value === 'cartao_debito') {
-                  setCardProcessingMode('maquininha');
-                  setTefOpen(false);
-                }
-              }}
-            >
-              {method.label}
-            </Button>
-          ))}
-        </div>
-
-        <div className={compact ? 'rounded-2xl border border-[#003223]/10 bg-[#F8FBF6] p-3 shadow-sm' : 'rounded-lg border border-[#003223]/10 bg-[#F8FBF6] p-1.5'}>
-          <div className={`${labelClassName} text-[#003223]/70`}>Valor neste método</div>
-          <CurrencyTextInput
-            placeholder="R$ 0,00"
-            value={displayedPaymentAmount}
-            onValueChange={(value) => updatePaymentAmount(paymentMethod, value)}
-            className={`${inputClassName} mt-1 bg-white`}
-          />
-          {compact && (
-            <div className="mt-2 text-xs leading-5 text-slate-500">
-              Deixe em branco para receber o total em {getPaymentMethodLabel(paymentMethod)}. Digite um valor para dividir em mais métodos.
-            </div>
-          )}
-        </div>
-
-        {paymentMethod === 'dinheiro' && (
-          <div className={compact ? 'grid grid-cols-2 gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 shadow-sm' : 'grid grid-cols-2 gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50/70 p-1.5'}>
-            <div className="space-y-1">
-              <div className={`${labelClassName} text-emerald-800`}>Valor recebido</div>
-              <CurrencyTextInput
-                placeholder={formatCurrency(cashPortion || getFinalTotal())}
-                value={changeAmount || formatCurrency(cashPortion || getFinalTotal())}
-                onValueChange={setChangeAmount}
-                className={`${inputClassName} bg-white`}
-              />
-            </div>
-            <div className="space-y-1">
-              <div className={`${labelClassName} text-emerald-800`}>Troco</div>
-              <div className={`${inputClassName} flex items-center rounded-md border bg-white px-3 text-emerald-700`}>
-                {formatCurrency(cashChange)}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {(paymentMethod === 'cartao_credito' || paymentMethod === 'cartao_debito') && (
-          tefSettings.enabled ? (
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  size={compact ? undefined : 'sm'}
-                  variant={cardProcessingMode === 'maquininha' ? 'default' : 'outline'}
-                  className={compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs'}
-                  onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}
-                >
-                  Maquininha
-                </Button>
-                <Button
-                  type="button"
-                  size={compact ? undefined : 'sm'}
-                  variant={cardProcessingMode === 'tef' ? 'default' : 'outline'}
-                  className={compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs'}
-                  onClick={() => { setCardProcessingMode('tef'); setTefOpen(true); }}
-                >
-                  TEF
-                </Button>
-              </div>
-              {cardProcessingMode === 'tef' && (
-                <Button type="button" size={compact ? undefined : 'sm'} variant="outline" className={`${compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs'} w-full`} onClick={() => setTefOpen(true)}>
-                  Editar dados TEF
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className={compact ? 'text-[10px] text-muted-foreground' : 'text-[10px] text-muted-foreground'}>Cartão via maquininha</div>
-          )
-        )}
-
-        {splitActive && (
-          <div className={compact ? 'rounded-xl border border-[#FF6400]/15 bg-white p-2 text-[11px]' : 'rounded-lg border border-[#FF6400]/15 bg-white p-1.5 text-[10px]'}>
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-500">Pago</span>
-              <span className="font-bold text-[#003223]">{formatCurrency(paidTotal)}</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between">
-              <span className="font-semibold text-slate-500">Restante</span>
-              <span className={`font-bold ${remaining > 0.009 ? 'text-red-600' : 'text-emerald-700'}`}>{formatCurrency(remaining)}</span>
-            </div>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {getPaymentLines().map((line) => (
-                <Badge key={line.method} variant="outline" className="rounded-full bg-[#F8FBF6] text-[10px]">
-                  {line.label}: {formatCurrency(line.amount)}
-                </Badge>
-              ))}
-              <Button type="button" variant="ghost" className="h-6 rounded-full px-2 text-[10px] text-slate-500" onClick={clearPaymentSplit}>
-                Limpar
-              </Button>
-            </div>
-          </div>
-        )}
-
-        <div className={compact ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-2 gap-1.5'}>
-          <div className="space-y-1">
-            <div className={`${labelClassName} text-red-600`}>Desconto</div>
-            <CurrencyTextInput
-              aria-label="Desconto"
-              placeholder="R$ 0,00"
-              value={discountAmount}
-              onValueChange={setDiscountAmount}
-              className={inputClassName}
-            />
-          </div>
-          <div className="space-y-1">
-            <div className={`${labelClassName} text-emerald-700`}>Acréscimo</div>
-            <CurrencyTextInput
-              aria-label="Acréscimo"
-              placeholder="R$ 0,00"
-              value={surchargeAmount}
-              onValueChange={setSurchargeAmount}
-              className={inputClassName}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="-mx-4 -mt-4 -mb-4 flex h-[calc(100%+1rem)] flex-col overflow-hidden bg-white sm:-mx-6 sm:-mt-6 sm:-mb-6 sm:h-[calc(100%+1.5rem)]">
       <FirstOperatorDialog open={mustCreateOperator} onCreated={async () => { setMustCreateOperator(false); await checkFirstOperator(); }} />
@@ -2851,8 +2705,9 @@ const PDV = () => {
                           </Button>
                       </div>
                     ) : null}
-                    
-                    {renderPaymentControls(false)}
+                    <div className="rounded-lg border border-[#003223]/10 bg-white px-3 py-2 text-[11px] font-semibold text-slate-500">
+                      O pagamento será escolhido ao clicar em Fechar.
+                    </div>
                 </div>
 
                 {/* Totals Summary */}
@@ -3099,8 +2954,9 @@ const PDV = () => {
                          </Button>
                      </div>
                    ) : null}
-                    
-                    {renderPaymentControls(true)}
+                    <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+                      O pagamento será escolhido ao clicar em Fechar.
+                    </div>
                   </div>
 
                   <div className="mb-3 space-y-1 text-[12px]">
@@ -3228,24 +3084,32 @@ const PDV = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-        <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto rounded-2xl border-[#FF6400]/10 bg-[#FFFDF9] p-0">
-          <DialogHeader>
-            <div className="rounded-t-2xl border-b border-[#FF6400]/10 bg-gradient-to-r from-[#FFF4EA] via-white to-[#F4FAEC] px-6 py-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <DialogTitle className="text-2xl font-bold text-[#003223]">Fechar pedido</DialogTitle>
-                  <p className="mt-1 text-sm text-slate-500">{cartItemsCount} item(ns) no carrinho</p>
-                </div>
-                <div className="rounded-2xl border border-[#003223]/10 bg-white px-4 py-2 text-right shadow-sm">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Total</div>
-                  <div className="text-2xl font-black text-[#003223]">{formatCurrency(getFinalTotal())}</div>
-                </div>
-              </div>
-            </div>
-          </DialogHeader>
-
-          <div className="space-y-4 px-6 py-5">
+      <CheckoutModal
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        title="Fechar pedido"
+        subtitle={`${cartItemsCount} item(ns) no carrinho`}
+        total={getFinalTotal()}
+        subtotal={getTotalValue()}
+        deliveryFee={getDeliveryFee()}
+        discountValue={discountAmount}
+        surchargeValue={surchargeAmount}
+        onDiscountChange={setDiscountAmount}
+        onSurchargeChange={setSurchargeAmount}
+        paymentMethod={paymentMethod}
+        paymentAmounts={paymentAmounts}
+        cashReceived={changeAmount}
+        onPaymentMethodChange={setSelectedPaymentMethod}
+        onPaymentAmountChange={updatePaymentAmount}
+        onCashReceivedChange={setChangeAmount}
+        onClearSplit={clearPaymentSplit}
+        onConfirm={handleFinalizeSale}
+        processing={processing || cart.length === 0}
+        modeVariant={checkoutSettings.mode}
+        cpfValue={orderType === 'counter' ? customerName : ''}
+        onCpfChange={orderType === 'counter' ? setCustomerName : undefined}
+        extraFields={(
+          <div className="space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">
               <Input
                 placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : (orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome *")}
@@ -3317,55 +3181,9 @@ const PDV = () => {
                 </Button>
               </div>
             )}
-
-            {renderPaymentControls(true)}
-
-            <div className="rounded-2xl border border-[#003223]/10 bg-white p-4 text-sm shadow-sm space-y-1">
-              <div className="flex justify-between text-gray-500">
-                <span>Subtotal</span>
-                <span>{formatCurrency(getTotalValue())}</span>
-              </div>
-              {getDeliveryFee() > 0 && (
-                <div className="flex justify-between text-gray-500">
-                  <span>Entrega</span>
-                  <span>{formatCurrency(getDeliveryFee())}</span>
-                </div>
-              )}
-              {getDiscountValue() > 0 && (
-                <div className="flex justify-between text-red-600">
-                  <span>Desconto</span>
-                  <span>-{formatCurrency(getDiscountValue())}</span>
-                </div>
-              )}
-              {getSurchargeValue() > 0 && (
-                <div className="flex justify-between text-emerald-700">
-                  <span>Acréscimo</span>
-                  <span>{formatCurrency(getSurchargeValue())}</span>
-                </div>
-              )}
-              <div className="mt-3 flex justify-between border-t pt-3 text-xl font-black text-gray-950">
-                <span>Total</span>
-                <span>{formatCurrency(getFinalTotal())}</span>
-              </div>
-            </div>
           </div>
-
-          <DialogFooter className="border-t border-[#003223]/10 bg-white px-6 py-4">
-            <Button variant="outline" onClick={() => setCheckoutOpen(false)} className="h-12 rounded-xl px-8 font-bold">Voltar</Button>
-            <Button
-              onClick={handleFinalizeSale}
-              disabled={processing || cart.length === 0}
-              className="h-12 rounded-xl bg-green-600 px-8 text-base font-black hover:bg-green-700"
-            >
-              {processing ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
-              ) : (
-                `Confirmar venda ${formatCurrency(getFinalTotal())}`
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+      />
 
       <Dialog open={tableLaunchOpen} onOpenChange={setTableLaunchOpen}>
         <DialogContent className="max-w-md">

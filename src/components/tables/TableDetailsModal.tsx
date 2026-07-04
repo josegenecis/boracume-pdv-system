@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { Switch } from '@/components/ui/switch';
 import { Users, Clock, ArrowRightLeft, Printer, WalletCards, ReceiptText, Plus, Trash2 } from 'lucide-react';
+import CheckoutModal, { CheckoutPaymentAmounts, CheckoutPaymentMethod } from '@/components/checkout/CheckoutModal';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +19,7 @@ import { getOpenCashRegisterSession } from '@/utils/cashSession';
 import { PrinterService } from '@/utils/printerService';
 import { parseBRL } from '@/lib/currency';
 import { emitNfceForOrder, isFiscalEmissionActiveForUser } from '@/utils/nfceClient';
+import { useCheckoutSettings } from '@/hooks/useCheckoutSettings';
 
 interface Table {
   id: string;
@@ -61,8 +63,6 @@ const generateOrderNumber = () => {
   return `${formattedDate}-${randomNumber.toString().padStart(3, '0')}`;
 };
 
-type CheckoutPaymentMethod = 'pix' | 'cartao' | 'dinheiro';
-
 interface PaymentLine {
   id: string;
   method: CheckoutPaymentMethod;
@@ -72,7 +72,10 @@ interface PaymentLine {
 
 const PAYMENT_METHOD_LABELS: Record<CheckoutPaymentMethod, string> = {
   pix: 'PIX',
-  cartao: 'Cartao',
+  cartao_credito: 'Cartao Credito',
+  cartao_debito: 'Cartao Debito',
+  cartao_voucher: 'Voucher',
+  cartao_outros: 'Cartao Outros',
   dinheiro: 'Dinheiro',
 };
 
@@ -88,14 +91,17 @@ const createPaymentLine = (method: CheckoutPaymentMethod, amount = 0): PaymentLi
 
 const normalizeCheckoutPaymentMethod = (value?: string | null): CheckoutPaymentMethod => {
   const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'pix') return 'pix';
-  if (['cartao', 'cartao_credito', 'cartao_debito', 'card', 'credito', 'debito'].includes(normalized)) return 'cartao';
+  if (normalized.includes('pix')) return 'pix';
+  if (['cartao_debito', 'debito', 'debit'].includes(normalized)) return 'cartao_debito';
+  if (['cartao_voucher', 'voucher'].includes(normalized)) return 'cartao_voucher';
+  if (['cartao_outros', 'outros'].includes(normalized)) return 'cartao_outros';
+  if (['cartao', 'cartao_credito', 'card', 'credito', 'credit'].includes(normalized)) return 'cartao_credito';
   if (['dinheiro', 'cash'].includes(normalized)) return 'dinheiro';
   return 'pix';
 };
 
 const mapPaymentMethodToWaiterPayment = (value: CheckoutPaymentMethod) => {
-  if (value === 'cartao') return 'card';
+  if (String(value).startsWith('cartao')) return 'card';
   if (value === 'dinheiro') return 'cash';
   return 'pix';
 };
@@ -134,6 +140,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const [serviceChargeTaxWithhold, setServiceChargeTaxWithhold] = useState(0);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { settings: checkoutSettings } = useCheckoutSettings();
 
   useEffect(() => {
     if (table && isOpen) {
@@ -440,6 +447,11 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const paymentSummaryLabel = hasSplitPayment
     ? 'multiplas formas'
     : PAYMENT_METHOD_LABELS[(normalizedPaymentLines[0]?.method || paymentMethod) as CheckoutPaymentMethod];
+  const checkoutPaymentAmounts: CheckoutPaymentAmounts = paymentLines.reduce((acc, line) => {
+    if (line.method) acc[line.method] = line.amount;
+    return acc;
+  }, {} as CheckoutPaymentAmounts);
+  const checkoutCashReceived = paymentLines.find((line) => line.method === 'dinheiro')?.received || '';
 
   useEffect(() => {
     if (!currentOrder) return;
@@ -476,6 +488,47 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       const next = prev.filter((line) => line.id !== id);
       return next.length > 0 ? next : [createPaymentLine(paymentMethod, checkoutTotal)];
     });
+  };
+
+  const selectCheckoutPaymentMethod = (method: CheckoutPaymentMethod) => {
+    setPaymentMethod(method);
+    setPaymentSplitTouched(false);
+    setPaymentLines([createPaymentLine(method, checkoutTotal)]);
+  };
+
+  const updateCheckoutPaymentAmount = (method: CheckoutPaymentMethod, value: string) => {
+    setPaymentSplitTouched(true);
+    setPaymentLines((prev) => {
+      const withoutMethod = prev.filter((line) => line.method !== method);
+      if (parseBRL(value) <= 0.009) return withoutMethod.length > 0 ? withoutMethod : [createPaymentLine(method, 0)];
+      const current = prev.find((line) => line.method === method);
+      return [
+        ...withoutMethod,
+        {
+          ...(current || createPaymentLine(method, 0)),
+          method,
+          amount: value,
+          received: method === 'dinheiro' ? current?.received || value : '',
+        },
+      ];
+    });
+    setPaymentMethod(method);
+  };
+
+  const updateCheckoutCashReceived = (value: string) => {
+    setPaymentSplitTouched(true);
+    setPaymentLines((prev) => {
+      const existing = prev.find((line) => line.method === 'dinheiro');
+      if (existing) {
+        return prev.map((line) => line.method === 'dinheiro' ? { ...line, received: value } : line);
+      }
+      return [...prev, { ...createPaymentLine('dinheiro', checkoutTotal), received: value }];
+    });
+  };
+
+  const clearCheckoutSplit = () => {
+    setPaymentSplitTouched(false);
+    setPaymentLines([createPaymentLine(paymentMethod, checkoutTotal)]);
   };
 
   const buildWaiterPaymentRows = (params: {
@@ -1147,218 +1200,61 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       </DialogContent>
       </Dialog>
 
-      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto rounded-2xl border-[#FF6400]/10 bg-[#FFFDF9] p-0">
-        <DialogHeader>
-          <div className="rounded-t-2xl border-b border-[#FF6400]/10 bg-gradient-to-r from-[#FFF4EA] via-white to-[#F4FAEC] px-6 py-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <CheckoutModal
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        title="Fechar mesa"
+        subtitle={`Mesa ${table.table_number} • ${currentOrder?.items?.length || 0} item(ns)`}
+        total={checkoutTotal}
+        subtotal={currentOrder?.total || 0}
+        discountValue={checkoutDiscount}
+        surchargeValue={checkoutSurcharge}
+        onDiscountChange={setCheckoutDiscount}
+        onSurchargeChange={setCheckoutSurcharge}
+        paymentMethod={paymentMethod}
+        paymentAmounts={checkoutPaymentAmounts}
+        cashReceived={checkoutCashReceived}
+        onPaymentMethodChange={selectCheckoutPaymentMethod}
+        onPaymentAmountChange={updateCheckoutPaymentAmount}
+        onCashReceivedChange={updateCheckoutCashReceived}
+        onClearSplit={clearCheckoutSplit}
+        onConfirm={handleFinishOrder}
+        processing={loading}
+        modeVariant={checkoutSettings.mode}
+        advancedContent={serviceChargeEnabled ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <DialogTitle className="text-2xl font-bold text-[#003223]">Fechar mesa</DialogTitle>
-                <p className="mt-1 text-sm text-slate-500">
-                  Mesa {table.table_number} • {currentOrder?.items?.length || 0} item(ns)
+                <Label className="text-sm font-semibold text-[#082F23]">
+                  Cobrar {serviceChargePercentage}% do garçom?
+                </Label>
+                <p className="mt-1 text-xs leading-5 text-amber-800">
+                  {serviceChargeAutoApply
+                    ? 'A regra da mesa deixou marcado automaticamente. Desmarque se o cliente não aceitar.'
+                    : 'Marque aqui somente se o cliente autorizar no fechamento.'}
                 </p>
               </div>
-              <div className="rounded-2xl border border-[#003223]/10 bg-white px-4 py-2 text-right shadow-sm">
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Total</div>
-                <div className="text-2xl font-black text-[#003223]">{formatCurrency(checkoutTotal)}</div>
-              </div>
+              <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
             </div>
-          </div>
-        </DialogHeader>
-
-        <div className="space-y-4 px-6 py-5">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Desconto</Label>
-              <CurrencyTextInput value={checkoutDiscount} onValueChange={setCheckoutDiscount} placeholder="R$ 0,00" />
-            </div>
-            <div className="space-y-2">
-              <Label>Acréscimo</Label>
-              <CurrencyTextInput value={checkoutSurcharge} onValueChange={setCheckoutSurcharge} placeholder="R$ 0,00" />
-            </div>
-          </div>
-
-          {serviceChargeEnabled && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <Label className="text-sm font-semibold text-[#082F23]">
-                    Cobrar {serviceChargePercentage}% do garçom?
-                  </Label>
-                  <p className="mt-1 text-xs leading-5 text-amber-800">
-                    {serviceChargeAutoApply
-                      ? 'A regra da mesa deixou marcado automaticamente. Desmarque se o cliente não aceitar.'
-                      : 'Marque aqui somente se o cliente autorizar no fechamento.'}
-                  </p>
+            {serviceChargeAccepted && (
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded-lg bg-white/80 p-2">
+                  <div className="text-slate-500">Taxa</div>
+                  <div className="font-bold text-[#082F23]">{formatCurrency(serviceChargeAmount)}</div>
                 </div>
-                <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
-              </div>
-              {serviceChargeAccepted && (
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                  <div className="rounded-lg bg-white/80 p-2">
-                    <div className="text-slate-500">Taxa</div>
-                    <div className="font-bold text-[#082F23]">{formatCurrency(serviceChargeAmount)}</div>
-                  </div>
-                  <div className="rounded-lg bg-white/80 p-2">
-                    <div className="text-slate-500">Retenção</div>
-                    <div className="font-bold text-red-700">{formatCurrency(serviceChargeTaxAmount)}</div>
-                  </div>
-                  <div className="rounded-lg bg-white/80 p-2">
-                    <div className="text-slate-500">Garçom</div>
-                    <div className="font-bold text-emerald-700">{formatCurrency(serviceChargeNetAmount)}</div>
-                  </div>
+                <div className="rounded-lg bg-white/80 p-2">
+                  <div className="text-slate-500">Retenção</div>
+                  <div className="font-bold text-red-700">{formatCurrency(serviceChargeTaxAmount)}</div>
                 </div>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-3 rounded-2xl border border-[#003223]/10 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <Label className="text-xs uppercase tracking-[0.16em] text-slate-500">Pagamento</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addPaymentLine}
-                className="h-8 gap-1.5 rounded-full px-3 text-xs"
-              >
-                <Plus size={14} />
-                Outra forma
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              {paymentLines.map((line, index) => (
-                <div key={line.id} className="rounded-xl border border-slate-200 bg-[#FFFDF9] p-3">
-                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Forma
-                      </Label>
-                      <Select
-                        value={line.method}
-                        onValueChange={(value) => updatePaymentLine(line.id, { method: value as CheckoutPaymentMethod })}
-                      >
-                        <SelectTrigger className="h-10 rounded-lg bg-white text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pix">PIX</SelectItem>
-                          <SelectItem value="cartao">Cartão</SelectItem>
-                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Valor
-                      </Label>
-                      <CurrencyTextInput
-                        value={line.amount}
-                        onValueChange={(value) => updatePaymentLine(line.id, { amount: value })}
-                        placeholder="R$ 0,00"
-                        className="h-10 bg-white"
-                      />
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      disabled={paymentLines.length === 1}
-                      onClick={() => removePaymentLine(line.id)}
-                      className="mt-5 h-10 w-10 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
-                      aria-label={`Remover pagamento ${index + 1}`}
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  </div>
-
-                  {line.method === 'dinheiro' && (
-                    <div className="mt-3 space-y-1 rounded-lg border border-emerald-100 bg-emerald-50/70 p-2">
-                      <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-900">
-                        Valor recebido em dinheiro
-                      </Label>
-                      <CurrencyTextInput
-                        value={line.received || ''}
-                        onValueChange={(value) => updatePaymentLine(line.id, { received: value })}
-                        placeholder="R$ 0,00"
-                        className="h-10 bg-white"
-                      />
-                    </div>
-                  )}
+                <div className="rounded-lg bg-white/80 p-2">
+                  <div className="text-slate-500">Garçom</div>
+                  <div className="font-bold text-emerald-700">{formatCurrency(serviceChargeNetAmount)}</div>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-[#003223]/10 bg-white p-4 text-sm shadow-sm space-y-1">
-            <div className="flex justify-between text-gray-500">
-              <span>Subtotal</span>
-              <span>{formatCurrency(currentOrder?.total || 0)}</span>
-            </div>
-            {checkoutDiscountValue > 0 && (
-              <div className="flex justify-between text-red-600">
-                <span>Desconto</span>
-                <span>-{formatCurrency(checkoutDiscountValue)}</span>
               </div>
             )}
-            {checkoutSurchargeValue > 0 && (
-              <div className="flex justify-between text-emerald-700">
-                <span>Acréscimo</span>
-                <span>{formatCurrency(checkoutSurchargeValue)}</span>
-              </div>
-            )}
-            {serviceChargeAmount > 0 && (
-              <div className="flex justify-between text-amber-700">
-                <span>10% do garçom</span>
-                <span>{formatCurrency(serviceChargeAmount)}</span>
-              </div>
-            )}
-            <div className="mt-3 flex justify-between border-t pt-3 text-xl font-black text-gray-950">
-              <span>Total</span>
-              <span>{formatCurrency(checkoutTotal)}</span>
-            </div>
-            <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
-              <div className="flex justify-between">
-                <span className="text-slate-600">Informado</span>
-                <span className="font-bold text-[#082F23]">{formatCurrency(paymentPaidTotal)}</span>
-              </div>
-              {paymentRemainingValue > 0.009 && (
-                <div className="mt-1 flex justify-between text-amber-700">
-                  <span>Falta</span>
-                  <span className="font-bold">{formatCurrency(paymentRemainingValue)}</span>
-                </div>
-              )}
-              {cashPaymentTotal > 0 && (
-                <div className="mt-2 flex items-center justify-between rounded-lg bg-white px-3 py-2">
-                  <span className="font-medium text-slate-600">Troco</span>
-                  <span className="text-lg font-bold text-emerald-700">{formatCurrency(changeAmount)}</span>
-                </div>
-              )}
-            </div>
           </div>
-        </div>
-
-        <div className="flex flex-col-reverse gap-3 border-t border-[#003223]/10 bg-white px-6 py-4 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={() => setCheckoutOpen(false)} className="h-12 rounded-xl px-8 font-bold">
-            Voltar
-          </Button>
-          <Button
-            onClick={handleFinishOrder}
-            disabled={loading}
-            className="h-12 rounded-xl bg-green-600 px-8 text-base font-black hover:bg-green-700"
-          >
-            {loading ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
-            ) : (
-              `Confirmar ${formatCurrency(checkoutTotal)}`
-            )}
-          </Button>
-        </div>
-      </DialogContent>
-      </Dialog>
+        ) : null}
+      />
     </>
   );
 };

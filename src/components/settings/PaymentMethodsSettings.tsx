@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTefSettings } from '@/hooks/useTefSettings';
+import { useCheckoutSettings, CheckoutMode } from '@/hooks/useCheckoutSettings';
 
 interface PaymentMethod {
   id?: string;
@@ -31,6 +32,7 @@ const PaymentMethodsSettings: React.FC = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { settings: tefSettings, save: saveTefSettings } = useTefSettings();
+  const { settings: checkoutSettings, save: saveCheckoutSettings } = useCheckoutSettings();
 
   useEffect(() => {
     if (user) {
@@ -157,6 +159,51 @@ const PaymentMethodsSettings: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Checkout do PDV e Mesas</CardTitle>
+          <CardDescription>
+            Escolha como o fechamento aparece para o operador. O modo Express mostra só o essencial; o Completo mantém CPF, desconto, acréscimo e opções avançadas recolhidas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-2">
+            {([
+              {
+                value: 'express',
+                title: 'Express',
+                description: 'Total, PIX, Cartão, Dinheiro, Dividir e Confirmar.',
+              },
+              {
+                value: 'complete',
+                title: 'Completo',
+                description: 'Mantém Mais opções para CPF, desconto, acréscimo e observações.',
+              },
+            ] as Array<{ value: CheckoutMode; title: string; description: string }>).map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                variant={checkoutSettings.mode === option.value ? 'default' : 'outline'}
+                className="h-auto justify-start rounded-xl p-4 text-left"
+                onClick={async () => {
+                  const ok = await saveCheckoutSettings({ mode: option.value });
+                  toast({
+                    title: ok ? 'Checkout atualizado' : 'Erro ao salvar',
+                    description: ok ? `Modo ${option.title} ativado.` : 'Não foi possível salvar o modo do checkout.',
+                    variant: ok ? 'default' : 'destructive',
+                  });
+                }}
+              >
+                <span>
+                  <span className="block text-base font-bold">{option.title}</span>
+                  <span className="mt-1 block text-sm font-medium opacity-80">{option.description}</span>
+                </span>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Cartão</CardTitle>

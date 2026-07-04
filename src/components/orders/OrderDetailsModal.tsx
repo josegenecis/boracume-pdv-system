@@ -21,7 +21,8 @@ import {
   XCircle,
   Check,
   MessageCircle,
-  Printer
+  Printer,
+  ReceiptText
 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -36,6 +37,7 @@ import {
   getOrderItemDetailGroups,
   getOrderMapsLink,
 } from '@/lib/orderDetails';
+import { emitNfceForOrder, isFiscalEmissionActiveForUser } from '@/utils/nfceClient';
 
 interface OrderItem {
   product_name: string;
@@ -104,11 +106,30 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   const { toast } = useToast();
   const { isMobile } = useSidebar();
   const [adminPinOpen, setAdminPinOpen] = useState(false);
+  const [fiscalActive, setFiscalActive] = useState(false);
+  const [nfceLoading, setNfceLoading] = useState(false);
 
   // Log detalhado quando o modal é renderizado
   useEffect(() => {
     if (isOpen && !order) return;
   }, [isOpen, order]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!isOpen || !order?.user_id) {
+      setFiscalActive(false);
+      return;
+    }
+
+    isFiscalEmissionActiveForUser(order.user_id).then((enabled) => {
+      if (active) setFiscalActive(enabled);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, order?.id, order?.user_id]);
 
   // Adicionar try-catch para capturar erros de renderização
   try {
@@ -241,6 +262,37 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       onStatusChange(order.id, newStatus);
     };
 
+    const handleEmitNfce = async () => {
+      if (!order) return;
+
+      setNfceLoading(true);
+      try {
+        const documentDigits = String(order.customer_document || '').replace(/\D/g, '');
+        const consumerData = order.customer_name || documentDigits
+          ? {
+              nome: order.customer_name || null,
+              cpf_cnpj: documentDigits || null,
+            }
+          : null;
+        const nfceData = await emitNfceForOrder(order, consumerData);
+
+        toast({
+          title: 'NFC-e emitida',
+          description: `Cupom fiscal ${nfceData.numero || ''}${nfceData.protocolo ? ` - Protocolo ${nfceData.protocolo}` : ''}`,
+        });
+
+        await PrinterService.printOrder({ ...order, nfce: nfceData });
+      } catch (error: any) {
+        toast({
+          title: 'Erro ao emitir NFC-e',
+          description: error?.message || 'Não foi possível emitir o cupom fiscal.',
+          variant: 'destructive',
+        });
+      } finally {
+        setNfceLoading(false);
+      }
+    };
+
     const getStatusIcon = (status: string) => {
       switch (status) {
         case 'pending': return <Clock className="h-3 w-3" />;
@@ -319,6 +371,18 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   <Printer className="h-3 w-3 mr-1" />
                   Imprimir
                 </Button>
+                {fiscalActive && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={isMobile ? "h-7 px-2 text-[10px]" : "h-7 text-xs"}
+                    onClick={handleEmitNfce}
+                    disabled={nfceLoading}
+                  >
+                    <ReceiptText className="h-3 w-3 mr-1" />
+                    {nfceLoading ? 'Emitindo...' : 'Emitir NFC-e'}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
