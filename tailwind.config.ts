@@ -108,16 +108,16 @@ export default {
 					from: { transform: 'translateX(100%)' },
 					to: { transform: 'translateX(0)' }
 				},
-					'stock-pulse': {
-						'0%, 100%': {
-							boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.28), 0 0 8px rgba(255, 0, 0, 0.16)',
-							opacity: '1'
-						},
-						'50%': {
-							boxShadow: '0 0 0 1px rgba(239, 68, 68, 0.12), 0 0 3px rgba(255, 0, 0, 0.08)',
-							opacity: '0.78'
-						}
+				'stock-pulse': {
+					'0%, 100%': {
+						boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.26), 0 0 8px rgba(239, 68, 68, 0.14)',
+						opacity: '1'
+					},
+					'50%': {
+						boxShadow: '0 0 0 1px rgba(239, 68, 68, 0.08), 0 0 2px rgba(239, 68, 68, 0.04)',
+						opacity: '0.82'
 					}
+				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
@@ -125,8 +125,8 @@ export default {
 				'fade-in': 'fade-in 0.3s ease-out',
 				'fade-out': 'fade-out 0.3s ease-out',
 				'slide-in': 'slide-in 0.3s ease-out',
-					'stock-pulse': 'stock-pulse 1s ease-in-out infinite'
-				},
+				'stock-pulse': 'stock-pulse 2s ease-in-out infinite'
+			},
 			fontFamily: {
 				'sora': ['Sora', 'sans-serif'],
 				'montserrat': ['Montserrat', 'sans-serif'],

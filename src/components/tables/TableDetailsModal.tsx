@@ -124,6 +124,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>('pix');
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [paymentSplitTouched, setPaymentSplitTouched] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutDiscount, setCheckoutDiscount] = useState('');
   const [checkoutSurcharge, setCheckoutSurcharge] = useState('');
   const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
@@ -149,6 +150,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       setCheckoutSurcharge('');
       setPaymentLines([]);
       setPaymentSplitTouched(false);
+      setCheckoutOpen(false);
       await loadServiceChargeSettings();
 
       const { data: accountData, error: accountError } = await supabase
@@ -309,6 +311,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       });
 
       onRefresh();
+      setCheckoutOpen(false);
       onClose();
     } catch (error) {
       console.error('Erro ao transferir mesa:', error);
@@ -860,6 +863,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       });
 
       onRefresh();
+      setCheckoutOpen(false);
       onClose();
     } catch (error) {
       console.error('Erro ao finalizar pedido:', error);
@@ -911,7 +915,13 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   if (!table) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => {
+        if (!open) {
+          setCheckoutOpen(false);
+          onClose();
+        }
+      }}>
       <DialogContent className="max-w-4xl max-h-[calc(100vh-1rem)] overflow-y-auto p-4 sm:p-5">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -1114,158 +1124,13 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Desconto</Label>
-                      <CurrencyTextInput value={checkoutDiscount} onValueChange={setCheckoutDiscount} placeholder="R$ 0,00" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Acréscimo</Label>
-                      <CurrencyTextInput value={checkoutSurcharge} onValueChange={setCheckoutSurcharge} placeholder="R$ 0,00" />
-                    </div>
-                  </div>
-
-                  {serviceChargeEnabled && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <Label className="text-sm font-semibold text-[#082F23]">
-                            Cobrar {serviceChargePercentage}% do garçom?
-                          </Label>
-                          <p className="mt-1 text-xs leading-5 text-amber-800">
-                            {serviceChargeAutoApply
-                              ? 'A regra da mesa deixou marcado automaticamente. Desmarque se o cliente não aceitar.'
-                              : 'Marque aqui somente se o cliente autorizar no fechamento.'}
-                          </p>
-                        </div>
-                        <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
-                      </div>
-                      {serviceChargeAccepted && (
-                        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                          <div className="rounded-lg bg-white/80 p-2">
-                            <div className="text-slate-500">Taxa</div>
-                            <div className="font-bold text-[#082F23]">{formatCurrency(serviceChargeAmount)}</div>
-                          </div>
-                          <div className="rounded-lg bg-white/80 p-2">
-                            <div className="text-slate-500">Retenção</div>
-                            <div className="font-bold text-red-700">{formatCurrency(serviceChargeTaxAmount)}</div>
-                          </div>
-                          <div className="rounded-lg bg-white/80 p-2">
-                            <div className="text-slate-500">Garçom</div>
-                            <div className="font-bold text-emerald-700">{formatCurrency(serviceChargeNetAmount)}</div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <Label className="text-xs uppercase tracking-[0.16em] text-slate-500">Pagamento</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={addPaymentLine}
-                        className="h-8 gap-1.5 rounded-full px-3 text-xs"
-                      >
-                        <Plus size={14} />
-                        Outra forma
-                      </Button>
-                    </div>
-
-                    <div className="space-y-2">
-                      {paymentLines.map((line, index) => (
-                        <div key={line.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                                Forma
-                              </Label>
-                              <Select
-                                value={line.method}
-                                onValueChange={(value) => updatePaymentLine(line.id, { method: value as CheckoutPaymentMethod })}
-                              >
-                                <SelectTrigger className="h-10 rounded-lg bg-white text-sm">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="pix">PIX</SelectItem>
-                                  <SelectItem value="cartao">Cartão</SelectItem>
-                                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                                Valor
-                              </Label>
-                              <CurrencyTextInput
-                                value={line.amount}
-                                onValueChange={(value) => updatePaymentLine(line.id, { amount: value })}
-                                placeholder="R$ 0,00"
-                                className="h-10 bg-white"
-                              />
-                            </div>
-
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              disabled={paymentLines.length === 1}
-                              onClick={() => removePaymentLine(line.id)}
-                              className="mt-5 h-10 w-10 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
-                              aria-label={`Remover pagamento ${index + 1}`}
-                            >
-                              <Trash2 size={16} />
-                            </Button>
-                          </div>
-
-                          {line.method === 'dinheiro' && (
-                            <div className="mt-3 space-y-1 rounded-lg border border-emerald-100 bg-emerald-50/70 p-2">
-                              <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-900">
-                                Valor recebido em dinheiro
-                              </Label>
-                              <CurrencyTextInput
-                                value={line.received || ''}
-                                onValueChange={(value) => updatePaymentLine(line.id, { received: value })}
-                                placeholder="R$ 0,00"
-                                className="h-10 bg-white"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">Informado</span>
-                        <span className="font-bold text-[#082F23]">{formatCurrency(paymentPaidTotal)}</span>
-                      </div>
-                      {paymentRemainingValue > 0.009 && (
-                        <div className="mt-1 flex justify-between text-amber-700">
-                          <span>Falta</span>
-                          <span className="font-bold">{formatCurrency(paymentRemainingValue)}</span>
-                        </div>
-                      )}
-                      {cashPaymentTotal > 0 && (
-                        <div className="mt-2 flex items-center justify-between rounded-lg bg-white px-3 py-2">
-                          <span className="font-medium text-slate-600">Troco</span>
-                          <span className="text-lg font-bold text-emerald-700">{formatCurrency(changeAmount)}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   <Button
-                    onClick={handleFinishOrder}
+                    onClick={() => setCheckoutOpen(true)}
                     disabled={loading}
                     className="w-full whitespace-normal break-words px-4 py-3 text-center leading-tight bg-emerald-600 hover:bg-emerald-700"
                     size="default"
                   >
-                    Receber e Fechar Mesa
+                    Finalizar conta
                   </Button>
                 </CardContent>
               </Card>
@@ -1280,7 +1145,221 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           </div>
         )}
       </DialogContent>
-    </Dialog>
+      </Dialog>
+
+      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto rounded-2xl border-[#FF6400]/10 bg-[#FFFDF9] p-0">
+        <DialogHeader>
+          <div className="rounded-t-2xl border-b border-[#FF6400]/10 bg-gradient-to-r from-[#FFF4EA] via-white to-[#F4FAEC] px-6 py-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold text-[#003223]">Fechar mesa</DialogTitle>
+                <p className="mt-1 text-sm text-slate-500">
+                  Mesa {table.table_number} • {currentOrder?.items?.length || 0} item(ns)
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#003223]/10 bg-white px-4 py-2 text-right shadow-sm">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Total</div>
+                <div className="text-2xl font-black text-[#003223]">{formatCurrency(checkoutTotal)}</div>
+              </div>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4 px-6 py-5">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Desconto</Label>
+              <CurrencyTextInput value={checkoutDiscount} onValueChange={setCheckoutDiscount} placeholder="R$ 0,00" />
+            </div>
+            <div className="space-y-2">
+              <Label>Acréscimo</Label>
+              <CurrencyTextInput value={checkoutSurcharge} onValueChange={setCheckoutSurcharge} placeholder="R$ 0,00" />
+            </div>
+          </div>
+
+          {serviceChargeEnabled && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm font-semibold text-[#082F23]">
+                    Cobrar {serviceChargePercentage}% do garçom?
+                  </Label>
+                  <p className="mt-1 text-xs leading-5 text-amber-800">
+                    {serviceChargeAutoApply
+                      ? 'A regra da mesa deixou marcado automaticamente. Desmarque se o cliente não aceitar.'
+                      : 'Marque aqui somente se o cliente autorizar no fechamento.'}
+                  </p>
+                </div>
+                <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
+              </div>
+              {serviceChargeAccepted && (
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <div className="rounded-lg bg-white/80 p-2">
+                    <div className="text-slate-500">Taxa</div>
+                    <div className="font-bold text-[#082F23]">{formatCurrency(serviceChargeAmount)}</div>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-2">
+                    <div className="text-slate-500">Retenção</div>
+                    <div className="font-bold text-red-700">{formatCurrency(serviceChargeTaxAmount)}</div>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-2">
+                    <div className="text-slate-500">Garçom</div>
+                    <div className="font-bold text-emerald-700">{formatCurrency(serviceChargeNetAmount)}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-3 rounded-2xl border border-[#003223]/10 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-xs uppercase tracking-[0.16em] text-slate-500">Pagamento</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addPaymentLine}
+                className="h-8 gap-1.5 rounded-full px-3 text-xs"
+              >
+                <Plus size={14} />
+                Outra forma
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {paymentLines.map((line, index) => (
+                <div key={line.id} className="rounded-xl border border-slate-200 bg-[#FFFDF9] p-3">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Forma
+                      </Label>
+                      <Select
+                        value={line.method}
+                        onValueChange={(value) => updatePaymentLine(line.id, { method: value as CheckoutPaymentMethod })}
+                      >
+                        <SelectTrigger className="h-10 rounded-lg bg-white text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pix">PIX</SelectItem>
+                          <SelectItem value="cartao">Cartão</SelectItem>
+                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Valor
+                      </Label>
+                      <CurrencyTextInput
+                        value={line.amount}
+                        onValueChange={(value) => updatePaymentLine(line.id, { amount: value })}
+                        placeholder="R$ 0,00"
+                        className="h-10 bg-white"
+                      />
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={paymentLines.length === 1}
+                      onClick={() => removePaymentLine(line.id)}
+                      className="mt-5 h-10 w-10 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                      aria-label={`Remover pagamento ${index + 1}`}
+                    >
+                      <Trash2 size={16} />
+                    </Button>
+                  </div>
+
+                  {line.method === 'dinheiro' && (
+                    <div className="mt-3 space-y-1 rounded-lg border border-emerald-100 bg-emerald-50/70 p-2">
+                      <Label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-900">
+                        Valor recebido em dinheiro
+                      </Label>
+                      <CurrencyTextInput
+                        value={line.received || ''}
+                        onValueChange={(value) => updatePaymentLine(line.id, { received: value })}
+                        placeholder="R$ 0,00"
+                        className="h-10 bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#003223]/10 bg-white p-4 text-sm shadow-sm space-y-1">
+            <div className="flex justify-between text-gray-500">
+              <span>Subtotal</span>
+              <span>{formatCurrency(currentOrder?.total || 0)}</span>
+            </div>
+            {checkoutDiscountValue > 0 && (
+              <div className="flex justify-between text-red-600">
+                <span>Desconto</span>
+                <span>-{formatCurrency(checkoutDiscountValue)}</span>
+              </div>
+            )}
+            {checkoutSurchargeValue > 0 && (
+              <div className="flex justify-between text-emerald-700">
+                <span>Acréscimo</span>
+                <span>{formatCurrency(checkoutSurchargeValue)}</span>
+              </div>
+            )}
+            {serviceChargeAmount > 0 && (
+              <div className="flex justify-between text-amber-700">
+                <span>10% do garçom</span>
+                <span>{formatCurrency(serviceChargeAmount)}</span>
+              </div>
+            )}
+            <div className="mt-3 flex justify-between border-t pt-3 text-xl font-black text-gray-950">
+              <span>Total</span>
+              <span>{formatCurrency(checkoutTotal)}</span>
+            </div>
+            <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+              <div className="flex justify-between">
+                <span className="text-slate-600">Informado</span>
+                <span className="font-bold text-[#082F23]">{formatCurrency(paymentPaidTotal)}</span>
+              </div>
+              {paymentRemainingValue > 0.009 && (
+                <div className="mt-1 flex justify-between text-amber-700">
+                  <span>Falta</span>
+                  <span className="font-bold">{formatCurrency(paymentRemainingValue)}</span>
+                </div>
+              )}
+              {cashPaymentTotal > 0 && (
+                <div className="mt-2 flex items-center justify-between rounded-lg bg-white px-3 py-2">
+                  <span className="font-medium text-slate-600">Troco</span>
+                  <span className="text-lg font-bold text-emerald-700">{formatCurrency(changeAmount)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-[#003223]/10 bg-white px-6 py-4 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={() => setCheckoutOpen(false)} className="h-12 rounded-xl px-8 font-bold">
+            Voltar
+          </Button>
+          <Button
+            onClick={handleFinishOrder}
+            disabled={loading}
+            className="h-12 rounded-xl bg-green-600 px-8 text-base font-black hover:bg-green-700"
+          >
+            {loading ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+            ) : (
+              `Confirmar ${formatCurrency(checkoutTotal)}`
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
