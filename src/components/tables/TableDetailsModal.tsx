@@ -84,6 +84,13 @@ const formatPaymentAmount = (value: number) => {
   return numericValue > 0.009 ? formatBRL(numericValue) : '';
 };
 
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
+};
+
 const parseCheckoutAmount = (value?: string) => {
   const raw = String(value || '').trim();
   const parsed = parseBRL(raw);
@@ -969,13 +976,6 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
   };
 
   const getStatusColor = (status: string) => {
