@@ -34,19 +34,33 @@ const CARD_OPTIONS: Array<{ value: CheckoutPaymentMethod; label: string }> = [
   { value: 'cartao_outros', label: 'Outros' },
 ];
 
+const DEFAULT_SPLIT_METHODS: CheckoutPaymentMethod[] = ['pix', 'dinheiro'];
+
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 
 const parsePaymentValue = (value: string | number | null | undefined) => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
   const rawValue = String(value || '').trim();
-  const parsedValue = parseBRL(rawValue);
 
-  if (/^\d{3,}$/.test(rawValue)) {
-    return parsedValue / 100;
+  if (!rawValue) return 0;
+
+  if (/^\d{3,}$/.test(rawValue) && !/[R$,.]/.test(rawValue)) {
+    return Number(rawValue) / 100;
   }
 
-  return parsedValue;
+  return parseBRL(rawValue);
+};
+
+const normalizeSplitMethods = (methods: CheckoutPaymentMethod[]) => {
+  const unique = methods.filter((method, index, list) => list.indexOf(method) === index);
+
+  for (const option of PAYMENT_OPTIONS) {
+    if (unique.length >= 2) break;
+    if (!unique.includes(option.value)) unique.push(option.value);
+  }
+
+  return unique.length > 0 ? unique : DEFAULT_SPLIT_METHODS;
 };
 
 interface CheckoutModalProps {
@@ -114,6 +128,7 @@ export function CheckoutModal({
   const [cardDialogOpen, setCardDialogOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [cpfOpen, setCpfOpen] = useState(false);
+  const [splitMethods, setSplitMethods] = useState<CheckoutPaymentMethod[]>(DEFAULT_SPLIT_METHODS);
 
   const manualTotal = useMemo(
     () => PAYMENT_OPTIONS.reduce((sum, option) => sum + parsePaymentValue(paymentAmounts[option.value] || ''), 0),
@@ -135,12 +150,39 @@ export function CheckoutModal({
     setMode(nextMode);
   }
 
+  function openSplitMode() {
+    const activeMethods = PAYMENT_OPTIONS
+      .filter((option) => parsePaymentValue(paymentAmounts[option.value] || '') > 0.009)
+      .map((option) => option.value);
+
+    setSplitMethods(normalizeSplitMethods(activeMethods.length > 0 ? activeMethods : DEFAULT_SPLIT_METHODS));
+    setMode('split');
+  }
+
+  function goBack() {
+    if (mode !== 'main') {
+      setMode('main');
+      return;
+    }
+
+    onOpenChange(false);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    setMode('main');
+    setAdvancedOpen(false);
+    setCpfOpen(false);
+    setCardDialogOpen(false);
+    setSplitMethods(DEFAULT_SPLIT_METHODS);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onOpenChange(false);
+        goBack();
       }
       if (event.key === 'Enter' && canConfirm) {
         event.preventDefault();
@@ -148,7 +190,7 @@ export function CheckoutModal({
       }
       if (event.key === 'F2') {
         event.preventDefault();
-        setMode('split');
+        openSplitMode();
       }
       if (event.key === 'F3') {
         event.preventDefault();
@@ -173,7 +215,7 @@ export function CheckoutModal({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [canConfirm, modeVariant, onConfirm, onOpenChange, open]);
+  }, [canConfirm, mode, modeVariant, onConfirm, onOpenChange, open, paymentAmounts]);
 
   const updateSplitAmount = (method: CheckoutPaymentMethod, value: string) => {
     onPaymentAmountChange(method, value);
@@ -185,9 +227,23 @@ export function CheckoutModal({
   };
 
   const addSplitMethod = () => {
-    const next = PAYMENT_OPTIONS.find((option) => parsePaymentValue(paymentAmounts[option.value] || '') <= 0.009);
+    const currentMethods = normalizeSplitMethods(splitMethods);
+    const next = PAYMENT_OPTIONS.find((option) => !currentMethods.includes(option.value));
     if (!next) return;
+    setSplitMethods([...currentMethods, next.value]);
     onPaymentAmountChange(next.value, remaining > 0.009 ? formatCurrency(remaining) : '');
+  };
+
+  const changeSplitMethod = (from: CheckoutPaymentMethod, to: CheckoutPaymentMethod) => {
+    if (from === to || splitMethods.includes(to)) return;
+
+    const currentAmount = paymentAmounts[from] || '';
+    setSplitMethods((methods) => normalizeSplitMethods(methods.map((method) => (method === from ? to : method))));
+    onPaymentAmountChange(from, '');
+    onPaymentAmountChange(to, currentAmount);
+
+    if (from === 'dinheiro' && to !== 'dinheiro') onCashReceivedChange?.('');
+    if (to === 'dinheiro' && currentAmount && onCashReceivedChange && !cashReceived) onCashReceivedChange(currentAmount);
   };
 
   return (
@@ -216,7 +272,7 @@ export function CheckoutModal({
                 onPix={() => selectSinglePayment('pix', 'pix')}
                 onCard={() => setCardDialogOpen(true)}
                 onCash={() => selectSinglePayment('dinheiro', 'cash')}
-                onSplit={() => setMode('split')}
+                onSplit={openSplitMode}
               />
             )}
 
@@ -246,7 +302,9 @@ export function CheckoutModal({
                 total={total}
                 cashReceived={cashReceived}
                 changeAmount={changeAmount}
+                methods={normalizeSplitMethods(splitMethods)}
                 onAmountChange={updateSplitAmount}
+                onMethodChange={changeSplitMethod}
                 onCashReceivedChange={onCashReceivedChange}
                 onAddMethod={addSplitMethod}
                 onBack={() => setMode('main')}
@@ -297,7 +355,7 @@ export function CheckoutModal({
             canConfirm={canConfirm}
             processing={processing}
             label={confirmLabel || (paymentMethod === 'pix' && mode === 'pix' ? 'Gerar QR Code' : `Confirmar ${formatCurrency(total)}`)}
-            onBack={() => onOpenChange(false)}
+            onBack={goBack}
             onConfirm={onConfirm}
           />
         </DialogContent>
@@ -445,7 +503,9 @@ function SplitPayment({
   total,
   cashReceived,
   changeAmount,
+  methods,
   onAmountChange,
+  onMethodChange,
   onCashReceivedChange,
   onAddMethod,
   onBack,
@@ -456,13 +516,17 @@ function SplitPayment({
   total: number;
   cashReceived: string;
   changeAmount: number;
+  methods: CheckoutPaymentMethod[];
   onAmountChange: (method: CheckoutPaymentMethod, value: string) => void;
+  onMethodChange: (from: CheckoutPaymentMethod, to: CheckoutPaymentMethod) => void;
   onCashReceivedChange?: (value: string) => void;
   onAddMethod: () => void;
   onBack: () => void;
 }) {
-  const activeMethods = PAYMENT_OPTIONS.filter((option) => parsePaymentValue(paymentAmounts[option.value] || '') > 0.009);
-  const methodsToRender = activeMethods.length > 0 ? activeMethods : [{ value: 'pix' as CheckoutPaymentMethod, label: 'PIX' }];
+  const methodsToRender = normalizeSplitMethods(methods)
+    .map((method) => PAYMENT_OPTIONS.find((option) => option.value === method))
+    .filter(Boolean) as Array<{ value: CheckoutPaymentMethod; label: string }>;
+  const usedMethods = new Set(methodsToRender.map((option) => option.value));
 
   return (
     <div className="rounded-2xl border border-[#003223]/10 bg-white p-3 shadow-sm">
@@ -478,17 +542,20 @@ function SplitPayment({
             <div className="grid gap-2 sm:grid-cols-[180px_1fr]">
               <Select
                 value={option.value}
-                onValueChange={(next) => {
-                  onAmountChange(option.value, '');
-                  onAmountChange(next as CheckoutPaymentMethod, paymentAmounts[option.value] || '');
-                }}
+                onValueChange={(next) => onMethodChange(option.value, next as CheckoutPaymentMethod)}
               >
                 <SelectTrigger className="h-11 bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {PAYMENT_OPTIONS.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                    <SelectItem
+                      key={item.value}
+                      value={item.value}
+                      disabled={usedMethods.has(item.value) && item.value !== option.value}
+                    >
+                      {item.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
