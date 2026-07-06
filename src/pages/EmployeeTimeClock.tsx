@@ -229,7 +229,7 @@ export default function EmployeeTimeClock() {
     return Math.max(0, Math.min(1, centerMove + sizeMove));
   };
 
-  const startFaceCapture = async (mode: 'enrollment' | 'punch' = 'punch') => {
+  const startFaceCapture = async (mode: 'enrollment' | 'punch' = 'punch'): Promise<FaceCapturePayload | null> => {
     setFaceError('');
     setFaceCapture(null);
     setCapturingFace(mode === 'punch');
@@ -316,9 +316,11 @@ export default function EmployeeTimeClock() {
           description: 'Este funcionario ja pode bater ponto com prova de vida.',
         });
       }
+      return payload;
     } catch (error: any) {
       setFaceError(error?.message || 'Nao foi possivel concluir a prova de vida.');
       stopCamera();
+      return null;
     } finally {
       setCapturingFace(false);
       setEnrollingFace(false);
@@ -327,24 +329,22 @@ export default function EmployeeTimeClock() {
 
   const handlePunch = async () => {
     if (!timeClock) return;
-    if (useSimpleFaceLiveness && !hasSimpleFaceEnrollment) {
-      toast({
-        title: 'Cadastro facial pendente',
-        description: 'Cadastre o rosto com prova de vida antes da primeira batida de ponto.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (timeClock.settings.requireFaceLiveness && !faceCapture) {
-      toast({
-        title: 'Prova de vida obrigatoria',
-        description: 'Capture a biometria facial antes de bater o ponto.',
-        variant: 'destructive',
-      });
-      return;
-    }
     setPunching(true);
     try {
+      let captureForPunch = faceCapture;
+
+      if (useSimpleFaceLiveness && !hasSimpleFaceEnrollment) {
+        toast({
+          title: 'Primeiro cadastro facial',
+          description: 'Vamos cadastrar o rosto e registrar o ponto em seguida.',
+        });
+        captureForPunch = await startFaceCapture('enrollment');
+        if (!captureForPunch) return;
+      } else if (timeClock.settings.requireFaceLiveness && !captureForPunch) {
+        captureForPunch = await startFaceCapture('punch');
+        if (!captureForPunch) return;
+      }
+
       const position = timeClock.settings.requireLocation ? await getCurrentPosition() : null;
       const response = await punchTimeClock({
         eventType: timeClock.nextEventType,
@@ -358,7 +358,7 @@ export default function EmployeeTimeClock() {
           platform: navigator.platform,
           simpleFaceEnrolledAt: session?.profile.localFaceEnrolledAt || null,
         },
-        faceCapture: faceCapture || undefined,
+        faceCapture: captureForPunch || undefined,
       });
 
       setTimeClock(response.status);
@@ -471,8 +471,13 @@ export default function EmployeeTimeClock() {
             )}
 
             {!hasSimpleFaceEnrollment && (
-              <div className="mt-4 overflow-hidden rounded-[22px] bg-[#06271D]">
+              <div className="relative mt-4 overflow-hidden rounded-[22px] bg-[#06271D]">
                 <video ref={videoRef} className={`${cameraActive ? 'block' : 'hidden'} aspect-[4/5] w-full scale-x-[-1] object-cover`} muted playsInline />
+                {cameraActive && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="h-[72%] w-[58%] rounded-[999px] border-4 border-white/85 shadow-[0_0_0_9999px_rgba(6,39,29,0.34)]" />
+                  </div>
+                )}
                 {!cameraActive && (
                   <div className="flex aspect-[4/5] flex-col items-center justify-center gap-3 text-white/70">
                     <Camera className="h-10 w-10 text-white/50" />
@@ -520,8 +525,13 @@ export default function EmployeeTimeClock() {
               </div>
             </div>
 
-            <div className="mt-4 overflow-hidden rounded-[22px] bg-[#06271D]">
+            <div className="relative mt-4 overflow-hidden rounded-[22px] bg-[#06271D]">
               <video ref={videoRef} className={`${cameraActive ? 'block' : 'hidden'} aspect-[4/5] w-full scale-x-[-1] object-cover`} muted playsInline />
+              {cameraActive && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="h-[72%] w-[58%] rounded-[999px] border-4 border-white/85 shadow-[0_0_0_9999px_rgba(6,39,29,0.34)]" />
+                </div>
+              )}
               {!cameraActive && (
                 <div className="flex aspect-[4/5] flex-col items-center justify-center gap-3 text-white/70">
                   {faceCapture ? <CheckCircle2 className="h-10 w-10 text-[#A4D65E]" /> : <Camera className="h-10 w-10 text-white/50" />}

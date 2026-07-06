@@ -189,7 +189,12 @@ async function analyzeTimeClockFaceCapture(settings: any, waiterSession: any, bo
     storedRawImage: false,
   }
 
-  if (settings.faceLivenessMode === 'simple_liveness' || settings.faceProvider === 'simple_liveness') {
+  if (
+    settings.faceLivenessMode === 'simple_liveness' ||
+    settings.faceProvider === 'simple_liveness' ||
+    settings.faceLivenessMode === 'manual_review' ||
+    settings.faceProvider === 'manual_review'
+  ) {
     const localFaceProfile = waiterSession.profile?.localFaceProfile && typeof waiterSession.profile.localFaceProfile === 'object'
       ? waiterSession.profile.localFaceProfile
       : null

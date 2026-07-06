@@ -219,6 +219,25 @@ export function CheckoutModal({
 
   const updateSplitAmount = (method: CheckoutPaymentMethod, value: string) => {
     onPaymentAmountChange(method, value);
+
+    const currentMethods = normalizeSplitMethods(splitMethods);
+    const firstMethod = currentMethods[0];
+    const secondMethod = currentMethods[1];
+
+    if (mode === 'split' && method === firstMethod && secondMethod) {
+      const firstAmount = parsePaymentValue(value);
+      const otherLockedAmount = currentMethods.slice(2).reduce((sum, currentMethod) => {
+        return sum + parsePaymentValue(paymentAmounts[currentMethod] || '');
+      }, 0);
+      const nextRemaining = Math.max(0, total - firstAmount - otherLockedAmount);
+      const formattedRemaining = nextRemaining > 0.009 ? formatCurrency(nextRemaining) : '';
+
+      onPaymentAmountChange(secondMethod, formattedRemaining);
+      if (secondMethod === 'dinheiro' && onCashReceivedChange) {
+        onCashReceivedChange(formattedRemaining);
+      }
+    }
+
     if (method === 'dinheiro' && onCashReceivedChange) {
       const received = parsePaymentValue(cashReceived);
       const amount = parsePaymentValue(value);
