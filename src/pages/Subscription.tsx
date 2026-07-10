@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Check, Clock, AlertTriangle, Crown, ArrowRight, Store, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,6 +13,13 @@ import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { PLAN_CATALOG, getPlanCatalogItem, type PlanCatalogItem } from '@/data/planCatalog';
 
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
+
+const isValidCpfCnpj = (value: string) => {
+  const digits = onlyDigits(value);
+  return digits.length === 11 || digits.length === 14;
+};
+
 const Subscription = () => {
   const { subscription, refreshSubscription, user } = useAuth();
   const { toast } = useToast();
@@ -19,6 +27,9 @@ const Subscription = () => {
   const [storeCounts, setStoreCounts] = useState<Record<number, number>>({ 3: 1 });
   const [paymentFrameUrl, setPaymentFrameUrl] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<{ planName: string; value: number } | null>(null);
+  const [billingDocument, setBillingDocument] = useState('');
+  const [billingDocumentError, setBillingDocumentError] = useState('');
+  const [pendingBillingPlan, setPendingBillingPlan] = useState<{ planId: number; storeCount: number } | null>(null);
 
   useEffect(() => {
     refreshSubscription();
@@ -37,7 +48,7 @@ const Subscription = () => {
 
   const formatCurrency = (value: number) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 
-  const handleSubscribeAsaas = async (planId: number, storeCount = 1) => {
+  const handleSubscribeAsaas = async (planId: number, storeCount = 1, documentOverride?: string) => {
     if (!user) {
       toast({
         title: "Erro",
@@ -50,15 +61,28 @@ const Subscription = () => {
     setLoadingPlanId(planId);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-subscription', {
-        body: { planId, storeCount }
+        body: {
+          planId,
+          storeCount,
+          billingDocument: documentOverride ? onlyDigits(documentOverride) : undefined,
+        }
       });
 
       if (error) {
         let message = error.message;
+        let needsBillingDocument = false;
         const context = (error as any).context;
         if (context?.json) {
           const body = await context.json().catch(() => null);
           message = body?.message || body?.error || message;
+          needsBillingDocument = Boolean(body?.needsBillingDocument);
+        }
+
+        if (needsBillingDocument || /cpf|cnpj/i.test(message)) {
+          setPendingBillingPlan({ planId, storeCount });
+          setBillingDocument(documentOverride || billingDocument);
+          setBillingDocumentError('Informe o CPF ou CNPJ do cliente para gerar a cobrança.');
+          return;
         }
         throw new Error(message);
       }
@@ -89,6 +113,20 @@ const Subscription = () => {
     } finally {
       setLoadingPlanId(null);
     }
+  };
+
+  const handleBillingDocumentSubmit = () => {
+    if (!pendingBillingPlan) return;
+
+    if (!isValidCpfCnpj(billingDocument)) {
+      setBillingDocumentError('Digite um CPF com 11 números ou CNPJ com 14 números.');
+      return;
+    }
+
+    const plan = pendingBillingPlan;
+    setBillingDocumentError('');
+    setPendingBillingPlan(null);
+    handleSubscribeAsaas(plan.planId, plan.storeCount, billingDocument);
   };
 
   const getPlanDisplay = (plan: PlanCatalogItem) => {
@@ -263,30 +301,14 @@ const Subscription = () => {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] py-8 px-4">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-10 overflow-hidden rounded-[32px] border border-[#FF6400]/10 bg-white shadow-[0_35px_90px_-55px_rgba(0,50,35,0.35)]">
-          <div className="px-6 py-8 md:px-10 md:py-10">
-            <Badge className="mb-4 bg-[#FFF1E8] text-[#C14E00] hover:bg-[#FFF1E8]">Planos PopSystem</Badge>
-            <div className="max-w-3xl">
-              <h1 className="text-3xl font-bold tracking-tight text-[#003223] md:text-5xl">
-                Escolha o plano certo para o seu restaurante crescer sem complicação.
-              </h1>
-              <p className="mt-4 text-base text-slate-600 md:text-lg">
-                Escolha entre Essencial, Pro e Multi. O Multi começa com uma loja e soma R$149 por loja adicional.
-              </p>
-            </div>
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              {PLAN_CATALOG.map((plan) => (
-                <div key={plan.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{plan.shortName}</div>
-                  <div className="mt-2 text-2xl font-bold text-slate-900">{formatCurrency(plan.monthlyPrice)}</div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    {plan.description}
-                    {plan.extraStorePrice ? ` + ${formatCurrency(plan.extraStorePrice)} por loja adicional.` : ''}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="mb-10 text-center">
+          <Badge className="mb-4 bg-[#FFF1E8] text-[#C14E00] hover:bg-[#FFF1E8]">Planos PopSystem</Badge>
+          <h1 className="mx-auto max-w-4xl text-3xl font-bold tracking-tight text-[#003223] md:text-5xl">
+            Escolha o plano certo para o seu restaurante.
+          </h1>
+          <p className="mx-auto mt-4 max-w-3xl text-base text-slate-600 md:text-lg">
+            Assine pelo Asaas e libere o PopSystem conforme o plano escolhido.
+          </p>
         </div>
 
         {isTrialSubscription && renderTrialInfo()}
@@ -452,7 +474,68 @@ const Subscription = () => {
             </CardContent>
           </Card>
         )}
-        <Dialog open={Boolean(paymentFrameUrl)} onOpenChange={(open) => !open && setPaymentFrameUrl(null)}>
+        <Dialog open={Boolean(pendingBillingPlan)} onOpenChange={(open) => {
+          if (!open) {
+            setPendingBillingPlan(null);
+            setBillingDocumentError('');
+          }
+        }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Informe CPF ou CNPJ</DialogTitle>
+              <DialogDescription>
+                O Asaas precisa desse dado para criar a cobrança do plano.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-[#003223]">
+                  CPF ou CNPJ do cliente
+                </label>
+                <Input
+                  value={billingDocument}
+                  onChange={(event) => {
+                    setBillingDocument(event.target.value);
+                    setBillingDocumentError('');
+                  }}
+                  placeholder="Digite somente números"
+                  inputMode="numeric"
+                  autoFocus
+                />
+                {billingDocumentError && (
+                  <p className="mt-2 text-sm font-medium text-red-600">{billingDocumentError}</p>
+                )}
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setPendingBillingPlan(null);
+                    setBillingDocumentError('');
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-[#003223] hover:bg-[#0b4733]"
+                  onClick={handleBillingDocumentSubmit}
+                  disabled={loadingPlanId !== null}
+                >
+                  Criar cobrança
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={Boolean(paymentFrameUrl)} onOpenChange={(open) => {
+          if (!open) {
+            setPaymentFrameUrl(null);
+            setPaymentSummary(null);
+          }
+        }}>
           <DialogContent className="max-w-5xl overflow-hidden p-0">
             <DialogHeader className="border-b px-6 py-4 text-left">
               <DialogTitle>Pagamento pelo Asaas</DialogTitle>

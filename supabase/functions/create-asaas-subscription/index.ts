@@ -22,6 +22,15 @@ const fallbackPlans: Record<number, PlanConfig> = {
 
 const money = (value: unknown) => Number(Number(value || 0).toFixed(2));
 
+const onlyDigits = (value: unknown) => String(value || "").replace(/\D/g, "");
+
+const normalizeCpfCnpj = (value: unknown) => {
+  const digits = onlyDigits(value);
+  return digits.length === 11 || digits.length === 14 ? digits : null;
+};
+
+const isBillingDocumentError = (message: string) => /cpf|cnpj/i.test(message);
+
 const addDays = (days: number) => {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -93,6 +102,27 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const planId = Number(body.planId || 2);
     const storeCount = Math.max(1, Number(body.storeCount || 1));
+    const metadata = (user.user_metadata || {}) as Record<string, unknown>;
+
+    const { data: fiscalSettings } = await supabaseAdmin
+      .from("fiscal_settings")
+      .select("cnpj,razao_social,nome_fantasia")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const customerName = String(
+      fiscalSettings?.razao_social ||
+      fiscalSettings?.nome_fantasia ||
+      metadata.full_name ||
+      metadata.name ||
+      user.email ||
+      "Cliente PopSystem"
+    );
+
+    const billingDocument =
+      normalizeCpfCnpj(body.billingDocument || body.cpfCnpj || body.document || body.cpf_cnpj || body.cnpj || body.cpf) ||
+      normalizeCpfCnpj(metadata.cpfCnpj || metadata.cpf_cnpj || metadata.document || metadata.cnpj || metadata.cpf) ||
+      normalizeCpfCnpj(fiscalSettings?.cnpj);
 
     const { data: planRow } = await supabaseAdmin
       .from("subscription_plans")
@@ -119,17 +149,33 @@ serve(async (req) => {
       .maybeSingle();
 
     let customerId = existingSubscription?.asaas_customer_id || null;
+
+    if (!billingDocument) {
+      throw new Error("Para criar esta cobrança é necessário preencher o CPF ou CNPJ do cliente.");
+    }
+
     if (!customerId) {
-      const metadata = user.user_metadata || {};
       const customer = await asaasFetch("/customers", {
         method: "POST",
         body: JSON.stringify({
-          name: metadata.full_name || metadata.name || user.email || "Cliente PopSystem",
+          name: customerName,
           email: user.email,
+          cpfCnpj: billingDocument,
           externalReference: user.id,
         }),
       });
       customerId = customer.id;
+    } else {
+      await asaasFetch(`/customers/${encodeURIComponent(customerId)}`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: customerName,
+          email: user.email,
+          cpfCnpj: billingDocument,
+        }),
+      }).catch((updateError) => {
+        console.warn("Não foi possível atualizar o cliente no Asaas:", updateError);
+      });
     }
 
     const billingType = String(body.billingType || Deno.env.get("ASAAS_BILLING_TYPE") || "UNDEFINED").toUpperCase();
@@ -197,9 +243,12 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("create-asaas-subscription error:", error);
+    const message = error instanceof Error ? error.message : "Erro ao criar cobrança no Asaas.";
     return new Response(JSON.stringify({
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao criar cobrança no Asaas.",
+      error: message,
+      message,
+      needsBillingDocument: isBillingDocumentError(message),
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,
