@@ -280,7 +280,7 @@ const Subscription = () => {
               <p className="text-sm text-slate-600">
                 {currentPlan.slug === 'multi'
                   ? `${storeCount} loja${storeCount === 1 ? '' : 's'}${extraStores > 0 ? ` (${extraStores} extra)` : ''}`
-                  : '1 loja'}
+                  : 'Uma loja'}
               </p>
             </div>
           </div>
@@ -415,7 +415,7 @@ const Subscription = () => {
                         </div>
                       </div>
                       <p className="mt-3 text-xs font-medium text-purple-700">
-                        1 loja já está incluída. {extraStores > 0 ? `${extraStores} loja(s) adicional(is) entram na mensalidade.` : 'Você pode usar o Multi com uma loja pelo valor base do plano.'}
+                        Uma loja já está incluída. {extraStores > 0 ? `${extraStores} loja(s) adicional(is) entram na mensalidade.` : 'Você pode usar o Multi com uma loja pelo valor base do plano.'}
                       </p>
                     </div>
                   )}

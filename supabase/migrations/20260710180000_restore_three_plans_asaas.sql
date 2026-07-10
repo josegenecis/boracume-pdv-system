@@ -99,7 +99,7 @@ insert into public.subscription_plans (
     149.00,
     true,
     3,
-    'R$269,00 por mês com 1 loja incluída. Cada loja adicional soma R$149,00 na mensalidade.',
+    'R$269,00 por mês com uma loja incluída. Cada loja adicional soma R$149,00 na mensalidade.',
     'asaas',
     null,
     null

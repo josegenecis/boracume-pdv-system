@@ -41,7 +41,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
       'Relatórios principais da operação',
       'PIX e formas de pagamento',
       'Suporte PopSystem',
-      '1 loja incluída'
+      'Uma loja incluída'
     ],
     modules: [
       'PDV',
@@ -64,7 +64,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     includedStores: 1,
     storeLimit: 1,
     featured: true,
-    badge: 'Completo para 1 loja',
+    badge: 'Completo para uma loja',
     accent: 'orange',
     audience: 'Ideal para restaurantes, lanchonetes, açaís, pizzarias e mercados que operam uma unidade.',
     features: [
@@ -79,7 +79,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
       'PIX, Mercado Pago e formas de pagamento',
       'Fiscal/NFC-e, app desktop e hardware',
       'IA para cardápio, marketing e produtividade',
-      '1 loja incluída'
+      'Uma loja incluída'
     ],
     modules: [
       'PDV',
@@ -111,7 +111,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     audience: 'Ideal para redes, grupos, franquias e donos que querem enxergar todas as lojas juntas ou separadas.',
     features: [
       'Tudo do plano Pro',
-      '1 loja incluída no valor base',
+      'Uma loja incluída no valor base',
       'R$149/mês por loja adicional',
       'Cadastro e operação de múltiplas lojas',
       'Painel inicial consolidado e por unidade',
