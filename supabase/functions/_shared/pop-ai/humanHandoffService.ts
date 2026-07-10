@@ -1,6 +1,19 @@
 import type { PopAiConversation } from './types.ts';
 import { logPopAiAction, updatePopAiConversationStatus } from './aiConversationService.ts';
 
+function getHumanHandoffPauseWindow() {
+  const rawMinutes = Number(Deno.env.get('WHATSAPP_MANUAL_PAUSE_MINUTES') || '60');
+  const minutes = Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : 60;
+  const now = new Date();
+  const resumeAt = new Date(now.getTime() + minutes * 60000);
+
+  return {
+    nowIso: now.toISOString(),
+    resumeAtIso: resumeAt.toISOString(),
+    status: `bot_paused_until:${resumeAt.toISOString()}`
+  };
+}
+
 export async function transferToHuman(
   supabase: any,
   conversation: PopAiConversation,
@@ -8,23 +21,39 @@ export async function transferToHuman(
   reason: string,
   assignedTo?: string | null
 ) {
+  const pause = getHumanHandoffPauseWindow();
   await updatePopAiConversationStatus(supabase, conversation.id, 'human_required', {
     reason,
     assignedTo: assignedTo || null,
-    transferredAt: new Date().toISOString()
+    transferredAt: pause.nowIso,
+    aiResumeAt: pause.resumeAtIso,
+    lastHumanMessageAt: pause.nowIso,
+    handoffMode: 'temporary_human_owner'
   });
 
   if (legacyConversationId) {
     await supabase
       .from('whatsapp_conversations')
       .update({
-        status: 'bot_paused',
+        status: pause.status,
         bot_paused: true,
-        bot_paused_at: new Date().toISOString(),
+        bot_paused_at: pause.nowIso,
         bot_paused_by: assignedTo || null,
         ai_status: 'human_required',
         human_required: true,
-        updated_at: new Date().toISOString()
+        owner: 'HUMAN',
+        current_state: 'HUMAN_ATTENDING',
+        last_human_message_at: pause.nowIso,
+        ai_resume_at: pause.resumeAtIso,
+        metadata: {
+          reason,
+          assignedTo: assignedTo || null,
+          transferredAt: pause.nowIso,
+          aiResumeAt: pause.resumeAtIso,
+          lastHumanMessageAt: pause.nowIso,
+          handoffMode: 'temporary_human_owner'
+        },
+        updated_at: pause.nowIso
       })
       .eq('id', legacyConversationId);
   }
@@ -47,6 +76,9 @@ export async function releaseToAi(supabase: any, conversation: PopAiConversation
         bot_paused_by: null,
         ai_status: 'ai_active',
         human_required: false,
+        owner: 'AI',
+        current_state: 'IDLE',
+        ai_resume_at: null,
         updated_at: new Date().toISOString()
       })
       .eq('id', legacyConversationId);

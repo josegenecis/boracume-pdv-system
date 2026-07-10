@@ -26,7 +26,10 @@ export type FeatureKey =
   | 'security'
   | 'fiscal'
   | 'nfce'
-  | 'fiscalCoupons';
+  | 'fiscalCoupons'
+  | 'multiStore'
+  | 'multiDashboard'
+  | 'multiFinance';
 
 export type FeatureDefinition = {
   key: FeatureKey;
@@ -34,6 +37,7 @@ export type FeatureDefinition = {
   description: string;
   requiredPlanId: number;
   comingSoon?: boolean;
+  requiresPaidMulti?: boolean;
 };
 
 export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
@@ -156,43 +160,64 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
     key: 'agent',
     name: 'Assistente inteligente',
     description: 'Agente e recursos de inteligência artificial.',
-    requiredPlanId: 3,
+    requiredPlanId: 2,
   },
   desktop: {
     key: 'desktop',
     name: 'App desktop',
     description: 'Aplicativo desktop com suporte a impressão e hardware.',
-    requiredPlanId: 3,
+    requiredPlanId: 2,
   },
   hardware: {
     key: 'hardware',
     name: 'Hardware avançado',
     description: 'Impressoras, balanças e integrações de dispositivos.',
-    requiredPlanId: 3,
+    requiredPlanId: 2,
   },
   security: {
     key: 'security',
     name: 'Segurança e performance',
     description: 'Painel de auditoria, segurança e monitoramento.',
-    requiredPlanId: 3,
+    requiredPlanId: 2,
   },
   fiscal: {
     key: 'fiscal',
     name: 'Notas fiscais',
     description: 'Configurações fiscais e emissão de documentos fiscais.',
-    requiredPlanId: 3,
+    requiredPlanId: 2,
   },
   nfce: {
     key: 'nfce',
     name: 'NFC-e',
     description: 'Emissão de Nota Fiscal de Consumidor Eletrônica.',
-    requiredPlanId: 3,
+    requiredPlanId: 2,
   },
   fiscalCoupons: {
     key: 'fiscalCoupons',
     name: 'Cupons fiscais',
     description: 'Gerenciamento e emissão de cupons fiscais eletrônicos.',
+    requiredPlanId: 2,
+  },
+  multiStore: {
+    key: 'multiStore',
+    name: 'Multilojas',
+    description: 'Cadastro, operação e troca entre várias lojas.',
     requiredPlanId: 3,
+    requiresPaidMulti: true,
+  },
+  multiDashboard: {
+    key: 'multiDashboard',
+    name: 'Painel multilojas',
+    description: 'Visão consolidada da operação e comparação entre lojas.',
+    requiredPlanId: 3,
+    requiresPaidMulti: true,
+  },
+  multiFinance: {
+    key: 'multiFinance',
+    name: 'Financeiro multilojas',
+    description: 'Relatórios financeiros por loja e visão consolidada da rede.',
+    requiredPlanId: 3,
+    requiresPaidMulti: true,
   },
 };
 
@@ -213,6 +238,12 @@ export const hasFeatureAccess = (
 ) => {
   const definition = getFeatureDefinition(feature);
   if (definition.comingSoon) return false;
+
+  if (definition.requiresPaidMulti) {
+    const status = String(subscription?.status || '').toLowerCase();
+    return status === 'active' && Number(subscription?.plan_id || 0) >= 3;
+  }
+
   if (!BILLING_ENFORCEMENT_ENABLED) return true;
 
   const status = String(subscription?.status || '').toLowerCase();
@@ -259,6 +290,10 @@ export const getRouteFeature = (pathname: string): FeatureKey | null => {
     ['/agente', 'agent'],
     ['/security', 'security'],
     ['/nfce', 'nfce'],
+    ['/lojas', 'multiStore'],
+    ['/multilojas', 'multiStore'],
+    ['/rede', 'multiDashboard'],
+    ['/dashboard/multi', 'multiDashboard'],
   ];
 
   return routes.find(([route]) => pathname === route)?.[1] || null;

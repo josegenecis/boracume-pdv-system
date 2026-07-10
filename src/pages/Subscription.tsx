@@ -3,20 +3,22 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, Clock, AlertTriangle, Crown, Zap, Rocket, ArrowRight, Sparkles } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Check, Clock, AlertTriangle, Crown, ArrowRight, Store, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
-import { PLAN_CATALOG, getPlanCatalogItem } from '@/data/planCatalog';
+import { PLAN_CATALOG, getPlanCatalogItem, type PlanCatalogItem } from '@/data/planCatalog';
 
 const Subscription = () => {
   const { subscription, refreshSubscription, user } = useAuth();
-  const { plans, isLoading } = useSubscription();
   const { toast } = useToast();
   const [loadingPlanId, setLoadingPlanId] = useState<number | null>(null);
+  const [storeCounts, setStoreCounts] = useState<Record<number, number>>({ 3: 1 });
+  const [paymentFrameUrl, setPaymentFrameUrl] = useState<string | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState<{ planName: string; value: number } | null>(null);
 
   useEffect(() => {
     refreshSubscription();
@@ -33,7 +35,9 @@ const Subscription = () => {
     return Math.max(0, differenceInDays(endDate, new Date()));
   };
 
-  const handleSubscribeStripe = async (planId: number) => {
+  const formatCurrency = (value: number) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
+
+  const handleSubscribeAsaas = async (planId: number, storeCount = 1) => {
     if (!user) {
       toast({
         title: "Erro",
@@ -45,8 +49,8 @@ const Subscription = () => {
 
     setLoadingPlanId(planId);
     try {
-      const { data, error } = await supabase.functions.invoke('create-stripe-subscription', {
-        body: { planId }
+      const { data, error } = await supabase.functions.invoke('create-asaas-subscription', {
+        body: { planId, storeCount }
       });
 
       if (error) {
@@ -59,16 +63,26 @@ const Subscription = () => {
         throw new Error(message);
       }
 
-      if (data?.url) {
-        window.location.href = data.url;
+      const paymentUrl = data?.paymentUrl || data?.invoiceUrl || data?.url;
+      if (paymentUrl) {
+        const plan = getPlanCatalogItem(planId);
+        setPaymentSummary({
+          planName: plan?.name || 'Plano PopSystem',
+          value: Number(data?.value || plan?.monthlyPrice || 0)
+        });
+        setPaymentFrameUrl(paymentUrl);
       } else {
-        throw new Error('Checkout da Stripe nao retornou URL.');
+        toast({
+          title: "Assinatura criada",
+          description: "A cobrança foi registrada no Asaas. Assim que o pagamento for confirmado, o plano será liberado.",
+        });
+        await refreshSubscription();
       }
     } catch (error: any) {
       console.error('Erro ao criar assinatura:', error);
-      const errorMessage = error?.message || "Nao foi possivel processar o pagamento. Tente novamente.";
+      const errorMessage = error?.message || "Nao foi possivel criar a cobrança no Asaas. Tente novamente.";
       toast({
-        title: "Erro ao processar pagamento",
+        title: "Erro ao criar cobrança",
         description: errorMessage,
         variant: "destructive",
       });
@@ -77,9 +91,8 @@ const Subscription = () => {
     }
   };
 
-  const getPlanDisplay = (plan: { id: number; name: string; description: string; price: number; features: string[] }) => {
-    const catalog = getPlanCatalogItem(plan.id, plan.name);
-    const accent = catalog?.accent || 'green';
+  const getPlanDisplay = (plan: PlanCatalogItem) => {
+    const accent = plan.accent || 'green';
     const palette = accent === 'orange'
       ? {
           border: 'border-[#FF6400]/40',
@@ -113,16 +126,16 @@ const Subscription = () => {
             soft: 'bg-[#F8FCF3]'
           };
 
-    const Icon = plan.id === 1 ? Rocket : plan.id === 2 ? Crown : Sparkles;
+    const Icon = plan.slug === 'multi' ? Store : Crown;
 
     return {
-      name: catalog?.name || plan.name,
-      description: catalog?.description || plan.description,
-      audience: catalog?.audience || '',
-      features: plan.features?.length ? plan.features : (catalog?.features || []),
-      modules: catalog?.modules || [],
-      badge: catalog?.badge || '',
-      featured: Boolean(catalog?.featured),
+      name: plan.name,
+      description: plan.description,
+      audience: plan.audience,
+      features: plan.features || [],
+      modules: plan.modules || [],
+      badge: plan.badge || '',
+      featured: Boolean(plan.featured),
       palette,
       Icon
     };
@@ -166,7 +179,7 @@ const Subscription = () => {
         {days <= 3 && (
           <CardFooter>
             <Button 
-              onClick={() => handleSubscribeStripe(2)} 
+              onClick={() => handleSubscribeAsaas(2)} 
               className="w-full bg-amber-600 hover:bg-amber-700"
               disabled={loadingPlanId !== null}
             >
@@ -182,9 +195,12 @@ const Subscription = () => {
   const renderCurrentPlan = () => {
     if (!subscription?.plan_id) return null;
     
-    const currentPlan = plans.find(p => p.id === subscription.plan_id);
+    const currentPlan = getPlanCatalogItem(subscription.plan_id);
     if (!currentPlan) return null;
     const display = getPlanDisplay(currentPlan);
+    const storeCount = Math.max(1, Number((subscription as any)?.store_count || currentPlan.includedStores || 1));
+    const extraStores = currentPlan.slug === 'multi' ? Math.max(0, storeCount - currentPlan.includedStores) : 0;
+    const monthlyTotal = currentPlan.monthlyPrice + extraStores * Number(currentPlan.extraStorePrice || 0);
 
     return (
       <Card className={`mb-8 overflow-hidden border-2 ${display.palette.border} ${display.palette.glow}`}>
@@ -207,7 +223,7 @@ const Subscription = () => {
             </div>
             <div className="text-left md:text-right">
               <span className="text-3xl font-bold text-slate-900">
-                R$ {currentPlan.price.toFixed(2)}
+                {formatCurrency(monthlyTotal)}
               </span>
               <p className="text-xs text-slate-500">por mês</p>
             </div>
@@ -219,7 +235,15 @@ const Subscription = () => {
             </div>
             <div>
               <p className="text-sm font-medium text-slate-700">Próxima cobrança</p>
-              <p className="text-sm text-slate-600">R$ {currentPlan.price.toFixed(2)}</p>
+              <p className="text-sm text-slate-600">{formatCurrency(monthlyTotal)}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700">Lojas incluídas</p>
+              <p className="text-sm text-slate-600">
+                {currentPlan.slug === 'multi'
+                  ? `${storeCount} loja${storeCount === 1 ? '' : 's'}${extraStores > 0 ? ` (${extraStores} extra)` : ''}`
+                  : '1 loja'}
+              </p>
             </div>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -247,15 +271,18 @@ const Subscription = () => {
                 Escolha o plano certo para o seu restaurante crescer sem complicação.
               </h1>
               <p className="mt-4 text-base text-slate-600 md:text-lg">
-                Mantive a nova identidade visual, mas deixei a página mais direta: três opções objetivas, preços atualizados e uma leitura mais limpa.
+                Escolha entre Essencial, Pro e Multi. O Multi começa com uma loja e soma R$149 por loja adicional.
               </p>
             </div>
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               {PLAN_CATALOG.map((plan) => (
                 <div key={plan.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{plan.shortName}</div>
-                  <div className="mt-2 text-2xl font-bold text-slate-900">R$ {plan.monthlyPrice.toFixed(2)}</div>
-                  <div className="mt-1 text-sm text-slate-500">{plan.description}</div>
+                  <div className="mt-2 text-2xl font-bold text-slate-900">{formatCurrency(plan.monthlyPrice)}</div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    {plan.description}
+                    {plan.extraStorePrice ? ` + ${formatCurrency(plan.extraStorePrice)} por loja adicional.` : ''}
+                  </div>
                 </div>
               ))}
             </div>
@@ -267,10 +294,16 @@ const Subscription = () => {
         {subscription?.status === 'active' && renderCurrentPlan()}
 
         <div className="mb-10 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {plans.map((plan) => {
-            const isCurrentPlan = subscription?.plan_id === plan.id;
+          {PLAN_CATALOG.map((plan) => {
+            const currentCatalogPlan = subscription?.plan_id ? getPlanCatalogItem(subscription.plan_id) : null;
+            const isCurrentPlan = currentCatalogPlan?.slug === plan.slug && subscription?.status === 'active';
             const display = getPlanDisplay(plan);
             const isProcessing = loadingPlanId === plan.id;
+            const isMulti = plan.slug === 'multi';
+            const selectedStores = Math.max(1, Number(storeCounts[plan.id] || 1));
+            const extraStores = isMulti ? Math.max(0, selectedStores - plan.includedStores) : 0;
+            const extraStorePrice = Number(plan.extraStorePrice || 149);
+            const monthlyTotal = Number(plan.monthlyPrice || 0) + extraStores * extraStorePrice;
 
             return (
               <Card
@@ -300,9 +333,14 @@ const Subscription = () => {
                   </CardDescription>
                   <div className="mt-5 text-center">
                     <span className="text-4xl font-bold">
-                      R$ {plan.price.toFixed(2)}
+                      {formatCurrency(plan.monthlyPrice)}
                     </span>
                     <span className="text-sm text-white/80">/mês</span>
+                    {isMulti && (
+                      <p className="mt-2 text-sm font-semibold text-white/90">
+                        + {formatCurrency(extraStorePrice)}/mês por loja adicional
+                      </p>
+                    )}
                   </div>
                 </CardHeader>
                 
@@ -310,6 +348,56 @@ const Subscription = () => {
                   <div className={`mb-5 rounded-2xl px-4 py-3 text-sm font-medium ${display.palette.soft} ${display.palette.icon}`}>
                     {display.audience}
                   </div>
+
+                  {isMulti && (
+                    <div className="mb-5 rounded-2xl border border-purple-200 bg-purple-50 p-4">
+                      <label className="text-sm font-semibold text-purple-900">
+                        Quantas lojas vão usar?
+                      </label>
+                      <div className="mt-3 flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 w-10 rounded-xl p-0"
+                          onClick={() => setStoreCounts((current) => ({
+                            ...current,
+                            [plan.id]: Math.max(1, selectedStores - 1)
+                          }))}
+                        >
+                          -
+                        </Button>
+                        <input
+                          className="h-11 w-20 rounded-xl border border-purple-200 bg-white text-center text-lg font-bold text-purple-900 outline-none focus:border-purple-500"
+                          type="number"
+                          min={1}
+                          value={selectedStores}
+                          onChange={(event) => {
+                            const nextValue = Math.max(1, Math.floor(Number(event.target.value) || 1));
+                            setStoreCounts((current) => ({ ...current, [plan.id]: nextValue }));
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 w-10 rounded-xl p-0"
+                          onClick={() => setStoreCounts((current) => ({
+                            ...current,
+                            [plan.id]: selectedStores + 1
+                          }))}
+                        >
+                          +
+                        </Button>
+                        <div className="ml-auto text-right">
+                          <p className="text-xs text-purple-700">Total mensal</p>
+                          <p className="text-xl font-bold text-purple-950">{formatCurrency(monthlyTotal)}</p>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-xs font-medium text-purple-700">
+                        1 loja já está incluída. {extraStores > 0 ? `${extraStores} loja(s) adicional(is) entram na mensalidade.` : 'Você pode usar o Multi com uma loja pelo valor base do plano.'}
+                      </p>
+                    </div>
+                  )}
+
                   <ul className="space-y-3">
                     {display.features.map((feature, index) => (
                       <li key={index} className="flex items-start">
@@ -323,7 +411,7 @@ const Subscription = () => {
                 <CardFooter className="pb-6 pt-4">
                   <Button
                     className={`w-full rounded-2xl text-base font-semibold text-white ${display.palette.button}`}
-                    onClick={() => handleSubscribeStripe(plan.id)}
+                    onClick={() => handleSubscribeAsaas(plan.id, selectedStores)}
                     disabled={loadingPlanId !== null || isCurrentPlan}
                     variant={isCurrentPlan ? "outline" : "default"}
                     size="lg"
@@ -332,7 +420,7 @@ const Subscription = () => {
                       "Plano Atual"
                     ) : (
                       <>
-                        {isProcessing ? "Processando..." : `Assinar ${display.name}`}
+                        {isProcessing ? "Processando..." : `Assinar ${display.name}${isMulti ? ` - ${formatCurrency(monthlyTotal)}` : ''}`}
                         <ArrowRight size={16} className="ml-2" />
                       </>
                     )}
@@ -352,7 +440,7 @@ const Subscription = () => {
                   Mantenha todas as funcionalidades ativas escolhendo um plano hoje mesmo.
                 </p>
                 <Button 
-                  onClick={() => handleSubscribeStripe(2)} 
+                  onClick={() => handleSubscribeAsaas(2)} 
                   variant="secondary" 
                   size="lg"
                   disabled={loadingPlanId !== null}
@@ -364,6 +452,36 @@ const Subscription = () => {
             </CardContent>
           </Card>
         )}
+        <Dialog open={Boolean(paymentFrameUrl)} onOpenChange={(open) => !open && setPaymentFrameUrl(null)}>
+          <DialogContent className="max-w-5xl overflow-hidden p-0">
+            <DialogHeader className="border-b px-6 py-4 text-left">
+              <DialogTitle>Pagamento pelo Asaas</DialogTitle>
+              <DialogDescription>
+                {paymentSummary
+                  ? `${paymentSummary.planName} - ${formatCurrency(paymentSummary.value)}`
+                  : 'Finalize o pagamento para ativar o plano.'}
+              </DialogDescription>
+            </DialogHeader>
+            {paymentFrameUrl && (
+              <div className="bg-slate-50">
+                <iframe
+                  title="Pagamento Asaas"
+                  src={paymentFrameUrl}
+                  className="h-[72vh] w-full border-0 bg-white"
+                />
+                <div className="flex items-center justify-between gap-3 border-t bg-white px-6 py-3 text-sm text-slate-600">
+                  <span>Quando o Asaas confirmar o pagamento, o PopSystem libera o plano automaticamente.</span>
+                  <Button asChild variant="outline" size="sm" className="shrink-0">
+                    <a href={paymentFrameUrl} target="_blank" rel="noreferrer">
+                      Abrir cobrança
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

@@ -25,6 +25,19 @@ function buildPhoneCandidates(value: string | null | undefined) {
   return Array.from(new Set(candidates));
 }
 
+function getManualPauseWindow() {
+  const rawMinutes = Number(Deno.env.get('WHATSAPP_MANUAL_PAUSE_MINUTES') || '60');
+  const minutes = Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : 60;
+  const now = new Date();
+  const resumeAt = new Date(now.getTime() + minutes * 60000);
+
+  return {
+    nowIso: now.toISOString(),
+    resumeAtIso: resumeAt.toISOString(),
+    status: `bot_paused_until:${resumeAt.toISOString()}`
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -103,29 +116,75 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: true, message: 'Failed to send message', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    const pause = getManualPauseWindow();
+    const phoneCandidates = buildPhoneCandidates(number);
     const pausePayload = {
-      status: 'bot_paused',
+      status: pause.status,
       bot_paused: true,
-      bot_paused_at: new Date().toISOString(),
+      bot_paused_at: pause.nowIso,
       bot_paused_by: user.id,
-      updated_at: new Date().toISOString()
+      owner: 'HUMAN',
+      current_state: 'HUMAN_ATTENDING',
+      last_human_message_at: pause.nowIso,
+      ai_resume_at: pause.resumeAtIso,
+      metadata: {
+        reason: 'manual_agent_message',
+        aiResumeAt: pause.resumeAtIso,
+        lastHumanMessageAt: pause.nowIso,
+        handoffMode: 'temporary_human_owner'
+      },
+      updated_at: pause.nowIso
     };
 
     let pauseResult = await supabaseClient
       .from('whatsapp_conversations')
       .update(pausePayload)
       .eq('user_id', restaurant_id)
-      .in('customer_phone', buildPhoneCandidates(number));
+      .in('customer_phone', phoneCandidates);
 
-    if (pauseResult.error && String(pauseResult.error.message || '').includes('bot_paused')) {
+    if (pauseResult.error && /bot_paused|owner|current_state|last_human_message_at|ai_resume_at|metadata|schema cache|column/i.test(String(pauseResult.error.message || ''))) {
       pauseResult = await supabaseClient
         .from('whatsapp_conversations')
         .update({
-          status: 'bot_paused',
-          updated_at: new Date().toISOString()
+          status: pause.status,
+          updated_at: pause.nowIso
         })
         .eq('user_id', restaurant_id)
-        .in('customer_phone', buildPhoneCandidates(number));
+        .in('customer_phone', phoneCandidates);
+    }
+
+    const aiPausePayload = {
+      status: 'human_active',
+      owner: 'HUMAN',
+      current_state: 'HUMAN_ATTENDING',
+      last_human_message_at: pause.nowIso,
+      ai_resume_at: pause.resumeAtIso,
+      metadata: {
+        reason: 'manual_agent_message',
+        pausedAt: pause.nowIso,
+        aiResumeAt: pause.resumeAtIso,
+        lastHumanMessageAt: pause.nowIso,
+        handoffMode: 'temporary_human_owner'
+      },
+      last_message_at: pause.nowIso
+    };
+
+    const aiPauseResult = await supabaseClient
+      .from('ai_conversations')
+      .update(aiPausePayload)
+      .eq('restaurant_id', restaurant_id)
+      .in('phone', phoneCandidates);
+
+    if (aiPauseResult.error && /owner|current_state|last_human_message_at|ai_resume_at|metadata|schema cache|column/i.test(String(aiPauseResult.error.message || ''))) {
+      await supabaseClient
+        .from('ai_conversations')
+        .update({
+          status: 'human_active',
+          metadata: aiPausePayload.metadata,
+          last_message_at: pause.nowIso
+        })
+        .eq('restaurant_id', restaurant_id)
+        .in('phone', phoneCandidates);
     }
 
     return new Response(JSON.stringify({ success: true, data: evoData }), {

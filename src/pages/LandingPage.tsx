@@ -88,20 +88,15 @@ const ecosystem = ['Cliente', 'Pedido', 'Pagamento', 'Cozinha', 'Entrega', 'Fina
 
 const plans = [
   {
-    name: 'Essencial',
-    description: 'Para operações que precisam organizar pedidos, caixa e cardápio digital.',
-    items: ['PDV e pedidos', 'Cardápio digital', 'Controle de caixa', 'Relatórios básicos'],
-  },
-  {
-    name: 'Profissional',
-    description: 'Para restaurantes que querem integrar operação, equipe e canais de venda.',
-    items: ['Delivery e mesas', 'App do garçom', 'Estoque e produção', 'WhatsApp integrado'],
+    name: 'Pro',
+    description: 'Para restaurantes que querem operar uma loja completa, com PDV, delivery, mesas, estoque, financeiro e fiscal.',
+    items: ['PDV e pedidos', 'Cardápio digital', 'Mesas e app garçom', 'Estoque, financeiro e fiscal'],
     featured: true,
   },
   {
-    name: 'Premium',
-    description: 'Para operações que precisam de automação, IA, propaganda e visão multiempresa.',
-    items: ['Anúncios Automáticos', 'WhatsApp com IA', 'Totem integrado', 'Multiempresa e relatórios'],
+    name: 'Multi',
+    description: 'Para redes e donos com mais de uma loja. O valor base inclui 1 loja e cada loja adicional soma R$149/mês.',
+    items: ['Tudo do Pro', 'Multilojas', 'Painel consolidado', 'Financeiro por unidade'],
   },
 ];
 

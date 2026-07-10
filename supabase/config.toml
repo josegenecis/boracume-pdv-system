@@ -129,3 +129,13 @@ entrypoint = "./functions/pix-webhook/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/admin-dashboard/index.ts"
+
+[functions.create-asaas-subscription]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/create-asaas-subscription/index.ts"
+
+[functions.asaas-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/asaas-webhook/index.ts"

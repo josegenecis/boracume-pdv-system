@@ -2,6 +2,8 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { loadCertificateFromBase64, validateCertificate } from './certificate-utils.ts';
 import { SefazClient } from './sefaz-client.ts';
+import { getSefazEndpoint } from './sefaz-endpoints.ts';
+import { getQRCodeBaseUrl } from './qrcode-generator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -85,7 +87,7 @@ serve(async (req) => {
 
 async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
   const fiscalSettings = await loadFiscalSettings(supabase, userId, true);
-  validateFiscalSettingsForEmission(fiscalSettings, { requireCePilot: true });
+  validateFiscalSettingsForEmission(fiscalSettings);
   const { certInfo, sefazClient } = loadSefazClient(fiscalSettings);
 
   try {
@@ -297,7 +299,7 @@ async function cancelarNFCe(supabase: any, userId: string, cupomId: string, moti
 
 async function testarConexaoSefaz(supabase: any, userId: string) {
   const fiscalSettings = await loadFiscalSettings(supabase, userId, true);
-  validateFiscalSettingsForEmission(fiscalSettings, { requireCePilot: true });
+  validateFiscalSettingsForEmission(fiscalSettings);
   const { certInfo, sefazClient } = loadSefazClient(fiscalSettings);
   try {
     const result = await sefazClient.consultarStatusServico(
@@ -319,7 +321,7 @@ async function testarConexaoSefaz(supabase: any, userId: string) {
 
 async function validarConfiguracaoFiscal(supabase: any, userId: string) {
   const fiscalSettings = await loadFiscalSettings(supabase, userId, false);
-  const checklist = buildFiscalReadiness(fiscalSettings, { requireCePilot: true });
+  const checklist = buildFiscalReadiness(fiscalSettings);
   let certificate: any = null;
 
   if (fiscalSettings.certificado_a1_base64 && fiscalSettings.certificado_senha) {
@@ -370,7 +372,7 @@ async function diagnosticarCadastroPorEmail(req: Request, supabase: any, data: a
   if (!user) return json({ success: false, error: 'Usuario nao encontrado', email });
 
   const fiscalSettings = await loadFiscalSettings(supabase, user.id, false);
-  const readiness = buildFiscalReadiness(fiscalSettings, { requireCePilot: true });
+  const readiness = buildFiscalReadiness(fiscalSettings);
   let certificate: any = null;
   let connection: any = null;
 
@@ -487,14 +489,14 @@ function loadSefazClient(fiscalSettings: any) {
   return { certInfo, sefazClient: new SefazClient(certInfo) };
 }
 
-function validateFiscalSettingsForEmission(settings: any, options: { requireCePilot?: boolean } = {}) {
-  const readiness = buildFiscalReadiness(settings, options);
+function validateFiscalSettingsForEmission(settings: any) {
+  const readiness = buildFiscalReadiness(settings);
   if (readiness.errors.length) {
     throw new Error(`Configuracao fiscal incompleta: ${readiness.errors.join('; ')}`);
   }
 }
 
-function buildFiscalReadiness(settings: any, options: { requireCePilot?: boolean } = {}) {
+function buildFiscalReadiness(settings: any) {
   const errors: string[] = [];
   const warnings: string[] = [];
   const requiredFields = [
@@ -507,19 +509,34 @@ function buildFiscalReadiness(settings: any, options: { requireCePilot?: boolean
   }
 
   const uf = String(settings.endereco_uf || '').toUpperCase();
-  if (options.requireCePilot && uf !== 'CE') {
-    errors.push('Piloto fiscal liberado apenas para empresas do Ceara (UF CE)');
+  let codigoUf = '';
+  if (uf) {
+    try {
+      codigoUf = getCodigoUF(uf);
+    } catch (error) {
+      errors.push(getErrorMessage(error));
+    }
   }
-  if (uf === 'CE') {
+  if (uf && codigoUf) {
     const codigoMunicipio = resolveMunicipalityCode(settings);
-    if (codigoMunicipio.length !== 7 || !codigoMunicipio.startsWith('23')) {
-      errors.push('Codigo do municipio do Ceara deve ter 7 digitos e comecar com 23');
+    if (codigoMunicipio.length !== 7 || !codigoMunicipio.startsWith(codigoUf)) {
+      errors.push(`Codigo do municipio deve ter 7 digitos e comecar com o codigo IBGE da UF ${uf} (${codigoUf})`);
     }
     if (codigoMunicipio !== onlyDigits(settings.codigo_municipio)) {
       warnings.push(`Codigo do municipio normalizado para ${settings.endereco_municipio || 'municipio'}: ${codigoMunicipio}`);
     }
     if (!onlyDigits(settings.inscricao_estadual)) {
-      errors.push('Inscricao Estadual e obrigatoria para NFC-e no piloto CE');
+      errors.push('Inscricao Estadual e obrigatoria para NFC-e');
+    }
+  }
+  const ambiente = String(settings.ambiente || '') as Ambiente;
+  if (uf && String(settings.ambiente || '').match(/^(homologacao|producao)$/)) {
+    try {
+      getSefazEndpoint(uf, ambiente, 'status');
+      getSefazEndpoint(uf, ambiente, 'autorizacao');
+      getQRCodeBaseUrl(uf, ambiente);
+    } catch (error) {
+      errors.push(getErrorMessage(error));
     }
   }
 
@@ -534,7 +551,7 @@ function buildFiscalReadiness(settings: any, options: { requireCePilot?: boolean
   if (String(settings.csc_token || '').trim().length < 8) warnings.push('Confira se o CSC Token esta completo antes de emitir em producao');
   if (!settings.certificado_a1_base64 || !settings.certificado_senha) errors.push('Certificado A1 e senha sao obrigatorios');
   if (settings.ambiente === 'producao') {
-    warnings.push('Producao CE exige credenciamento NFC-e ativo na Sefaz e CSC de producao. Teste primeiro em homologacao.');
+    warnings.push('Producao exige credenciamento NFC-e ativo na Sefaz da UF e CSC de producao. Teste primeiro em homologacao.');
   }
 
   return { errors, warnings };
@@ -776,7 +793,10 @@ function getCodigoUF(uf: string): string {
     RJ: '33', RN: '24', RS: '43', RO: '11', RR: '14', SC: '42',
     SP: '35', SE: '28', TO: '17',
   };
-  return codigos[String(uf || '').toUpperCase()] || '35';
+  const normalizedUf = String(uf || '').toUpperCase();
+  const codigo = codigos[normalizedUf];
+  if (!codigo) throw new Error(`UF fiscal invalida ou nao suportada: ${uf || '(vazia)'}`);
+  return codigo;
 }
 
 function json(data: unknown, status = 200) {

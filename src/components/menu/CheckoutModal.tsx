@@ -345,12 +345,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (!isFormValid()) {
       // Verificar cada campo individualmente para dar feedback específico
       const errors: string[] = [];
-      const needsNeighborhood = quoteMode === 'neighborhood' || !deliveryQuote?.ok;
       const hasDelivery = selectedZone !== '' || (deliveryQuote && quoteMode && quoteMode !== 'neighborhood');
       if (!customerData.name.trim()) errors.push('Nome é obrigatório');
       if (!customerData.phone.trim()) errors.push('Telefone é obrigatório');
       if (!customerData.address.trim()) errors.push('Endereço é obrigatório');
-      if (needsNeighborhood && !customerData.neighborhood.trim()) errors.push('Bairro é obrigatório');
       if (!hasDelivery) errors.push('Selecione uma área de entrega');
       if (total < minimumOrder) errors.push(`Pedido mínimo: R$ ${minimumOrder.toFixed(2)}`);
       if (!paymentMethod) errors.push('Selecione forma de pagamento');
@@ -377,6 +375,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customer_name: customerData.name.trim(),
         customer_phone: customerData.phone.trim(),
         customer_address: customerData.address.trim(),
+        customer_neighborhood: customerData.neighborhood.trim() || selectedZoneData?.name || quoteZone?.name || '',
         delivery_zone_id: selectedZone || null,
         items: cart.map(item => ({
           product_id: item.id,
@@ -443,13 +442,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const isFormValid = () => {
-    const needsNeighborhood = quoteMode === 'neighborhood' || !deliveryQuote?.ok;
     const hasDelivery = selectedZone !== '' || (deliveryQuote && quoteMode && quoteMode !== 'neighborhood');
     const isValid = (
       customerData.name.trim() !== '' &&
       customerData.phone.trim() !== '' &&
       customerData.address.trim() !== '' &&
-      (!needsNeighborhood || customerData.neighborhood.trim() !== '') &&
       hasDelivery &&
       total >= minimumOrder &&
       paymentMethod !== '' &&
@@ -589,23 +586,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="neighborhood">Bairro *</Label>
-                  <Input
-                    id="neighborhood"
-                    placeholder="Nome do bairro"
-                    value={customerData.neighborhood}
-                    onChange={(e) => {
-                      zoneWasAutoRef.current = false;
-                      setManualZoneSelection(true);
-                      setCustomerData(prev => ({ ...prev, neighborhood: e.target.value }));
-                    }}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="delivery-zone">Área de Entrega *</Label>
+              <div className="space-y-2">
+                  <Label htmlFor="delivery-zone">Bairro de entrega *</Label>
                   {quoteMode !== 'neighborhood' && deliveryQuote?.ok && !manualZoneSelection ? (
                     <div className="p-3 border rounded-lg bg-gray-50">
                       <div className="text-sm font-medium">Frete calculado automaticamente</div>
@@ -634,15 +616,17 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           setManualZoneSelection(true);
                           setDeliveryQuote(null);
                           setSelectedZone(v);
+                          const zone = deliveryZones.find((item) => String(item.id) === String(v));
+                          setCustomerData(prev => ({ ...prev, neighborhood: zone?.name || '' }));
                         }}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione a área" />
+                          <SelectValue placeholder="Selecione seu bairro" />
                         </SelectTrigger>
                         <SelectContent>
                           {deliveryZones.map((zone) => (
                             <SelectItem key={zone.id} value={zone.id}>
-                              {zone.name} - R$ {zone.delivery_fee.toFixed(2)} ({zone.delivery_time})
+                              {zone.name} - R$ {zone.delivery_fee.toFixed(2)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -678,7 +662,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       Pedido mínimo para esta área: R$ {minimumOrder.toFixed(2)}
                     </p>
                   )}
-                </div>
               </div>
 
               {/* Localização GPS */}

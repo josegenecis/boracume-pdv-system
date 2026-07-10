@@ -20,6 +20,8 @@ export interface PopAiSettings {
   human_transfer_message: string;
   upsell_enabled: boolean;
   max_history_messages: number;
+  human_handoff_timeout_minutes?: number;
+  auto_resume_human_handoff?: boolean;
   forbidden_responses?: string[];
   specific_rules?: string | null;
   ai_hours?: Record<string, unknown>;
@@ -33,6 +35,10 @@ export interface PopAiConversation {
   phone: string;
   status: PopAiConversationStatus;
   ai_enabled: boolean;
+  owner?: 'AI' | 'HUMAN' | 'HYBRID';
+  current_state?: string;
+  last_human_message_at?: string | null;
+  ai_resume_at?: string | null;
   metadata?: Record<string, unknown>;
 }
 

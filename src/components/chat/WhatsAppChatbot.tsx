@@ -29,6 +29,8 @@ interface Conversation {
   ai_conversation_id?: string | null;
   ai_status?: string | null;
   human_required?: boolean | null;
+  owner?: string | null;
+  current_state?: string | null;
 }
 
 interface AiSettings {
@@ -78,13 +80,29 @@ const defaultAiSettings: AiSettings = {
   specific_rules: ''
 };
 
-const isBotPaused = (conversation: { status?: string | null; bot_paused?: boolean | null }) => {
+const isBotPaused = (conversation: {
+  status?: string | null;
+  bot_paused?: boolean | null;
+  ai_status?: string | null;
+  human_required?: boolean | null;
+  owner?: string | null;
+  current_state?: string | null;
+}) => {
   const status = String(conversation.status || '').trim().toLowerCase();
-  if (status === 'bot_paused') return true;
+  const aiStatus = String(conversation.ai_status || '').trim().toLowerCase();
+  const owner = String(conversation.owner || '').trim().toUpperCase();
+  const currentState = String(conversation.current_state || '').trim().toUpperCase();
+
   if (status.startsWith('bot_paused_until:')) {
     const until = new Date(status.slice('bot_paused_until:'.length)).getTime();
-    return Number.isFinite(until) && until > Date.now();
+    if (Number.isFinite(until)) return until > Date.now();
   }
+
+  if (status === 'active' || status === 'ai_active' || aiStatus === 'ai_active' || owner === 'AI') return false;
+  if (conversation.human_required || aiStatus === 'human_required' || aiStatus === 'human_active' || owner === 'HUMAN' || currentState === 'HUMAN_ATTENDING') {
+    return true;
+  }
+  if (status === 'bot_paused') return true;
 
   return Boolean(conversation.bot_paused);
 };
@@ -106,6 +124,28 @@ const WhatsAppChatbot = () => {
   const [savingAiSettings, setSavingAiSettings] = useState(false);
   const [aiLogs, setAiLogs] = useState<AiLog[]>([]);
   const [loadingAiLogs, setLoadingAiLogs] = useState(false);
+
+  const buildTemporaryHumanPausePayload = () => {
+    const now = new Date();
+    const resumeAt = new Date(now.getTime() + 60 * 60 * 1000);
+    return {
+      status: `bot_paused_until:${resumeAt.toISOString()}`,
+      bot_paused: true,
+      bot_paused_at: now.toISOString(),
+      bot_paused_by: user?.id || null,
+      owner: 'HUMAN',
+      current_state: 'HUMAN_ATTENDING',
+      last_human_message_at: now.toISOString(),
+      ai_resume_at: resumeAt.toISOString(),
+      metadata: {
+        reason: 'manual_agent_message',
+        aiResumeAt: resumeAt.toISOString(),
+        lastHumanMessageAt: now.toISOString(),
+        handoffMode: 'temporary_human_owner'
+      },
+      updated_at: now.toISOString()
+    };
+  };
 
   // Buscar conversas
   useEffect(() => {
@@ -146,7 +186,9 @@ const WhatsAppChatbot = () => {
         bot_paused_at: (conv as any).bot_paused_at || null,
         ai_conversation_id: (conv as any).ai_conversation_id || null,
         ai_status: (conv as any).ai_status || null,
-        human_required: (conv as any).human_required || false
+        human_required: (conv as any).human_required || false,
+        owner: (conv as any).owner || null,
+        current_state: (conv as any).current_state || null
       }));
       
       setConversations(typedConversations);
@@ -198,13 +240,7 @@ const WhatsAppChatbot = () => {
     const messageToSend = newMessage.trim();
 
     try {
-      const pausePayload = {
-        status: 'bot_paused',
-        bot_paused: true,
-        bot_paused_at: new Date().toISOString(),
-        bot_paused_by: user?.id || null,
-        updated_at: new Date().toISOString()
-      };
+      const pausePayload = buildTemporaryHumanPausePayload();
 
       let { error: pauseError } = await supabase
         .from('whatsapp_conversations')
@@ -212,9 +248,9 @@ const WhatsAppChatbot = () => {
         .eq('id', selectedConversation)
         .eq('user_id', user?.id);
 
-      if (pauseError && String(pauseError.message || '').includes('bot_paused')) {
+      if (pauseError && /bot_paused|owner|current_state|last_human_message_at|ai_resume_at|metadata|schema cache|column/i.test(String(pauseError.message || ''))) {
         const fallbackPausePayload = {
-          status: 'bot_paused',
+          status: pausePayload.status,
           updated_at: new Date().toISOString()
         };
         const fallbackResult = await supabase
@@ -226,6 +262,35 @@ const WhatsAppChatbot = () => {
       }
 
       if (pauseError) throw pauseError;
+
+      const aiPausePayload = {
+        status: 'human_active',
+        owner: 'HUMAN',
+        current_state: 'HUMAN_ATTENDING',
+        last_human_message_at: pausePayload.last_human_message_at,
+        ai_resume_at: pausePayload.ai_resume_at,
+        metadata: {
+          ...(pausePayload.metadata || {}),
+          legacyConversationId: selectedConversation
+        },
+        last_message_at: pausePayload.updated_at
+      };
+
+      let aiPauseQuery = supabase
+        .from('ai_conversations')
+        .update(aiPausePayload as any)
+        .eq('restaurant_id', user?.id);
+
+      if (conversation.ai_conversation_id) {
+        aiPauseQuery = aiPauseQuery.eq('id', conversation.ai_conversation_id);
+      } else {
+        aiPauseQuery = aiPauseQuery.eq('phone', String(conversation.customer_phone || '').replace(/\D/g, ''));
+      }
+
+      const { error: aiPauseError } = await aiPauseQuery;
+      if (aiPauseError && !/owner|current_state|last_human_message_at|ai_resume_at|metadata|schema cache|column/i.test(String(aiPauseError.message || ''))) {
+        throw aiPauseError;
+      }
 
       const { data: sendResult, error: sendError } = await supabase.functions.invoke('whatsapp-send', {
         body: {
@@ -257,7 +322,7 @@ const WhatsAppChatbot = () => {
       
       toast({
         title: "Mensagem enviada",
-        description: "O robô foi pausado nesta conversa até ser reativado manualmente."
+        description: "A IA ficará em silêncio por 60 minutos enquanto o atendente conduz a conversa."
       });
     } catch (error: any) {
       console.error('Erro ao enviar mensagem:', error);
@@ -272,18 +337,16 @@ const WhatsAppChatbot = () => {
   const toggleBotPause = async (conversationId: string, paused: boolean) => {
     try {
       const payload = paused
-        ? {
-            status: 'bot_paused',
-            bot_paused: true,
-            bot_paused_at: new Date().toISOString(),
-            bot_paused_by: user?.id || null,
-            updated_at: new Date().toISOString()
-          }
+        ? buildTemporaryHumanPausePayload()
         : {
             status: 'active',
             bot_paused: false,
             bot_paused_at: null,
             bot_paused_by: null,
+            owner: 'AI',
+            current_state: 'IDLE',
+            last_human_message_at: null,
+            ai_resume_at: null,
             updated_at: new Date().toISOString()
           };
 
@@ -293,9 +356,9 @@ const WhatsAppChatbot = () => {
         .eq('id', conversationId)
         .eq('user_id', user?.id);
 
-      if (error && String(error.message || '').includes('bot_paused')) {
+      if (error && /bot_paused|owner|current_state|last_human_message_at|ai_resume_at|metadata|schema cache|column/i.test(String(error.message || ''))) {
         const fallbackPayload = {
-          status: paused ? 'bot_paused' : 'active',
+          status: paused ? String((payload as any).status || 'bot_paused') : 'active',
           updated_at: new Date().toISOString()
         };
         const fallbackResult = await supabase
@@ -307,6 +370,30 @@ const WhatsAppChatbot = () => {
       }
 
       if (error) throw error;
+
+      const selected = conversations.find(item => item.id === conversationId);
+      if (selected?.ai_conversation_id) {
+        await supabase
+          .from('ai_conversations')
+          .update(paused
+            ? {
+                status: 'human_active',
+                owner: 'HUMAN',
+                current_state: 'HUMAN_ATTENDING',
+                last_human_message_at: (payload as any).last_human_message_at,
+                ai_resume_at: (payload as any).ai_resume_at,
+                last_message_at: (payload as any).updated_at
+              } as any
+            : {
+                status: 'ai_active',
+                owner: 'AI',
+                current_state: 'IDLE',
+                ai_resume_at: null,
+                last_message_at: new Date().toISOString()
+              } as any)
+          .eq('restaurant_id', user?.id)
+          .eq('id', selected.ai_conversation_id);
+      }
 
       setConversations(prev => prev.map(item => item.id === conversationId ? { ...item, ...payload } : item));
       toast({
@@ -759,13 +846,13 @@ const WhatsAppChatbot = () => {
               {selectedConv && (
                 <Button
                   type="button"
-                  variant={selectedConv.bot_paused ? 'outline' : 'secondary'}
+                  variant={isBotPaused(selectedConv) ? 'outline' : 'secondary'}
                   size="sm"
-                  onClick={() => toggleBotPause(selectedConv.id, !selectedConv.bot_paused)}
+                  onClick={() => toggleBotPause(selectedConv.id, !isBotPaused(selectedConv))}
                   className="gap-2"
                 >
-                  {selectedConv.bot_paused ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
-                  {selectedConv.bot_paused ? 'Reativar robô' : 'Pausar robô'}
+                  {isBotPaused(selectedConv) ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
+                  {isBotPaused(selectedConv) ? 'Reativar robô' : 'Pausar robô'}
                 </Button>
               )}
             </CardTitle>

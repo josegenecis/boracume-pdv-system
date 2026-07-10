@@ -19,6 +19,10 @@ const STATUS_ENDPOINTS: Record<Ambiente, Record<string, string>> = {
     SP: 'https://nfce.fazenda.sp.gov.br/ws/NFeStatusServico4.asmx',
     PR: 'https://nfce.sefa.pr.gov.br/nfce/NFeStatusServico4',
     AM: 'https://nfce.sefaz.am.gov.br/nfce-services/services/NfeStatusServico2',
+    GO: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeStatusServico4',
+    MT: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeStatusServico4',
+    MS: 'https://nfce.sefaz.ms.gov.br/ws/NFeStatusServico4',
+    MG: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeStatusServico4',
   },
   homologacao: {
     SVRS: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
@@ -27,8 +31,19 @@ const STATUS_ENDPOINTS: Record<Ambiente, Record<string, string>> = {
     SP: 'https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeStatusServico4.asmx',
     PR: 'https://homologacao.nfce.sefa.pr.gov.br/nfce/NFeStatusServico4',
     AM: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/NfeStatusServico2',
+    GO: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeStatusServico4',
+    MT: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeStatusServico4',
+    MS: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeStatusServico4',
+    MG: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeStatusServico4',
   },
 };
+
+const SVRS_UFS = ['AC', 'AL', 'AP', 'BA', 'DF', 'ES', 'MA', 'PA', 'PB', 'PE', 'PI', 'RJ', 'RN', 'RO', 'RR', 'SC', 'SE', 'TO'];
+
+for (const uf of SVRS_UFS) {
+  STATUS_ENDPOINTS.producao[uf] = STATUS_ENDPOINTS.producao.SVRS;
+  STATUS_ENDPOINTS.homologacao[uf] = STATUS_ENDPOINTS.homologacao.SVRS;
+}
 
 const CODIGO_UF: Record<string, string> = {
   AC: '12',
@@ -174,9 +189,27 @@ function firstXmlText(xml: string, tag: string): string {
 
 function createStatusEnvelope(uf: string, ambiente: Ambiente) {
   const tpAmb = ambiente === 'producao' ? '1' : '2';
-  const cUF = CODIGO_UF[uf] || CODIGO_UF.CE;
+  const cUF = getCodigoUFOrThrow(uf);
   const payload = `<consStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmb}</tpAmb><cUF>${cUF}</cUF><xServ>STATUS</xServ></consStatServ>`;
   return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header><nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4"><cUF>${cUF}</cUF><versaoDados>4.00</versaoDados></nfeCabecMsg></soap12:Header><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4">${payload}</nfeDadosMsg></soap12:Body></soap12:Envelope>`;
+}
+
+function getCodigoUFOrThrow(uf: string): string {
+  const normalizedUf = String(uf || '').toUpperCase();
+  const code = CODIGO_UF[normalizedUf];
+  if (!code) throw new Error(`UF fiscal invalida ou nao suportada: ${uf || 'vazia'}.`);
+  return code;
+}
+
+function getStatusEndpoint(uf: string, ambiente: Ambiente): string {
+  const normalizedUf = String(uf || '').toUpperCase();
+  const envKey = `NFCE_${ambiente.toUpperCase()}_${normalizedUf}_STATUS_URL`;
+  const override = process.env[envKey];
+  const endpoint = override || STATUS_ENDPOINTS[ambiente]?.[normalizedUf];
+  if (!endpoint) {
+    throw new Error(`Endpoint de status NFC-e nao configurado para ${normalizedUf}. Configure ${envKey}.`);
+  }
+  return endpoint.replace(/\?wsdl$/i, '');
 }
 
 function getBagLocalKeyId(bag: any): string {
@@ -368,10 +401,11 @@ export default async function handler(req: any, res: any) {
     const ambiente: Ambiente = settings.ambiente === 'producao' ? 'producao' : 'homologacao';
     const codigoMunicipio = onlyDigits(settings.codigo_municipio);
 
-    if (uf === 'CE' && (codigoMunicipio.length !== 7 || !codigoMunicipio.startsWith('23'))) {
+    const codigoUf = getCodigoUFOrThrow(uf);
+    if (codigoMunicipio.length !== 7 || !codigoMunicipio.startsWith(codigoUf)) {
       return res.status(400).json({
         success: false,
-        motivo: 'Codigo do municipio do Ceara deve ser o codigo IBGE com 7 digitos. Fortaleza, por exemplo, e 2304400.',
+        motivo: `Codigo do municipio deve ser o codigo IBGE com 7 digitos e iniciar com ${codigoUf} para UF ${uf}.`,
       });
     }
 
@@ -379,7 +413,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ success: false, motivo: 'Certificado A1 e senha sao obrigatorios.' });
     }
 
-    const endpoint = STATUS_ENDPOINTS[ambiente][uf] || STATUS_ENDPOINTS[ambiente].SVRS;
+    const endpoint = getStatusEndpoint(uf, ambiente);
     const xml = await requestSefazStatus(
       endpoint,
       createStatusEnvelope(uf, ambiente),

@@ -16,12 +16,35 @@ const AUTH_ENDPOINTS: Record<Ambiente, Record<string, string>> = {
   producao: {
     SVRS: 'https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
     CE: 'https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    RS: 'https://nfce.sefazrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    SP: 'https://nfce.fazenda.sp.gov.br/ws/NFeAutorizacao4.asmx',
+    PR: 'https://nfce.sefa.pr.gov.br/nfce/NFeAutorizacao4',
+    AM: 'https://nfce.sefaz.am.gov.br/nfce-services/services/NfeAutorizacao',
+    GO: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4',
+    MT: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeAutorizacao4',
+    MS: 'https://nfce.sefaz.ms.gov.br/ws/NFeAutorizacao4',
+    MG: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeAutorizacao4',
   },
   homologacao: {
     SVRS: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
     CE: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    RS: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    SP: 'https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeAutorizacao4.asmx',
+    PR: 'https://homologacao.nfce.sefa.pr.gov.br/nfce/NFeAutorizacao4',
+    AM: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/NfeAutorizacao',
+    GO: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeAutorizacao4',
+    MT: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeAutorizacao4',
+    MS: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeAutorizacao4',
+    MG: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeAutorizacao4',
   },
 };
+
+const SVRS_UFS = ['AC', 'AL', 'AP', 'BA', 'DF', 'ES', 'MA', 'PA', 'PB', 'PE', 'PI', 'RJ', 'RN', 'RO', 'RR', 'SC', 'SE', 'TO'];
+
+for (const uf of SVRS_UFS) {
+  AUTH_ENDPOINTS.producao[uf] = AUTH_ENDPOINTS.producao.SVRS;
+  AUTH_ENDPOINTS.homologacao[uf] = AUTH_ENDPOINTS.homologacao.SVRS;
+}
 
 const CODIGO_UF: Record<string, string> = {
   AC: '12', AL: '27', AP: '16', AM: '13', BA: '29', CE: '23',
@@ -29,6 +52,66 @@ const CODIGO_UF: Record<string, string> = {
   MG: '31', PA: '15', PB: '25', PR: '41', PE: '26', PI: '22',
   RJ: '33', RN: '24', RS: '43', RO: '11', RR: '14', SC: '42',
   SP: '35', SE: '28', TO: '17',
+};
+const QR_CODE_URLS: Record<Ambiente, Record<string, string>> = {
+  producao: {
+    AC: 'http://www.sefaznet.ac.gov.br/nfce/qrcode',
+    AL: 'http://nfce.sefaz.al.gov.br/QRCode/consultarNFCe.jsp',
+    AP: 'https://www.sefaz.ap.gov.br/nfce/nfcep.php',
+    AM: 'https://sistemas.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp',
+    BA: 'http://nfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx',
+    CE: 'http://nfce.sefaz.ce.gov.br/pages/ShowNFCe.html',
+    DF: 'http://www.fazenda.df.gov.br/nfce/qrcode',
+    ES: 'http://app.sefaz.es.gov.br/ConsultaNFCe',
+    GO: 'https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe',
+    MA: 'http://nfce.sefaz.ma.gov.br/portal/consultarNFCe.jsp',
+    MT: 'http://www.sefaz.mt.gov.br/nfce/consultanfce',
+    MS: 'http://www.dfe.ms.gov.br/nfce/qrcode',
+    MG: 'https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml',
+    PA: 'https://appnfc.sefa.pa.gov.br/portal/view/consultas/nfce/nfceForm.seam',
+    PB: 'http://www.sefaz.pb.gov.br/nfce',
+    PR: 'http://www.fazenda.pr.gov.br/nfce/qrcode',
+    PE: 'http://nfce.sefaz.pe.gov.br/nfce/consulta',
+    PI: 'http://www.sefaz.pi.gov.br/nfce/qrcode',
+    RJ: 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode',
+    RN: 'https://nfce.set.rn.gov.br/consultarNFCe.aspx',
+    RS: 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx',
+    RO: 'http://www.nfce.sefin.ro.gov.br/consultanfce/consulta.jsp',
+    RR: 'https://www.sefaz.rr.gov.br/nfce/servlet/qrcode',
+    SC: 'https://sat.sef.sc.gov.br/nfce/consulta',
+    SP: 'https://www.nfce.fazenda.sp.gov.br/qrcode',
+    SE: 'http://www.nfce.se.gov.br/nfce/consulta',
+    TO: 'http://www.sefaz.to.gov.br/nfce/qrcode',
+  },
+  homologacao: {
+    AC: 'http://hml.sefaznet.ac.gov.br/nfce/qrcode',
+    AL: 'http://nfce.sefaz.al.gov.br/QRCode/consultarNFCe.jsp',
+    AP: 'https://www.sefaz.ap.gov.br/nfce/nfcep.php',
+    AM: 'https://homnfce.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp',
+    BA: 'http://hnfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx',
+    CE: 'http://nfceh.sefaz.ce.gov.br/pages/ShowNFCe.html',
+    DF: 'http://dec.fazenda.df.gov.br/ConsultarNFCe.aspx',
+    ES: 'http://homologacao.sefaz.es.gov.br/ConsultaNFCe',
+    GO: 'https://homolog.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe',
+    MA: 'http://homologacao.sefaz.ma.gov.br/portal/consultarNFCe.jsp',
+    MT: 'http://homologacao.sefaz.mt.gov.br/nfce/consultanfce',
+    MS: 'http://www.dfe.ms.gov.br/nfce/qrcode',
+    MG: 'https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml',
+    PA: 'https://appnfc.sefa.pa.gov.br/portal-homologacao/view/consultas/nfce/nfceForm.seam',
+    PB: 'http://www.sefaz.pb.gov.br/nfcehom',
+    PR: 'http://www.fazenda.pr.gov.br/nfce/qrcode',
+    PE: 'http://nfcehomolog.sefaz.pe.gov.br/nfce/consulta',
+    PI: 'http://www.sefaz.pi.gov.br/nfce/qrcode',
+    RJ: 'https://homologacao.consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode',
+    RN: 'https://hom.nfce.set.rn.gov.br/consultarNFCe.aspx',
+    RS: 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx',
+    RO: 'http://www.nfce.sefin.ro.gov.br/consultanfce/consulta.jsp',
+    RR: 'https://www.sefaz.rr.gov.br/nfce/servlet/qrcode',
+    SC: 'https://sat.sef.sc.gov.br/nfce/consulta',
+    SP: 'https://www.homologacao.nfce.fazenda.sp.gov.br/qrcode',
+    SE: 'http://www.hom.nfe.se.gov.br/nfce/consulta',
+    TO: 'http://homologacao.sefaz.to.gov.br/nfce/qrcode',
+  },
 };
 const NFE_TIMEZONE = 'America/Fortaleza';
 const MUNICIPALITY_CODE_OVERRIDES: Record<string, string> = {
@@ -257,6 +340,24 @@ function resolveMunicipalityCode(settings: any): string {
   return MUNICIPALITY_CODE_OVERRIDES[`${uf}|${city}`] || raw;
 }
 
+function getCodigoUFOrThrow(uf: string): string {
+  const normalizedUf = String(uf || '').toUpperCase();
+  const code = CODIGO_UF[normalizedUf];
+  if (!code) throw new Error(`UF fiscal invalida ou nao suportada: ${uf || 'vazia'}.`);
+  return code;
+}
+
+function getAuthorizationEndpoint(uf: string, ambiente: Ambiente): string {
+  const normalizedUf = String(uf || '').toUpperCase();
+  const envKey = `NFCE_${ambiente.toUpperCase()}_${normalizedUf}_AUTORIZACAO_URL`;
+  const override = process.env[envKey];
+  const endpoint = override || AUTH_ENDPOINTS[ambiente]?.[normalizedUf];
+  if (!endpoint) {
+    throw new Error(`Endpoint de autorizacao NFC-e nao configurado para ${normalizedUf}. Configure ${envKey}.`);
+  }
+  return endpoint.replace(/\?wsdl$/i, '');
+}
+
 function sanitizeCode(value: string): string {
   return String(value || '').replace(/[^\w.-]/g, '').slice(0, 60) || '000001';
 }
@@ -469,11 +570,11 @@ function generateNFCeXML(input: {
     : '';
   const paymentXml = buildPaymentDetailsXml(order, paymentMethod, valorTotal);
 
-  return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${cupom.chave_acesso}" versao="4.00"><ide><cUF>${CODIGO_UF[String(fiscalSettings.endereco_uf || '').toUpperCase()] || '23'}</cUF><cNF>${cupom.chave_acesso.substring(35, 43)}</cNF><natOp>Venda</natOp><mod>65</mod><serie>${Number(cupom.serie)}</serie><nNF>${cupom.numero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>${codigoMunicipio}</cMunFG><tpImp>4</tpImp><tpEmis>1</tpEmis><cDV>${cupom.chave_acesso.slice(-1)}</cDV><tpAmb>${isHomologacao ? '2' : '1'}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>PopSystem-1.0</verProc></ide><emit><CNPJ>${onlyDigits(fiscalSettings.cnpj)}</CNPJ><xNome>${escapeXml(fiscalSettings.razao_social)}</xNome><xFant>${escapeXml(fiscalSettings.nome_fantasia || fiscalSettings.razao_social)}</xFant><enderEmit><xLgr>${escapeXml(fiscalSettings.endereco_logradouro)}</xLgr><nro>${escapeXml(fiscalSettings.endereco_numero)}</nro>${fiscalSettings.endereco_complemento ? `<xCpl>${escapeXml(fiscalSettings.endereco_complemento)}</xCpl>` : ''}<xBairro>${escapeXml(fiscalSettings.endereco_bairro)}</xBairro><cMun>${codigoMunicipio}</cMun><xMun>${escapeXml(fiscalSettings.endereco_municipio)}</xMun><UF>${escapeXml(fiscalSettings.endereco_uf)}</UF><CEP>${onlyDigits(fiscalSettings.endereco_cep)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${escapeXml(fiscalSettings.inscricao_estadual || 'ISENTO')}</IE><CRT>${Number(fiscalSettings.regime_tributario || 1)}</CRT></emit>${destXml}${detXml}<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${fixed2(totalProdutos)}</vProd><vFrete>${fixed2(deliveryFee)}</vFrete><vSeg>0.00</vSeg><vDesc>${fixed2(valorDesconto)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${fixed2(valorTotal)}</vNF><vTotTrib>${fixed2(valorTributos)}</vTotTrib></ICMSTot></total><transp><modFrete>9</modFrete></transp><pag>${paymentXml}</pag>${observacoes ? `<infAdic><infCpl>${escapeXml(observacoes)}</infCpl></infAdic>` : ''}</infNFe></NFe>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${cupom.chave_acesso}" versao="4.00"><ide><cUF>${getCodigoUFOrThrow(fiscalSettings.endereco_uf)}</cUF><cNF>${cupom.chave_acesso.substring(35, 43)}</cNF><natOp>Venda</natOp><mod>65</mod><serie>${Number(cupom.serie)}</serie><nNF>${cupom.numero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>${codigoMunicipio}</cMunFG><tpImp>4</tpImp><tpEmis>1</tpEmis><cDV>${cupom.chave_acesso.slice(-1)}</cDV><tpAmb>${isHomologacao ? '2' : '1'}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>PopSystem-1.0</verProc></ide><emit><CNPJ>${onlyDigits(fiscalSettings.cnpj)}</CNPJ><xNome>${escapeXml(fiscalSettings.razao_social)}</xNome><xFant>${escapeXml(fiscalSettings.nome_fantasia || fiscalSettings.razao_social)}</xFant><enderEmit><xLgr>${escapeXml(fiscalSettings.endereco_logradouro)}</xLgr><nro>${escapeXml(fiscalSettings.endereco_numero)}</nro>${fiscalSettings.endereco_complemento ? `<xCpl>${escapeXml(fiscalSettings.endereco_complemento)}</xCpl>` : ''}<xBairro>${escapeXml(fiscalSettings.endereco_bairro)}</xBairro><cMun>${codigoMunicipio}</cMun><xMun>${escapeXml(fiscalSettings.endereco_municipio)}</xMun><UF>${escapeXml(fiscalSettings.endereco_uf)}</UF><CEP>${onlyDigits(fiscalSettings.endereco_cep)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${escapeXml(fiscalSettings.inscricao_estadual || 'ISENTO')}</IE><CRT>${Number(fiscalSettings.regime_tributario || 1)}</CRT></emit>${destXml}${detXml}<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${fixed2(totalProdutos)}</vProd><vFrete>${fixed2(deliveryFee)}</vFrete><vSeg>0.00</vSeg><vDesc>${fixed2(valorDesconto)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${fixed2(valorTotal)}</vNF><vTotTrib>${fixed2(valorTributos)}</vTotTrib></ICMSTot></total><transp><modFrete>9</modFrete></transp><pag>${paymentXml}</pag>${observacoes ? `<infAdic><infCpl>${escapeXml(observacoes)}</infCpl></infAdic>` : ''}</infNFe></NFe>`;
 }
 
 function createAuthorizationEnvelope(signedNFe: string, uf: string) {
-  const cUF = CODIGO_UF[String(uf || '').toUpperCase()] || CODIGO_UF.CE;
+  const cUF = getCodigoUFOrThrow(uf);
   const loteId = Date.now().toString().slice(-15);
   const nfeXml = stripXmlDeclaration(signedNFe);
   const payload = `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${loteId}</idLote><indSinc>1</indSinc>${nfeXml}</enviNFe>`;
@@ -509,26 +610,13 @@ function generateQRCodeData(
 
 function getQRCodeBaseUrl(uf: string, ambiente: Ambiente): string {
   const normalizedUf = String(uf || '').toUpperCase();
-  const svrs = ambiente === 'producao'
-    ? 'https://nfce.svrs.rs.gov.br/ws/NfeQRCode/NFeQRCode.asmx'
-    : 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeQRCode/NFeQRCode.asmx';
-
-  const urls: Record<string, string> = {
-    CE: ambiente === 'producao'
-      ? 'http://nfce.sefaz.ce.gov.br/pages/ShowNFCe.html'
-      : 'http://nfceh.sefaz.ce.gov.br/pages/ShowNFCe.html',
-    SP: ambiente === 'producao'
-      ? 'https://www.nfce.fazenda.sp.gov.br/qrcode'
-      : 'https://www.homologacao.nfce.fazenda.sp.gov.br/qrcode',
-    PR: ambiente === 'producao'
-      ? 'https://www.fazenda.pr.gov.br/nfce/qrcode'
-      : 'https://www.fazenda.pr.gov.br/nfce/qrcode',
-    AM: ambiente === 'producao'
-      ? 'https://sistemas.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp'
-      : 'https://homnfce.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp',
-  };
-
-  return urls[normalizedUf] || svrs;
+  const envKey = `NFCE_${ambiente.toUpperCase()}_${normalizedUf}_QRCODE_URL`;
+  const override = process.env[envKey];
+  const endpoint = override || QR_CODE_URLS[ambiente]?.[normalizedUf];
+  if (!endpoint) {
+    throw new Error(`URL de QR Code NFC-e nao configurada para ${normalizedUf}. Configure ${envKey}.`);
+  }
+  return endpoint.replace(/[?&]+$/g, '');
 }
 
 function addNFCeSupplement(signedNFe: string, data: { qrCodeUrl: string; consultaUrl: string }): string {
@@ -582,7 +670,7 @@ async function generateAccessKey(supabase: any, fiscalSettings: any, numero: num
   const aamm = `${parts.year.slice(-2)}${parts.month}`;
   const codigoNumerico = Math.floor(Math.random() * 100000000).toString().padStart(8, '0');
   const { data, error } = await supabase.rpc('generate_nfce_access_key', {
-    p_uf: CODIGO_UF[String(fiscalSettings.endereco_uf || '').toUpperCase()] || '23',
+    p_uf: getCodigoUFOrThrow(fiscalSettings.endereco_uf),
     p_aamm: aamm,
     p_cnpj: onlyDigits(fiscalSettings.cnpj),
     p_modelo: '65',
@@ -633,7 +721,16 @@ export default async function handler(req: any, res: any) {
 
     const uf = String(fiscalSettings.endereco_uf || '').toUpperCase();
     const ambiente: Ambiente = fiscalSettings.ambiente === 'producao' ? 'producao' : 'homologacao';
-    if (uf !== 'CE') return res.status(400).json({ success: false, error: 'Piloto fiscal liberado apenas para empresas do Ceara (UF CE).' });
+    const codigoUf = getCodigoUFOrThrow(uf);
+    const codigoMunicipio = resolveMunicipalityCode(fiscalSettings);
+    if (codigoMunicipio.length !== 7 || !codigoMunicipio.startsWith(codigoUf)) {
+      return res.status(400).json({
+        success: false,
+        error: `Codigo do municipio fiscal invalido para ${uf}. Use o codigo IBGE com 7 digitos iniciando por ${codigoUf}.`,
+      });
+    }
+    getQRCodeBaseUrl(uf, ambiente);
+    const endpoint = getAuthorizationEndpoint(uf, ambiente);
 
     const certInfo = loadPfxForSigning(fiscalSettings.certificado_a1_base64, fiscalSettings.certificado_senha);
     validateCertificate(certInfo, fiscalSettings.cnpj);
@@ -745,7 +842,6 @@ export default async function handler(req: any, res: any) {
       qrCodeUrl,
       consultaUrl: getQRCodeBaseUrl(uf, ambiente),
     });
-    const endpoint = AUTH_ENDPOINTS[ambiente][uf] || AUTH_ENDPOINTS[ambiente].SVRS;
     await supabase.from('nfce_cupons').update({
       xml_content: finalNFe,
       qr_code_url: qrCodeUrl,

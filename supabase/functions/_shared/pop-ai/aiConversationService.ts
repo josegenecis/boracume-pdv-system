@@ -179,14 +179,43 @@ export async function updatePopAiConversationStatus(
   status: PopAiConversationStatus,
   metadata: Record<string, unknown> = {}
 ) {
-  await supabase
+  const isHuman = status === 'human_required' || status === 'human_active';
+  const payload: Record<string, unknown> = {
+    status,
+    metadata,
+    owner: isHuman ? 'HUMAN' : 'AI',
+    current_state: isHuman ? 'HUMAN_ATTENDING' : (status === 'waiting_payment' ? 'WAITING_PAYMENT' : status === 'order_confirmed' ? 'ORDER_CONFIRMED' : 'IDLE'),
+    last_message_at: new Date().toISOString()
+  };
+  if (!isHuman) payload.ai_resume_at = null;
+
+  const result = await supabase
     .from('ai_conversations')
-    .update({
-      status,
-      metadata,
-      last_message_at: new Date().toISOString()
-    })
+    .update(payload)
     .eq('id', conversationId);
+
+  if (result.error && /owner|current_state|ai_resume_at|schema cache|column/i.test(String(result.error.message || ''))) {
+    await supabase
+      .from('ai_conversations')
+      .update({
+        status,
+        metadata,
+        last_message_at: new Date().toISOString()
+      })
+      .eq('id', conversationId);
+  }
+}
+
+function getHumanHandoffPauseWindow() {
+  const rawMinutes = Number(Deno.env.get('WHATSAPP_MANUAL_PAUSE_MINUTES') || '60');
+  const minutes = Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : 60;
+  const now = new Date();
+  const resumeAt = new Date(now.getTime() + minutes * 60000);
+  return {
+    nowIso: now.toISOString(),
+    resumeAtIso: resumeAt.toISOString(),
+    status: `bot_paused_until:${resumeAt.toISOString()}`
+  };
 }
 
 export async function syncLegacyConversationAiState(
@@ -197,22 +226,47 @@ export async function syncLegacyConversationAiState(
 ) {
   if (!legacyConversationId) return;
   const isHuman = status === 'human_required' || status === 'human_active';
+  const pause = isHuman ? getHumanHandoffPauseWindow() : null;
   const payload: Record<string, unknown> = {
     ai_conversation_id: aiConversationId,
     ai_status: status,
     human_required: isHuman,
-    updated_at: new Date().toISOString()
+    owner: isHuman ? 'HUMAN' : 'AI',
+    current_state: isHuman ? 'HUMAN_ATTENDING' : 'IDLE',
+    updated_at: pause?.nowIso || new Date().toISOString()
   };
   if (isHuman) {
-    payload.status = 'bot_paused';
+    payload.status = pause?.status;
     payload.bot_paused = true;
-    payload.bot_paused_at = new Date().toISOString();
+    payload.bot_paused_at = pause?.nowIso;
+    payload.last_human_message_at = pause?.nowIso;
+    payload.ai_resume_at = pause?.resumeAtIso;
+  } else {
+    payload.status = 'active';
+    payload.bot_paused = false;
+    payload.bot_paused_at = null;
+    payload.bot_paused_by = null;
+    payload.ai_resume_at = null;
   }
 
-  await supabase
+  const result = await supabase
     .from('whatsapp_conversations')
     .update(payload)
     .eq('id', legacyConversationId);
+
+  if (result.error && /owner|current_state|ai_resume_at|bot_paused|schema cache|column/i.test(String(result.error.message || ''))) {
+    const fallbackPayload: Record<string, unknown> = {
+      ai_conversation_id: aiConversationId,
+      ai_status: status,
+      human_required: isHuman,
+      status: isHuman ? pause?.status : 'active',
+      updated_at: pause?.nowIso || new Date().toISOString()
+    };
+    await supabase
+      .from('whatsapp_conversations')
+      .update(fallbackPayload)
+      .eq('id', legacyConversationId);
+  }
 }
 
 export async function logPopAiAction(

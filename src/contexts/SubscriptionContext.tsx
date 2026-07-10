@@ -10,6 +10,12 @@ interface Plan {
   price: number;
   description: string;
   features: string[];
+  slug?: string | null;
+  included_stores?: number | null;
+  store_limit?: number | null;
+  extra_store_price?: number | null;
+  is_public?: boolean | null;
+  sort_order?: number | null;
 }
 
 interface SubscriptionContextType {
@@ -26,21 +32,41 @@ const getFallbackPlans = (): Plan[] => {
     name: plan.name,
     description: plan.description,
     price: plan.monthlyPrice,
-    features: plan.features
+    features: plan.features,
+    slug: plan.slug,
+    included_stores: plan.includedStores,
+    store_limit: plan.storeLimit,
+    extra_store_price: plan.extraStorePrice || 0,
+    is_public: true,
+    sort_order: plan.id
   }));
 };
 
 const normalizePlans = (rows: any[]): Plan[] => {
-  return rows.map((row) => {
+  const normalizedRows = rows.map((row) => {
     const catalog = getPlanCatalogItem(row?.id, row?.name);
     return {
-      id: Number(row?.id),
-      name: String(row?.name || catalog?.name || 'Plano'),
-      description: String(row?.description || catalog?.description || ''),
-      price: Number(row?.price ?? catalog?.monthlyPrice ?? 0),
-      features: Array.isArray(row?.features) && row.features.length > 0 ? row.features : (catalog?.features || [])
+      id: Number(catalog?.id || row?.id),
+      name: String(catalog?.name || row?.name || 'Plano'),
+      description: String(catalog?.description || row?.description || ''),
+      price: Number(catalog?.monthlyPrice ?? row?.price ?? 0),
+      features: catalog?.features || (Array.isArray(row?.features) ? row.features : []),
+      slug: catalog?.slug || row?.slug || null,
+      included_stores: Number(catalog?.includedStores ?? row?.included_stores ?? 1),
+      store_limit: catalog?.storeLimit ?? row?.store_limit ?? null,
+      extra_store_price: Number(catalog?.extraStorePrice ?? row?.extra_store_price ?? 0),
+      is_public: row?.is_public ?? true,
+      sort_order: Number(row?.sort_order ?? catalog?.id ?? row?.id ?? 99)
     };
+  }).filter((plan) => plan.is_public !== false && (plan.id === 1 || plan.id === 2 || plan.id === 3));
+
+  const byId = new Map<number, Plan>();
+  normalizedRows.forEach((plan) => byId.set(plan.id, plan));
+  getFallbackPlans().forEach((plan) => {
+    if (!byId.has(plan.id)) byId.set(plan.id, plan);
   });
+
+  return Array.from(byId.values()).sort((a, b) => Number(a.sort_order || a.id) - Number(b.sort_order || b.id));
 };
 
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -92,22 +118,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         throw new Error('Usuário não autenticado');
       }
 
-      console.log('🔍 [SUBSCRIPTION] Atualizando subscription no banco...');
-      const currentDate = new Date();
-      const nextMonth = new Date();
-      nextMonth.setMonth(nextMonth.getMonth() + 1);
-
-      // Update subscription to active with the selected plan
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({
-          plan_id: planId,
-          status: 'active',
-          current_period_start: currentDate.toISOString(),
-          current_period_end: nextMonth.toISOString(),
-          updated_at: currentDate.toISOString()
-        })
-        .eq('user_id', user.id);
+      console.log('🔍 [SUBSCRIPTION] Criando cobrança no Asaas...');
+      const { error } = await supabase.functions.invoke('create-asaas-subscription', {
+        body: { planId, storeCount: 1 }
+      });
 
       if (error) {
         console.error('❌ [SUBSCRIPTION] Erro ao atualizar subscription:', error);

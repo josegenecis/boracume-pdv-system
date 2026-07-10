@@ -214,9 +214,8 @@ const CollapsibleSidebar = () => {
   const currentPlanLabel = useMemo(() => {
     const status = String(subscription?.status || '').toLowerCase();
     if (status.includes('trial')) return 'Teste';
-    if ((subscription?.plan_id || 0) >= 3) return 'Elite';
-    if ((subscription?.plan_id || 0) === 2) return 'Profissional';
-    if ((subscription?.plan_id || 0) === 1) return 'Essencial';
+    if ((subscription?.plan_id || 0) >= 3) return 'Multi';
+    if ((subscription?.plan_id || 0) >= 2) return 'Pro';
     return 'Plano';
   }, [subscription]);
 

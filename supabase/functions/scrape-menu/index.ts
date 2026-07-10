@@ -162,6 +162,202 @@ async function extractAnotaCategories(rawUrl: string) {
   return normalizeAnotaCategories(data);
 }
 
+function cardapioWebSlugFromUrl(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl);
+    const parts = url.pathname.split('/').filter(Boolean);
+    return parts[parts.length - 1] || '';
+  } catch {
+    return '';
+  }
+}
+
+function extractCardapioWebMeta(html: string, rawUrl: string) {
+  const slug = cardapioWebSlugFromUrl(rawUrl);
+  const companyId =
+    html.match(/Object\.defineProperty\(window,\s*["']companyId["'],\s*\{\s*value:\s*["']?(\d+)/i)?.[1] ||
+    html.match(/window\.companyId\s*=\s*["']?(\d+)/i)?.[1] ||
+    '';
+  const companyUuid =
+    html.match(/Object\.defineProperty\(window,\s*["']companyUuid["'],\s*\{\s*value:\s*["']([^"']+)/i)?.[1] ||
+    html.match(/window\.companyUuid\s*=\s*["']([^"']+)/i)?.[1] ||
+    '';
+  const companySlug =
+    html.match(/Object\.defineProperty\(window,\s*["']companySlug["'],\s*\{\s*value:\s*["']([^"']+)/i)?.[1] ||
+    html.match(/window\.companySlug\s*=\s*["']([^"']+)/i)?.[1] ||
+    slug;
+  const title = cleanText(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]).replace(/\s*\|\s*Card[aá]pio.*$/i, '');
+  const preloadImages = [...html.matchAll(/<link[^>]+rel=["']preload["'][^>]+as=["']image["'][^>]+href=["']([^"']+)/gi)]
+    .map((match) => match[1])
+    .filter(Boolean);
+
+  return {
+    companyId,
+    companyUuid,
+    companySlug,
+    name: title,
+    logo: preloadImages.find((image) => /\/logo\//i.test(image)) || '',
+    banner: preloadImages.find((image) => /\/company\/image\//i.test(image)) || preloadImages.find((image) => !/\/logo\//i.test(image)) || '',
+  };
+}
+
+async function fetchCardapioWebJson(path: string, meta: any, rawUrl: string, params?: Record<string, string>) {
+  const url = new URL(`https://integracao.cardapioweb.com${path}`);
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
+  }
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      accept: 'application/json, text/plain, */*',
+      'company-id': String(meta.companyId || ''),
+      company: String(meta.companySlug || ''),
+      sessionid: 'popsystem-import',
+      referer: 'https://app.cardapioweb.com/',
+      'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+    },
+    redirect: 'follow',
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`CardapioWeb respondeu ${response.status} em ${path}. ${body.slice(0, 200)}`);
+  }
+
+  return response.json();
+}
+
+function isCardapioWebAvailable(entity: any) {
+  const status = cleanText(entity?.status).toUpperCase();
+  if (['MISSING', 'UNAVAILABLE', 'INACTIVE', 'DELETED', 'DISABLED'].includes(status)) return false;
+  if (entity?.active === false || entity?.available === false) return false;
+  return true;
+}
+
+function normalizeCardapioWebAddOns(addOns: any[]) {
+  return (addOns || [])
+    .filter((group: any) => cleanText(group?.name) && isCardapioWebAvailable(group))
+    .sort((a: any, b: any) => Number(a?.position ?? 9999) - Number(b?.position ?? 9999))
+    .map((group: any) => {
+      const options = (group?.subitems || group?.items || group?.options || [])
+        .filter((option: any) => cleanText(option?.name) && isCardapioWebAvailable(option))
+        .sort((a: any, b: any) => Number(a?.position ?? 9999) - Number(b?.position ?? 9999))
+        .map((option: any) => ({
+          name: cleanText(option?.name),
+          price: numberMoney(option?.price ?? option?.price_extra ?? 0),
+        }))
+        .filter((option: any) => option.name);
+
+      return {
+        name: cleanText(group?.name) || 'Adicionais',
+        required: Number(group?.minimum_quantity || group?.min || 0) > 0,
+        max_selections: Math.max(1, Number(group?.maximum_quantity || group?.max || 10)),
+        options,
+      };
+    })
+    .filter((group: any) => group.options.length > 0);
+}
+
+function normalizeCardapioWebCategories(rawCategories: any[]) {
+  const categories = (rawCategories || [])
+    .filter((category: any) => cleanText(category?.name) && isCardapioWebAvailable(category))
+    .sort((a: any, b: any) => Number(a?.position ?? 9999) - Number(b?.position ?? 9999))
+    .map((category: any) => ({
+      name: cleanText(category?.name) || 'Geral',
+      description: cleanText(category?.description),
+      image_url: cleanText(category?.image_url),
+      items: (category?.items || [])
+        .filter((item: any) => cleanText(item?.name))
+        .sort((a: any, b: any) => Number(a?.position ?? 9999) - Number(b?.position ?? 9999))
+        .map((item: any) => {
+          const price = item?.promotional_price_active && item?.promotional_price !== null && item?.promotional_price !== undefined
+            ? item.promotional_price
+            : item?.price;
+
+          return {
+            name: cleanText(item?.name),
+            description: cleanText(item?.description),
+            price: numberMoney(price),
+            image_url: cleanText(item?.image_url || item?.thumbnail_url),
+            available: isCardapioWebAvailable(item),
+            variations: [
+              ...normalizeCardapioWebAddOns(item?.add_ons || []),
+              ...normalizeCardapioWebAddOns(item?.combo_steps || []),
+            ],
+          };
+        })
+        .filter((item: any) => item.name),
+    }))
+    .filter((category: any) => category.items.length > 0);
+
+  const productsCount = categories.reduce((sum: number, category: any) => sum + category.items.length, 0);
+  if (!categories.length || productsCount <= 0) {
+    throw new Error('Não encontrei categorias ou produtos nesse CardapioWeb. Verifique se o link é público e se o cardápio está ativo.');
+  }
+
+  console.log('[CardapioWeb] categorias encontradas:', categories.length);
+  console.log('[CardapioWeb] produtos encontrados:', productsCount);
+  console.log('[CardapioWeb] produtos com complementos:', categories.reduce((sum: number, category: any) => sum + category.items.filter((item: any) => item.variations?.length).length, 0));
+
+  return categories;
+}
+
+async function extractCardapioWebCategories(rawUrl: string) {
+  const htmlResponse = await fetch(rawUrl, {
+    headers: {
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+    },
+    redirect: 'follow',
+  });
+
+  if (!htmlResponse.ok) throw new Error(`Não consegui abrir o CardapioWeb (${htmlResponse.status}).`);
+
+  const html = await htmlResponse.text();
+  const meta = extractCardapioWebMeta(html, rawUrl);
+  if (!meta.companyId || !meta.companySlug) {
+    throw new Error('Não consegui identificar a empresa nesse link CardapioWeb.');
+  }
+
+  let profile: any = {};
+  try {
+    profile = await fetchCardapioWebJson('/api/menu/company/profile', meta, rawUrl, {
+      company: meta.companySlug,
+      hostname: 'app.cardapioweb.com',
+    });
+  } catch (error) {
+    console.warn('[CardapioWeb] Perfil não carregou, seguindo com categorias:', error);
+  }
+
+  const modes = ['delivery', 'view_only', 'service_desk', 'table'];
+  let lastError: any = null;
+  for (const mode of modes) {
+    try {
+      const categoriesData = await fetchCardapioWebJson('/api/menu/company/categories', meta, rawUrl, {
+        only_available_for: mode,
+        origin: 'catalogo',
+      });
+      const rawCategories = Array.isArray(categoriesData) ? categoriesData : categoriesData?.categories || [];
+      const categories = normalizeCardapioWebCategories(rawCategories);
+      return {
+        restaurant: {
+          name: cleanText(profile?.name || meta.name),
+          logo: cleanText(profile?.logo || meta.logo),
+          banner: cleanText(profile?.image || meta.banner),
+          address: [profile?.street, profile?.address_number, profile?.neighborhood, profile?.city, profile?.state].map(cleanText).filter(Boolean).join(', '),
+          phone: cleanText(profile?.order_whatsapp || profile?.phone_number),
+        },
+        categories,
+      };
+    } catch (error) {
+      lastError = error;
+      console.warn(`[CardapioWeb] Falha no modo ${mode}:`, error);
+    }
+  }
+
+  throw lastError || new Error('Não consegui importar esse CardapioWeb.');
+}
+
 function decodeBrendiNuxtPayload(html: string) {
   const match = html.match(/<script[^>]*id=["']__NUXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
   if (!match?.[1]) throw new Error('Não encontrei os dados estruturados desse cardápio Brendi.');
@@ -370,6 +566,21 @@ Deno.serve(async (req: Request) => {
               const categories = await extractAnotaCategories(rawUrl);
               return new Response(
                 JSON.stringify({ success: true, status: 'completed', platform: 'anota-ai', categories }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              );
+            }
+
+            if (parsedUrl.host.toLowerCase().includes('cardapioweb.com')) {
+              console.log('[Start] Importação CardapioWeb direta no scrape-menu.');
+              const result = await extractCardapioWebCategories(rawUrl);
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  status: 'completed',
+                  platform: 'cardapioweb',
+                  restaurant: result.restaurant,
+                  categories: result.categories,
+                }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
               );
             }

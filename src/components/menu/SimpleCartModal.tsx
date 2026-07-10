@@ -1351,14 +1351,34 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
               {isDeliveryMode && showNeighborhoodSelect && (
                 <div>
-                  <Label htmlFor="neighborhood" className="text-sm font-semibold mb-2 block" style={{ color: menuSecondaryColor }}>Bairro</Label>
-                  <Input
-                    id="neighborhood"
-                    value={customerNeighborhood}
-                    onChange={(e) => setCustomerNeighborhood(e.target.value)}
-                    placeholder="Ex: Centro"
-                    className="h-12 bg-white rounded-xl text-base shadow-sm border-gray-200"
-                  />
+                  <Label htmlFor="neighborhood-zone" className="text-sm font-semibold mb-2 block" style={{ color: menuSecondaryColor }}>Bairro de entrega *</Label>
+                  <Select
+                    value={deliveryZoneId}
+                    onValueChange={(v) => {
+                      zoneWasAutoRef.current = false;
+                      const zone = deliveryZones.find((item: any) => String(item?.id || '') === String(v));
+                      setDeliveryZoneId(v);
+                      setCustomerNeighborhood(String(zone?.name || ''));
+                      setDeliveryQuote(null);
+                      setDetectZoneError(null);
+                    }}
+                  >
+                    <SelectTrigger id="neighborhood-zone" className="h-12 bg-white rounded-xl text-base shadow-sm border-gray-200">
+                      <SelectValue placeholder="Selecione seu bairro" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {deliveryZones.map((zone: any) => (
+                        <SelectItem key={zone.id} value={String(zone.id)}>
+                          {zone.name} - R$ {Number(zone.delivery_fee || 0).toFixed(2)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {deliveryZones.length === 0 && (
+                    <div className="mt-2 text-sm text-red-600">
+                      Nenhum bairro de entrega cadastrado para esta loja.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1437,36 +1457,20 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   </div>
                 )}
               </div>
-            ) : quoteMode !== 'neighborhood' && deliveryQuote?.ok ? (
+            ) : selectedZone ? (
               <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
-                <div className="text-sm font-semibold mb-1" style={{ color: menuSecondaryColor }}>Frete calculado automaticamente</div>
+                <div className="text-sm font-semibold mb-1" style={{ color: menuSecondaryColor }}>Frete do bairro</div>
                 <div className="text-lg font-bold" style={{ color: menuPriceColor }}>
-                  R$ {Number(quoteZone?.delivery_fee || 0).toFixed(2)}
-                  {typeof deliveryQuote?.distanceKm === 'number' ? <span className="text-gray-500 text-sm font-normal"> • {Number(deliveryQuote.distanceKm).toFixed(2)} km</span> : ''}
+                  {selectedZone.name} • R$ {Number(selectedZone.delivery_fee || 0).toFixed(2)}
+                  {Number(selectedZone.minimum_order || 0) > 0 ? (
+                    <span className="text-gray-500 text-sm font-normal"> • mínimo R$ {Number(selectedZone.minimum_order || 0).toFixed(2)}</span>
+                  ) : null}
                 </div>
               </div>
             ) : (
               <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
-                <Label htmlFor="zone" className="text-sm font-semibold mb-2 block" style={{ color: menuSecondaryColor }}>Área de entrega *</Label>
-                <Select
-                  value={deliveryZoneId}
-                  onValueChange={(v) => {
-                    zoneWasAutoRef.current = false;
-                    setDeliveryQuote(null);
-                    setDeliveryZoneId(v);
-                  }}
-                >
-                  <SelectTrigger className="h-12 bg-white rounded-xl text-base shadow-sm border-gray-200">
-                    <SelectValue placeholder="Selecione sua área" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {deliveryZones.map((zone) => (
-                      <SelectItem key={zone.id} value={zone.id}>
-                        {zone.name} - R$ {zone.delivery_fee.toFixed(2)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="text-sm font-semibold mb-1" style={{ color: menuSecondaryColor }}>Frete da entrega</div>
+                <div className="text-sm text-gray-500">Selecione o bairro de entrega para calcular o frete.</div>
                 {isDetectingZone && (
                   <div className="mt-2 text-sm font-medium" style={{ color: menuPrimaryColor }}>
                     Detectando bairro automaticamente...

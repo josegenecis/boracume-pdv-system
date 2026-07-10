@@ -26,9 +26,9 @@ Deno.serve(async (req: Request) => {
     let payload: any = null
 
     try {
-      payload = bodyText ? JSON.parse(bodyText) : null
+      payload = bodyText ? JSON.parse(bodyText) : null 
     } catch {
-      payload = null
+      payload = null 
     }
 
     const events = Array.isArray(payload)
@@ -36,7 +36,7 @@ Deno.serve(async (req: Request) => {
       : Array.isArray(payload?.events)
         ? payload.events
         : payload
-          ? [payload]
+          ? [payload] 
           : []
 
     const firstEvent = events[0] || {}
@@ -68,7 +68,7 @@ Deno.serve(async (req: Request) => {
         last_sync_status: 'signature_invalid',
         last_sync_message: 'Webhook recebido com assinatura inválida',
       })
-      return okJson({ ok: false, error: 'invalid_signature' }, 401)
+      return okJson({ ok: false, error: 'invalid_signature' }, 401) 
     }
 
     const headers: Record<string, string> = {}
@@ -84,7 +84,7 @@ Deno.serve(async (req: Request) => {
       const { eventRow, duplicate } = await persistIfoodEvent(supabase, settings.user_id, event, {
         source: 'webhook',
         headers,
-        signature: receivedSignature,
+        signature: receivedSignature, 
         httpStatus: 200,
       })
 

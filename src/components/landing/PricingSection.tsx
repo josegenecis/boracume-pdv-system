@@ -21,10 +21,10 @@ const PricingSection = () => {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 mb-6">
-            Planos pensados para <span className="text-boracume-orange">cada fase do restaurante</span>.
+            Planos para <span className="text-boracume-orange">começar, crescer e operar em rede</span>.
           </h2>
           <p className="text-xl text-slate-600 mb-8">
-            Preços mais agressivos, recursos melhor organizados e uma escada comercial mais clara.
+            Essencial para começar, Pro para operação completa e Multi para redes com R$149 por loja adicional.
           </p>
 
           <div className="flex items-center justify-center gap-4">
@@ -39,7 +39,7 @@ const PricingSection = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
           {PLAN_CATALOG.map((plan, index) => (
             <motion.div
               key={plan.name}
@@ -49,7 +49,7 @@ const PricingSection = () => {
               viewport={{ once: true }}
               className={`relative bg-white rounded-3xl p-8 border ${
                 plan.featured 
-                  ? 'border-boracume-orange shadow-2xl scale-105 z-10' 
+                  ? 'border-boracume-orange shadow-2xl lg:scale-105 z-10'
                   : 'border-slate-200 shadow-xl hover:shadow-2xl transition-shadow'
               }`}
             >
@@ -73,6 +73,11 @@ const PricingSection = () => {
                 {isAnnual && (
                   <p className="text-xs text-boracume-green font-semibold mt-2">
                     Cobrado anualmente: {formatPrice(plan.annualPrice)}
+                  </p>
+                )}
+                {plan.extraStorePrice && (
+                  <p className="text-xs text-purple-700 font-semibold mt-2">
+                    + {formatPrice(plan.extraStorePrice)} por loja adicional
                   </p>
                 )}
               </div>

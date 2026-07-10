@@ -1298,18 +1298,34 @@ function getPauseState(status: unknown) {
 }
 
 function getConversationPauseState(conversation: any) {
+  const statusPause = getPauseState(conversation?.status);
+  if (statusPause.reason === 'temporary') return statusPause;
+
+  const status = String(conversation?.status || '').trim().toLowerCase();
+  const aiStatus = String(conversation?.ai_status || '').trim().toLowerCase();
+  const owner = String(conversation?.owner || '').trim().toUpperCase();
+  const currentState = String(conversation?.current_state || '').trim().toUpperCase();
+
+  if (status === 'active' || status === 'ai_active' || aiStatus === 'ai_active' || owner === 'AI') {
+    return { paused: false, expired: false, reason: '' };
+  }
+
+  if (conversation?.human_required || aiStatus === 'human_required' || aiStatus === 'human_active' || owner === 'HUMAN' || currentState === 'HUMAN_ATTENDING') {
+    return { paused: true, expired: false, reason: 'manual' };
+  }
+
   if (conversation?.bot_paused === true) {
     return { paused: true, expired: false, reason: 'manual' };
   }
 
-  return getPauseState(conversation?.status);
+  return statusPause;
 }
 
 async function loadExistingWhatsAppConversation(supabase: any, restaurantId: string, customerPhone: string) {
   const phoneCandidates = buildPhoneCandidates(customerPhone);
   const fullResult = await supabase
     .from('whatsapp_conversations')
-    .select('id, status, bot_paused, bot_paused_at, bot_paused_by')
+    .select('id, status, bot_paused, bot_paused_at, bot_paused_by, ai_status, human_required, owner, current_state, ai_resume_at')
     .eq('user_id', restaurantId)
     .in('customer_phone', phoneCandidates)
     .order('updated_at', { ascending: false })
@@ -1352,9 +1368,18 @@ function isActionableCustomerIntent(text: string) {
     isGreeting(text);
 }
 
+function isExplicitCustomerReactivationIntent(text: string) {
+  return wantsMenuLink(text) ||
+    wantsOrderTracking(text) ||
+    wantsPromotions(text) ||
+    wantsComplementsInfo(text) ||
+    wantsWhatsAppOrderFlow(text) ||
+    (wantsToOrder(text) && hasProductClue(text));
+}
+
 function getManualPauseMinutes() {
-  const raw = Number(getEnv('WHATSAPP_MANUAL_PAUSE_MINUTES', '20'));
-  return Number.isFinite(raw) && raw > 0 ? raw : 20;
+  const raw = Number(getEnv('WHATSAPP_MANUAL_PAUSE_MINUTES', '60'));
+  return Number.isFinite(raw) && raw > 0 ? raw : 60;
 }
 
 function getMenuGreetingCooldownMinutes() {
@@ -1364,7 +1389,17 @@ function getMenuGreetingCooldownMinutes() {
 }
 
 function shouldAutoResumeManualPause() {
-  return getEnv('WHATSAPP_AUTO_RESUME_MANUAL_PAUSE', 'false').toLowerCase() === 'true';
+  return getEnv('WHATSAPP_AUTO_RESUME_MANUAL_PAUSE', 'true').toLowerCase() !== 'false';
+}
+
+function buildHumanHandoffPause() {
+  const now = new Date();
+  const resumeAt = new Date(now.getTime() + getManualPauseMinutes() * 60000);
+  return {
+    nowIso: now.toISOString(),
+    resumeAtIso: resumeAt.toISOString(),
+    status: `bot_paused_until:${resumeAt.toISOString()}`
+  };
 }
 
 export async function pauseRestaurantBotForConversation(params: {
@@ -1403,7 +1438,7 @@ export async function pauseRestaurantBotForConversation(params: {
         user_id: restaurantId,
         customer_phone: customerPhone,
         customer_name: customerName,
-        status: 'bot_paused'
+        status: buildHumanHandoffPause().status
       })
       .select('id')
       .single();
@@ -1412,11 +1447,22 @@ export async function pauseRestaurantBotForConversation(params: {
     conversationId = String(createdConversation?.id || '');
   }
 
+  const pause = buildHumanHandoffPause();
   const fullPausePayload = {
-    status: 'bot_paused',
+    status: pause.status,
     bot_paused: true,
-    bot_paused_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+    bot_paused_at: pause.nowIso,
+    owner: 'HUMAN',
+    current_state: 'HUMAN_ATTENDING',
+    last_human_message_at: pause.nowIso,
+    ai_resume_at: pause.resumeAtIso,
+    metadata: {
+      reason: params.reason || 'outgoing_message',
+      aiResumeAt: pause.resumeAtIso,
+      lastHumanMessageAt: pause.nowIso,
+      handoffMode: 'temporary_human_owner'
+    },
+    updated_at: pause.nowIso
   };
 
   let { error: updateError } = await supabase
@@ -1425,12 +1471,12 @@ export async function pauseRestaurantBotForConversation(params: {
     .eq('id', conversationId)
     .eq('user_id', restaurantId);
 
-  if (updateError && String(updateError.message || '').includes('bot_paused')) {
+  if (updateError && /bot_paused|owner|current_state|last_human_message_at|ai_resume_at|metadata|schema cache|column/i.test(String(updateError.message || ''))) {
     const fallbackResult = await supabase
       .from('whatsapp_conversations')
       .update({
-        status: 'bot_paused',
-        updated_at: new Date().toISOString()
+        status: pause.status,
+        updated_at: pause.nowIso
       })
       .eq('id', conversationId)
       .eq('user_id', restaurantId);
@@ -1439,19 +1485,47 @@ export async function pauseRestaurantBotForConversation(params: {
 
   if (updateError) return { ok: false, error: updateError.message };
 
-  await supabase
+  const aiPausePayload = {
+    status: 'human_active',
+    owner: 'HUMAN',
+    current_state: 'HUMAN_ATTENDING',
+    last_human_message_at: pause.nowIso,
+    ai_resume_at: pause.resumeAtIso,
+    metadata: {
+      reason: params.reason || 'outgoing_message',
+      legacyConversationId: conversationId,
+      pausedAt: pause.nowIso,
+      aiResumeAt: pause.resumeAtIso,
+      lastHumanMessageAt: pause.nowIso,
+      handoffMode: 'temporary_human_owner'
+    },
+    last_message_at: pause.nowIso
+  };
+
+  const aiPauseResult = await supabase
     .from('ai_conversations')
-    .update({
-      status: 'human_active',
-      metadata: {
-        reason: params.reason || 'outgoing_message',
-        legacyConversationId: conversationId,
-        pausedAt: new Date().toISOString()
-      },
-      last_message_at: new Date().toISOString()
-    })
+    .update(aiPausePayload)
     .eq('restaurant_id', restaurantId)
     .in('phone', phoneCandidates);
+
+  if (aiPauseResult.error && /owner|current_state|last_human_message_at|ai_resume_at|schema cache|column/i.test(String(aiPauseResult.error.message || ''))) {
+    await supabase
+      .from('ai_conversations')
+      .update({
+        status: 'human_active',
+        metadata: {
+          reason: params.reason || 'outgoing_message',
+          legacyConversationId: conversationId,
+          pausedAt: pause.nowIso,
+          aiResumeAt: pause.resumeAtIso,
+          lastHumanMessageAt: pause.nowIso,
+          handoffMode: 'temporary_human_owner'
+        },
+        last_message_at: pause.nowIso
+      })
+      .eq('restaurant_id', restaurantId)
+      .in('phone', phoneCandidates);
+  }
 
   await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_paused_by_outgoing', 'Bot pausado por mensagem enviada pelo restaurante', {
     customerPhone,
@@ -1848,25 +1922,35 @@ export async function processRestaurantBotMessage(params: {
   }
 
   const pauseState = getConversationPauseState(existingConversation);
-  const shouldResumeExpiredPause = pauseState.expired;
+  const actionableCustomerIntent = isActionableCustomerIntent(text);
+  const explicitReactivationIntent = isExplicitCustomerReactivationIntent(text);
+  const shouldResumeExpiredPause = pauseState.paused && pauseState.expired && actionableCustomerIntent;
   const shouldResumeManualPauseForCustomer =
     shouldAutoResumeManualPause() &&
     pauseState.paused &&
     pauseState.reason === 'manual' &&
-    minutesSince(existingConversation?.bot_paused_at) >= getManualPauseMinutes() &&
-    isActionableCustomerIntent(text);
+    actionableCustomerIntent;
   const shouldResumeTemporaryPauseForCustomer =
     pauseState.paused &&
     pauseState.reason === 'temporary' &&
-    minutesSince(existingConversation?.bot_paused_at) >= 10 &&
-    isActionableCustomerIntent(text);
+    (
+      explicitReactivationIntent ||
+      (pauseState.expired && actionableCustomerIntent)
+    );
+  const didResumeConversation =
+    shouldResumeExpiredPause ||
+    shouldResumeTemporaryPauseForCustomer ||
+    shouldResumeManualPauseForCustomer;
 
-  if (shouldResumeExpiredPause || shouldResumeTemporaryPauseForCustomer || shouldResumeManualPauseForCustomer) {
+  if (didResumeConversation) {
     const resumePayload = {
       status: 'active',
       bot_paused: false,
       bot_paused_at: null,
       bot_paused_by: null,
+      owner: 'AI',
+      current_state: 'IDLE',
+      ai_resume_at: null,
       updated_at: new Date().toISOString()
     };
 
@@ -1875,7 +1959,7 @@ export async function processRestaurantBotMessage(params: {
       .update(resumePayload)
       .eq('id', conversationId);
 
-    if (resumeResult.error && String(resumeResult.error.message || '').includes('bot_paused')) {
+  if (resumeResult.error && /bot_paused|owner|current_state|ai_resume_at|schema cache|column/i.test(String(resumeResult.error.message || ''))) {
       await supabase
         .from('whatsapp_conversations')
         .update({ status: 'active', updated_at: new Date().toISOString() })
@@ -1889,17 +1973,22 @@ export async function processRestaurantBotMessage(params: {
         conversationId,
         pauseState,
         manualPauseMinutes: getManualPauseMinutes(),
+        actionableCustomerIntent,
+        explicitReactivationIntent,
         textPreview: text.slice(0, 120)
       });
     }
   }
 
-  if (pauseState.paused && !shouldResumeTemporaryPauseForCustomer && !shouldResumeManualPauseForCustomer) {
+  if (pauseState.paused && !didResumeConversation) {
     await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_paused', 'Bot pausado por atendimento humano', {
       instanceName,
       customerPhone,
       conversationId,
-      pauseState
+      pauseState,
+      actionableCustomerIntent,
+      explicitReactivationIntent,
+      textPreview: text.slice(0, 120)
     });
     return { ok: true, skipped: true, reason: 'bot_paused', conversationId };
   }
@@ -2084,37 +2173,75 @@ export async function processRestaurantBotMessage(params: {
   }
 
   if (humanIntent || problemIntent) {
+    const pause = buildHumanHandoffPause();
     const pausePayload = {
-      status: 'bot_paused',
+      status: pause.status,
       bot_paused: true,
-      bot_paused_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      bot_paused_at: pause.nowIso,
+      owner: 'HUMAN',
+      current_state: 'HUMAN_ATTENDING',
+      last_human_message_at: pause.nowIso,
+      ai_resume_at: pause.resumeAtIso,
+      metadata: {
+        reason: problemIntent ? 'problem_or_complaint' : 'human_requested',
+        aiResumeAt: pause.resumeAtIso,
+        lastHumanMessageAt: pause.nowIso,
+        handoffMode: 'temporary_human_owner'
+      },
+      updated_at: pause.nowIso
     };
     const pauseUpdate = await supabase
       .from('whatsapp_conversations')
       .update(pausePayload)
       .eq('id', conversationId);
 
-    if (pauseUpdate.error && String(pauseUpdate.error.message || '').includes('bot_paused')) {
+    if (pauseUpdate.error && /bot_paused|owner|current_state|last_human_message_at|ai_resume_at|metadata|schema cache|column/i.test(String(pauseUpdate.error.message || ''))) {
       await supabase
         .from('whatsapp_conversations')
-        .update({ status: 'bot_paused', updated_at: new Date().toISOString() })
+        .update({ status: pause.status, updated_at: pause.nowIso })
         .eq('id', conversationId);
     }
 
-    await supabase
+    const aiHumanPayload = {
+      status: 'human_required',
+      owner: 'HUMAN',
+      current_state: 'HUMAN_ATTENDING',
+      last_human_message_at: pause.nowIso,
+      ai_resume_at: pause.resumeAtIso,
+      metadata: {
+        reason: problemIntent ? 'problem_or_complaint' : 'human_requested',
+        legacyConversationId: conversationId,
+        pausedAt: pause.nowIso,
+        aiResumeAt: pause.resumeAtIso,
+        lastHumanMessageAt: pause.nowIso,
+        handoffMode: 'temporary_human_owner'
+      },
+      last_message_at: pause.nowIso
+    };
+    const aiHumanResult = await supabase
       .from('ai_conversations')
-      .update({
+      .update(aiHumanPayload)
+      .eq('restaurant_id', restaurantId)
+      .in('phone', phoneCandidates);
+
+    if (aiHumanResult.error && /owner|current_state|last_human_message_at|ai_resume_at|schema cache|column/i.test(String(aiHumanResult.error.message || ''))) {
+      await supabase
+        .from('ai_conversations')
+        .update({
         status: 'human_required',
         metadata: {
           reason: problemIntent ? 'problem_or_complaint' : 'human_requested',
           legacyConversationId: conversationId,
-          pausedAt: new Date().toISOString()
+          pausedAt: pause.nowIso,
+          aiResumeAt: pause.resumeAtIso,
+          lastHumanMessageAt: pause.nowIso,
+          handoffMode: 'temporary_human_owner'
         },
-        last_message_at: new Date().toISOString()
-      })
-      .eq('restaurant_id', restaurantId)
-      .in('phone', phoneCandidates);
+          last_message_at: pause.nowIso
+        })
+        .eq('restaurant_id', restaurantId)
+        .in('phone', phoneCandidates);
+    }
 
     const handoffText = problemIntent
       ? (renderConfiguredText(getBotConfig(context).human_transfer_message, context.restaurantName, restaurantId, customerName) ||

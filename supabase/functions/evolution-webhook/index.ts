@@ -128,17 +128,36 @@ function isLikelyBotEcho(text: string) {
     value.includes('cardapio completo');
 }
 
-function isMessageFromRestaurant(data: any) {
+function firstDefined(...values: any[]) {
+  return values.find((value) => value !== undefined && value !== null);
+}
+
+function toBooleanFlag(value: any) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'sim', 's'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'nao', 'não', 'n', ''].includes(normalized)) return false;
+  }
+  return false;
+}
+
+function getFromMeRaw(data: any) {
   const key = data?.key || data?.data?.key || {};
-  return Boolean(
-    key?.fromMe ??
-    data?.fromMe ??
-    data?.data?.fromMe ??
-    data?.Info?.IsFromMe ??
-    data?.data?.Info?.IsFromMe ??
-    data?.info?.isFromMe ??
+  return firstDefined(
+    key?.fromMe,
+    data?.fromMe,
+    data?.data?.fromMe,
+    data?.Info?.IsFromMe,
+    data?.data?.Info?.IsFromMe,
+    data?.info?.isFromMe,
     data?.data?.info?.isFromMe
   );
+}
+
+function isMessageFromRestaurant(data: any) {
+  return toBooleanFlag(getFromMeRaw(data));
 }
 
 function pickIncomingEnvelope(body: any) {
@@ -196,6 +215,7 @@ Deno.serve(async (req: Request) => {
 
   const instance = pickInstanceName(body);
   const data = pickIncomingEnvelope(body);
+  const rawFromMe = getFromMeRaw(data);
   const fromMe = isMessageFromRestaurant(data);
 
   const remoteJid = String(data?.key?.remoteJid || data?.remoteJid || '');
@@ -277,6 +297,8 @@ Deno.serve(async (req: Request) => {
       rawEvent,
       instanceName: instance,
       customerPhone,
+      rawFromMe,
+      parsedFromMe: fromMe,
       pauseResult
     });
 
@@ -289,6 +311,8 @@ Deno.serve(async (req: Request) => {
     rawEvent,
     instanceName: instance,
     customerPhone,
+    rawFromMe,
+    parsedFromMe: fromMe,
     textPreview: text.slice(0, 120),
     media: media ? { type: media.type, mimeType: media.mimeType, hasInlineBytes: media.hasInlineBytes, hasUrl: Boolean(media.url) } : null
   });
@@ -320,7 +344,9 @@ Deno.serve(async (req: Request) => {
     event,
     rawEvent,
     instanceName: instance,
-    customerPhone
+    customerPhone,
+    rawFromMe,
+    parsedFromMe: fromMe
   });
 
   return json({ success: true, message: result.replyText });

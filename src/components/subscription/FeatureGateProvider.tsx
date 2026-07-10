@@ -12,8 +12,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import {
   FeatureKey,
   getFeatureDefinition,
@@ -29,14 +27,13 @@ type FeatureGateContextValue = {
 const FeatureGateContext = createContext<FeatureGateContextValue | undefined>(undefined);
 
 export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { subscription, user } = useAuth();
-  const { toast } = useToast();
+  const { subscription } = useAuth();
   const navigate = useNavigate();
   const [feature, setFeature] = useState<FeatureKey | null>(null);
-  const [subscribing, setSubscribing] = useState(false);
 
   const activeDefinition = feature ? getFeatureDefinition(feature) : null;
   const requiredPlan = feature ? getRequiredPlan(feature) : null;
+  const isMultiPlan = requiredPlan?.slug === 'multi';
 
   const value = useMemo<FeatureGateContextValue>(() => ({
     canAccessFeature: (nextFeature) => hasFeatureAccess(nextFeature, subscription),
@@ -45,39 +42,8 @@ export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const goToPlan = async () => {
     if (!requiredPlan) return;
-    if (!user) {
-      setFeature(null);
-      navigate(`/subscription?plan=${requiredPlan.id}`);
-      return;
-    }
-
-    setSubscribing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('create-stripe-subscription', {
-        body: { planId: requiredPlan.id },
-      });
-
-      if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, '_blank');
-        setFeature(null);
-      } else {
-        navigate(`/subscription?plan=${requiredPlan.id}`);
-        setFeature(null);
-      }
-    } catch (error) {
-      console.error('Erro ao abrir checkout do plano:', error);
-      toast({
-        title: 'Não foi possível abrir o checkout',
-        description: 'Abrimos a tela de planos para você tentar novamente.',
-        variant: 'destructive',
-      });
-      navigate(`/subscription?plan=${requiredPlan.id}`);
-      setFeature(null);
-    } finally {
-      setSubscribing(false);
-    }
+    navigate(`/subscription?plan=${requiredPlan.id}`);
+    setFeature(null);
   };
 
   const isComingSoon = Boolean(activeDefinition?.comingSoon);
@@ -119,7 +85,9 @@ export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ c
                   </div>
                   {requiredPlan && (
                     <div className="mt-1 text-xs leading-5 text-slate-600">
-                      Incluído a partir do plano {requiredPlan.name}, com mensalidade de R$ {requiredPlan.monthlyPrice.toFixed(2)}.
+                      {isMultiPlan
+                        ? `Liberado no plano Multi. O valor base é R$ ${requiredPlan.monthlyPrice.toFixed(2)} e cada loja adicional soma R$ ${(requiredPlan.extraStorePrice || 149).toFixed(2)}.`
+                        : `Incluído no plano ${requiredPlan.name}, com mensalidade de R$ ${requiredPlan.monthlyPrice.toFixed(2)}.`}
                     </div>
                   )}
                 </div>
@@ -133,7 +101,7 @@ export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ c
                   Plano recomendado: {requiredPlan.name}
                 </div>
                 <div className="text-xs leading-5 text-slate-600">
-                  A contratação abre a tela de planos e usa o checkout da Stripe já configurado no sistema.
+                  A contratação é feita na tela de planos e o pagamento será processado pelo Asaas.
                 </div>
               </div>
             )}
@@ -144,8 +112,8 @@ export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ c
               {isComingSoon ? 'Entendi' : 'Agora não'}
             </Button>
             {!isComingSoon && (
-              <Button onClick={goToPlan} disabled={subscribing} className="rounded-xl bg-[#FF6400] text-white hover:bg-[#e55a00]">
-                {subscribing ? 'Abrindo checkout...' : 'Contratar plano'}
+              <Button onClick={goToPlan} className="rounded-xl bg-[#FF6400] text-white hover:bg-[#e55a00]">
+                Ver planos
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             )}

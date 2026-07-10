@@ -113,17 +113,36 @@ function isLikelyBotEcho(text: string) {
     value.includes('cardapio completo');
 }
 
-function isMessageFromRestaurant(item: any) {
+function firstDefined(...values: any[]) {
+  return values.find((value) => value !== undefined && value !== null);
+}
+
+function toBooleanFlag(value: any) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'sim', 's'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'nao', 'não', 'n', ''].includes(normalized)) return false;
+  }
+  return false;
+}
+
+function getFromMeRaw(item: any) {
   const key = item?.key || item?.data?.key || {};
-  return Boolean(
-    key?.fromMe ??
-    item?.fromMe ??
-    item?.data?.fromMe ??
-    item?.Info?.IsFromMe ??
-    item?.data?.Info?.IsFromMe ??
-    item?.info?.isFromMe ??
+  return firstDefined(
+    key?.fromMe,
+    item?.fromMe,
+    item?.data?.fromMe,
+    item?.Info?.IsFromMe,
+    item?.data?.Info?.IsFromMe,
+    item?.info?.isFromMe,
     item?.data?.info?.isFromMe
   );
+}
+
+function isMessageFromRestaurant(item: any) {
+  return toBooleanFlag(getFromMeRaw(item));
 }
 
 serve(async (req) => {
@@ -317,6 +336,8 @@ serve(async (req) => {
             rawEvent,
             instanceName: instanceRow.instance_name || instanceName,
             customerPhone: phone,
+            rawFromMe: getFromMeRaw(primaryOutgoing),
+            parsedFromMe: isMessageFromRestaurant(primaryOutgoing),
             pauseResult
           });
         }
@@ -381,6 +402,8 @@ serve(async (req) => {
             rawEvent,
             instanceName: instanceRow.instance_name || instanceName,
             customerPhone: phone,
+            rawFromMe: getFromMeRaw(primaryIncoming),
+            parsedFromMe: isMessageFromRestaurant(primaryIncoming),
             error: result.error || null,
             details: result.details || null
           });

@@ -17,6 +17,14 @@ export interface SefazResponse {
 
 type EndpointSet = Record<SefazOperation, string>;
 
+const OPERATION_ENV_KEYS: Record<SefazOperation, string> = {
+  autorizacao: 'AUTORIZACAO',
+  retAutorizacao: 'RET_AUTORIZACAO',
+  consulta: 'CONSULTA',
+  status: 'STATUS',
+  evento: 'EVENTO',
+};
+
 const SVRS_PROD: EndpointSet = {
   autorizacao: 'https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
   retAutorizacao: 'https://nfce.svrs.rs.gov.br/ws/NfeRetAutorizacao/NFeRetAutorizacao4.asmx',
@@ -31,6 +39,70 @@ const SVRS_HOM: EndpointSet = {
   consulta: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
   status: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
   evento: 'https://nfce-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+};
+
+const GO_PROD: EndpointSet = {
+  autorizacao: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4',
+  retAutorizacao: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeRetAutorizacao4',
+  consulta: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4',
+  status: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeStatusServico4',
+  evento: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeRecepcaoEvento4',
+};
+
+const GO_HOM: EndpointSet = {
+  autorizacao: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeAutorizacao4',
+  retAutorizacao: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeRetAutorizacao4',
+  consulta: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4',
+  status: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeStatusServico4',
+  evento: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeRecepcaoEvento4',
+};
+
+const MT_PROD: EndpointSet = {
+  autorizacao: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeAutorizacao4',
+  retAutorizacao: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeRetAutorizacao4',
+  consulta: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeConsulta4',
+  status: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeStatusServico4',
+  evento: 'https://nfce.sefaz.mt.gov.br/nfcews/services/RecepcaoEvento4',
+};
+
+const MT_HOM: EndpointSet = {
+  autorizacao: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeAutorizacao4',
+  retAutorizacao: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeRetAutorizacao4',
+  consulta: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeConsulta4',
+  status: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeStatusServico4',
+  evento: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/RecepcaoEvento4',
+};
+
+const MS_PROD: EndpointSet = {
+  autorizacao: 'https://nfce.sefaz.ms.gov.br/ws/NFeAutorizacao4',
+  retAutorizacao: 'https://nfce.sefaz.ms.gov.br/ws/NFeRetAutorizacao4',
+  consulta: 'https://nfce.sefaz.ms.gov.br/ws/NFeConsultaProtocolo4',
+  status: 'https://nfce.sefaz.ms.gov.br/ws/NFeStatusServico4',
+  evento: 'https://nfce.sefaz.ms.gov.br/ws/NFeRecepcaoEvento4',
+};
+
+const MS_HOM: EndpointSet = {
+  autorizacao: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeAutorizacao4',
+  retAutorizacao: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeRetAutorizacao4',
+  consulta: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeConsultaProtocolo4',
+  status: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeStatusServico4',
+  evento: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeRecepcaoEvento4',
+};
+
+const MG_PROD: EndpointSet = {
+  autorizacao: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeAutorizacao4',
+  retAutorizacao: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeRetAutorizacao4',
+  consulta: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeConsultaProtocolo4',
+  status: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeStatusServico4',
+  evento: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeRecepcaoEvento4',
+};
+
+const MG_HOM: EndpointSet = {
+  autorizacao: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeAutorizacao4',
+  retAutorizacao: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeRetAutorizacao4',
+  consulta: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeConsultaProtocolo4',
+  status: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeStatusServico4',
+  evento: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeRecepcaoEvento4',
 };
 
 const ENDPOINTS: Record<Ambiente, Partial<Record<string, EndpointSet>>> = {
@@ -81,6 +153,12 @@ const ENDPOINTS: Record<Ambiente, Partial<Record<string, EndpointSet>>> = {
       status: 'https://nfce.sefaz.am.gov.br/nfce-services/services/NfeStatusServico2',
       evento: 'https://nfce.sefaz.am.gov.br/nfce-services/services/RecepcaoEvento',
     },
+    BA: SVRS_PROD,
+    PE: SVRS_PROD,
+    GO: GO_PROD,
+    MT: MT_PROD,
+    MS: MS_PROD,
+    MG: MG_PROD,
   },
   homologacao: {
     SVRS: SVRS_HOM,
@@ -129,17 +207,52 @@ const ENDPOINTS: Record<Ambiente, Partial<Record<string, EndpointSet>>> = {
       status: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/NfeStatusServico2',
       evento: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/RecepcaoEvento',
     },
+    BA: SVRS_HOM,
+    PE: SVRS_HOM,
+    GO: GO_HOM,
+    MT: MT_HOM,
+    MS: MS_HOM,
+    MG: MG_HOM,
   },
 };
 
 export function getSefazEndpoint(uf: string, ambiente: Ambiente, operation: SefazOperation): string {
   const normalizedUf = String(uf || '').toUpperCase();
-  const endpoints = ENDPOINTS[ambiente]?.[normalizedUf] || ENDPOINTS[ambiente]?.SVRS;
+  const override = getEndpointOverride(normalizedUf, ambiente, operation);
+  if (override) return override;
+
+  const endpoints = ENDPOINTS[ambiente]?.[normalizedUf];
   const endpoint = endpoints?.[operation];
   if (!endpoint) {
-    throw new Error(`Endpoint NFC-e nao configurado para ${normalizedUf}/${ambiente}/${operation}`);
+    const envKey = getEndpointEnvKey(normalizedUf, ambiente, operation);
+    throw new Error(`Endpoint NFC-e nao configurado para ${normalizedUf}/${ambiente}/${operation}. Configure ${envKey} ou adicione a UF no mapa fiscal.`);
   }
-  return endpoint;
+  return sanitizeEndpointUrl(endpoint);
+}
+
+export function getConfiguredSefazUfs(ambiente: Ambiente): string[] {
+  return Object.keys(ENDPOINTS[ambiente] || {}).filter((uf) => uf !== 'SVRS').sort();
+}
+
+export function hasSefazEndpoint(uf: string, ambiente: Ambiente, operation: SefazOperation): boolean {
+  try {
+    return Boolean(getSefazEndpoint(uf, ambiente, operation));
+  } catch {
+    return false;
+  }
+}
+
+function getEndpointOverride(uf: string, ambiente: Ambiente, operation: SefazOperation): string {
+  const value = Deno.env.get(getEndpointEnvKey(uf, ambiente, operation))?.trim();
+  return value ? sanitizeEndpointUrl(value) : '';
+}
+
+function getEndpointEnvKey(uf: string, ambiente: Ambiente, operation: SefazOperation): string {
+  return `NFCE_${ambiente.toUpperCase()}_${uf}_${OPERATION_ENV_KEYS[operation]}_URL`;
+}
+
+function sanitizeEndpointUrl(value: string): string {
+  return String(value || '').trim().replace(/\?wsdl$/i, '');
 }
 
 export function getSoapNamespace(operation: SefazOperation): string {

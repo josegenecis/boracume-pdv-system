@@ -1,12 +1,12 @@
 
--- Função para dar baixa no estoque quando um pedido é concluído
+-- FunÃ§Ã£o para dar baixa no estoque quando um pedido Ã© concluÃ­do
 CREATE OR REPLACE FUNCTION process_order_inventory_deduction()
 RETURNS TRIGGER AS \$\$
 DECLARE
     item RECORD;
     recipe_item RECORD;
 BEGIN
-    -- Só processa se o status mudou para 'completed'
+    -- SÃ³ processa se o status mudou para 'completed'
     IF NEW.status = 'completed' AND OLD.status != 'completed' THEN
         
         -- Loop pelos itens do pedido
@@ -17,13 +17,13 @@ BEGIN
                 p_qty INTEGER := (item.value->>'quantity')::INTEGER;
             BEGIN
                 IF p_id IS NOT NULL THEN
-                    -- Busca a ficha técnica do produto
+                    -- Busca a ficha tÃ©cnica do produto
                     FOR recipe_item IN 
                         SELECT ingredient_id, quantity 
                         FROM public.product_recipes 
                         WHERE product_id = p_id 
                     LOOP
-                        -- Insere a movimentação de saída
+                        -- Insere a movimentaÃ§Ã£o de saÃ­da
                         INSERT INTO public.stock_movements (
                             user_id, ingredient_id, movement_type, quantity, reason, order_id
                         ) VALUES (

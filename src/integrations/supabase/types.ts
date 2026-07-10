@@ -1414,63 +1414,99 @@ export type Database = {
       }
       subscription_plans: {
         Row: {
+          checkout_note: string | null
           description: string
+          extra_store_price: number | null
           features: Json
           id: number
+          included_stores: number | null
+          is_public: boolean | null
           name: string
           price: number
+          slug: string | null
+          sort_order: number | null
           stripe_price_id: string | null
+          store_limit: number | null
         }
         Insert: {
+          checkout_note?: string | null
           description: string
+          extra_store_price?: number | null
           features: Json
           id?: number
+          included_stores?: number | null
+          is_public?: boolean | null
           name: string
           price: number
+          slug?: string | null
+          sort_order?: number | null
           stripe_price_id?: string | null
+          store_limit?: number | null
         }
         Update: {
+          checkout_note?: string | null
           description?: string
+          extra_store_price?: number | null
           features?: Json
           id?: number
+          included_stores?: number | null
+          is_public?: boolean | null
           name?: string
           price?: number
+          slug?: string | null
+          sort_order?: number | null
           stripe_price_id?: string | null
+          store_limit?: number | null
         }
         Relationships: []
       }
       subscriptions: {
         Row: {
+          additional_store_count: number | null
           created_at: string
           current_period_end: string | null
           current_period_start: string | null
+          extra_store_price: number | null
           id: string
           plan_id: number | null
           status: string
+          store_count: number | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
           trial_end: string | null
           trial_start: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          additional_store_count?: number | null
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
+          extra_store_price?: number | null
           id?: string
           plan_id?: number | null
           status: string
+          store_count?: number | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
           trial_end?: string | null
           trial_start?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          additional_store_count?: number | null
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
+          extra_store_price?: number | null
           id?: string
           plan_id?: number | null
           status?: string
+          store_count?: number | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
           trial_end?: string | null
           trial_start?: string | null
           updated_at?: string

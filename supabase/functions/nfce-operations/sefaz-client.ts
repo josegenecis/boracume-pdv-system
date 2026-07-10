@@ -309,7 +309,10 @@ function getCodigoUF(uf: string): string {
     RJ: '33', RN: '24', RS: '43', RO: '11', RR: '14', SC: '42',
     SP: '35', SE: '28', TO: '17',
   };
-  return codigos[String(uf || '').toUpperCase()] || '35';
+  const normalizedUf = String(uf || '').toUpperCase();
+  const codigo = codigos[normalizedUf];
+  if (!codigo) throw new Error(`UF fiscal invalida ou nao suportada: ${uf || '(vazia)'}`);
+  return codigo;
 }
 
 function getErrorMessage(error: unknown): string {

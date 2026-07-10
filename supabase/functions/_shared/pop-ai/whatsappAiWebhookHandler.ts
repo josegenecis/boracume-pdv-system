@@ -31,12 +31,12 @@ function minutesSince(dateString?: string | null) {
 }
 
 function manualPauseMinutes() {
-  const raw = Number(Deno.env.get('WHATSAPP_MANUAL_PAUSE_MINUTES') || '20');
-  return Number.isFinite(raw) && raw > 0 ? raw : 20;
+  const raw = Number(Deno.env.get('WHATSAPP_MANUAL_PAUSE_MINUTES') || '60');
+  return Number.isFinite(raw) && raw > 0 ? raw : 60;
 }
 
 function shouldAutoResumeManualPause() {
-  return String(Deno.env.get('WHATSAPP_AUTO_RESUME_MANUAL_PAUSE') || 'false').trim().toLowerCase() === 'true';
+  return String(Deno.env.get('WHATSAPP_AUTO_RESUME_MANUAL_PAUSE') || 'true').trim().toLowerCase() !== 'false';
 }
 
 function isActionableCustomerIntent(text: string) {
@@ -46,6 +46,61 @@ function isActionableCustomerIntent(text: string) {
     /(acompanhar|rastrear|status do pedido|meu pedido|onde.*pedido|pedido.*andamento|pedido.*status)/i.test(value) ||
     /(promo|promocao|desconto|oferta|combo)/i.test(value) ||
     /(quero|queria|gostaria|vou querer|fazer pedido|pedir|pedido|finalizar pedido)/i.test(value);
+}
+
+function isExplicitCustomerReactivationIntent(text: string) {
+  const value = normalizeIntentText(text);
+  return /(link|cardapio|catalogo|menu|me envia|me manda|manda (o )?(link|cardapio)|envia (o )?(link|cardapio)|me passa (o )?(link|cardapio)|quero (ver )?(o )?(cardapio|menu)|tem cardapio)/i.test(value) ||
+    /(acompanhar|rastrear|status do pedido|meu pedido|onde.*pedido|pedido.*andamento|pedido.*status)/i.test(value) ||
+    /(promo|promocao|desconto|oferta|combo)/i.test(value) ||
+    /(fazer pedido|pedir|finalizar pedido|quero pedir|quero fazer pedido|pedido por aqui|pedido no whatsapp)/i.test(value);
+}
+
+function getHandoffTimeoutMinutes(settings: any) {
+  const configured = Number(settings?.human_handoff_timeout_minutes || settings?.metadata?.human_handoff_timeout_minutes);
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  return manualPauseMinutes();
+}
+
+function getConversationResumeAt(conversation: any, timeoutMinutes: number) {
+  const metadata = conversation?.metadata || {};
+  const explicitResumeAt =
+    conversation?.ai_resume_at ||
+    metadata.aiResumeAt ||
+    metadata.pauseExpiresAt ||
+    metadata.resumeAt;
+  if (explicitResumeAt && !Number.isNaN(new Date(explicitResumeAt).getTime())) {
+    return String(explicitResumeAt);
+  }
+
+  const lastHumanAt =
+    conversation?.last_human_message_at ||
+    metadata.lastHumanMessageAt ||
+    metadata.pausedAt;
+  if (!lastHumanAt) return null;
+  const baseTime = new Date(lastHumanAt).getTime();
+  if (Number.isNaN(baseTime)) return null;
+  return new Date(baseTime + timeoutMinutes * 60000).toISOString();
+}
+
+async function markPopAiResumed(supabase: any, conversation: any, metadata: Record<string, unknown>) {
+  const payload = {
+    status: 'ai_active',
+    owner: 'AI',
+    current_state: 'IDLE',
+    ai_resume_at: null,
+    metadata,
+    last_message_at: new Date().toISOString()
+  };
+
+  const result = await supabase
+    .from('ai_conversations')
+    .update(payload)
+    .eq('id', conversation.id);
+
+  if (result.error && /owner|current_state|ai_resume_at|schema cache|column/i.test(String(result.error.message || ''))) {
+    await updatePopAiConversationStatus(supabase, conversation.id, 'ai_active', metadata);
+  }
 }
 
 export async function processPopAiMessage(params: PopAiIncomingMessage): Promise<PopAiEngineResult> {
@@ -73,31 +128,53 @@ export async function processPopAiMessage(params: PopAiIncomingMessage): Promise
       getConversationHistory(supabase, aiConversation.id, Number(settings.max_history_messages || 30))
     ]);
 
-    if (aiConversation.status === 'human_active' || aiConversation.status === 'human_required') {
-      const pausedAt = String(aiConversation?.metadata?.pausedAt || aiConversation?.last_message_at || '');
+    const owner = String(aiConversation?.owner || '').toUpperCase();
+    if (owner === 'HUMAN' || aiConversation.status === 'human_active' || aiConversation.status === 'human_required') {
+      const timeoutMinutes = getHandoffTimeoutMinutes(settings);
+      const resumeAt = getConversationResumeAt(aiConversation, timeoutMinutes);
+      const resumeAtMs = resumeAt ? new Date(resumeAt).getTime() : Number.NaN;
+      const autoResumeEnabled = settings?.auto_resume_human_handoff !== false && shouldAutoResumeManualPause() !== false;
+      const actionableCustomerIntent = isActionableCustomerIntent(text);
+      const explicitReactivationIntent = isExplicitCustomerReactivationIntent(text);
       const shouldResume =
-        shouldAutoResumeManualPause() &&
-        minutesSince(pausedAt) >= manualPauseMinutes() &&
-        isActionableCustomerIntent(text);
+        autoResumeEnabled &&
+        actionableCustomerIntent &&
+        (
+          explicitReactivationIntent ||
+          actionableCustomerIntent ||
+          (Number.isFinite(resumeAtMs) && resumeAtMs <= Date.now()) ||
+          (!resumeAt && minutesSince(aiConversation?.metadata?.pausedAt || aiConversation?.last_message_at) >= timeoutMinutes)
+        );
 
       if (shouldResume) {
-        await updatePopAiConversationStatus(supabase, aiConversation.id, 'ai_active', {
-          reason: 'auto_resume_after_human_pause',
+        await markPopAiResumed(supabase, aiConversation, {
+          ...(aiConversation?.metadata || {}),
+          reason: explicitReactivationIntent ? 'auto_resume_by_explicit_customer_request' : 'auto_resume_after_human_pause',
           previousStatus: aiConversation.status,
-          manualPauseMinutes: manualPauseMinutes(),
+          previousOwner: owner || null,
+          manualPauseMinutes: timeoutMinutes,
           resumedAt: new Date().toISOString()
         });
-        aiConversation = { ...aiConversation, status: 'ai_active' };
+        aiConversation = { ...aiConversation, status: 'ai_active', owner: 'AI' };
       } else {
         await savePopAiMessage(supabase, aiConversation, 'user', text, {
           skipped: true,
-          reason: 'human_conversation_active'
+          reason: 'human_conversation_active',
+          resumeAt,
+          timeoutMinutes,
+          actionableCustomerIntent,
+          explicitReactivationIntent
         });
         await logPopAiAction(supabase, restaurantId, aiConversation.id, 'incoming_ignored_human_active', {
           instanceName: params.instanceName,
           phone,
           textPreview: text.slice(0, 180),
-          status: aiConversation.status
+          status: aiConversation.status,
+          owner,
+          resumeAt,
+          timeoutMinutes,
+          actionableCustomerIntent,
+          explicitReactivationIntent
         });
         return { ok: true, skipped: true, reason: 'bot_paused', aiConversationId: aiConversation.id, status: 'human_active' };
       }
