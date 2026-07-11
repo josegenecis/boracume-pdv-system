@@ -31,6 +31,9 @@ const normalizeCpfCnpj = (value: unknown) => {
 
 const isBillingDocumentError = (message: string) => /cpf|cnpj/i.test(message);
 
+const isRemovedCustomerError = (message: string) =>
+  /cliente removido|customer.*(removed|deleted)|deleted customer/i.test(message);
+
 const addDays = (days: number) => {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -154,7 +157,7 @@ serve(async (req) => {
       throw new Error("Para criar esta cobrança é necessário preencher o CPF ou CNPJ do cliente.");
     }
 
-    if (!customerId) {
+    const createCustomer = async () => {
       const customer = await asaasFetch("/customers", {
         method: "POST",
         body: JSON.stringify({
@@ -164,25 +167,37 @@ serve(async (req) => {
           externalReference: user.id,
         }),
       });
-      customerId = customer.id;
+      return customer.id as string;
+    };
+
+    if (!customerId) {
+      customerId = await createCustomer();
     } else {
-      await asaasFetch(`/customers/${encodeURIComponent(customerId)}`, {
-        method: "POST",
-        body: JSON.stringify({
-          name: customerName,
-          email: user.email,
-          cpfCnpj: billingDocument,
-        }),
-      }).catch((updateError) => {
-        console.warn("Não foi possível atualizar o cliente no Asaas:", updateError);
-      });
+      try {
+        await asaasFetch(`/customers/${encodeURIComponent(customerId)}`, {
+          method: "POST",
+          body: JSON.stringify({
+            name: customerName,
+            email: user.email,
+            cpfCnpj: billingDocument,
+          }),
+        });
+      } catch (updateError) {
+        const updateMessage = updateError instanceof Error ? updateError.message : String(updateError);
+        if (isRemovedCustomerError(updateMessage)) {
+          console.warn("Cliente anterior foi removido no Asaas; criando um novo cadastro.");
+          customerId = await createCustomer();
+        } else {
+          console.warn("Não foi possível atualizar o cliente no Asaas:", updateError);
+        }
+      }
     }
 
     const billingType = String(body.billingType || Deno.env.get("ASAAS_BILLING_TYPE") || "UNDEFINED").toUpperCase();
     const dueDays = Math.max(0, Number(Deno.env.get("ASAAS_DUE_DAYS") || 1));
     const nextDueDate = String(body.nextDueDate || addDays(dueDays));
 
-    const asaasSubscription = await asaasFetch("/subscriptions", {
+    const createSubscription = () => asaasFetch("/subscriptions", {
       method: "POST",
       body: JSON.stringify({
         customer: customerId,
@@ -194,6 +209,20 @@ serve(async (req) => {
         externalReference: `${user.id}:${plan.id}:${Date.now()}`,
       }),
     });
+
+    let asaasSubscription;
+    try {
+      asaasSubscription = await createSubscription();
+    } catch (subscriptionError) {
+      const subscriptionMessage = subscriptionError instanceof Error
+        ? subscriptionError.message
+        : String(subscriptionError);
+      if (!isRemovedCustomerError(subscriptionMessage)) throw subscriptionError;
+
+      console.warn("Cliente foi removido no Asaas durante a cobrança; recriando o cadastro.");
+      customerId = await createCustomer();
+      asaasSubscription = await createSubscription();
+    }
 
     const payments = await asaasFetch(`/payments?subscription=${encodeURIComponent(asaasSubscription.id)}&limit=1`);
     const payment = Array.isArray(payments?.data) ? payments.data[0] : null;
