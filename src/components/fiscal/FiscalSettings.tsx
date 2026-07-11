@@ -67,6 +67,7 @@ type CnpjRegistrationData = {
 type FiscalReadiness = {
   ready: boolean;
   pilot?: string;
+  scope?: string;
   ambiente?: string;
   uf?: string;
   checklist?: {
@@ -115,16 +116,6 @@ const validateLocalFiscalSettings = (settings: FiscalConfig): string[] => {
     }
     if (!onlyDigits(settings.inscricao_estadual)) {
       errors.push('Inscricao Estadual e obrigatoria para NFC-e no Ceara.');
-    }
-  }
-
-  if (settings.ativo) {
-    const cscId = String(settings.csc_id || '').trim();
-    if (!/^\d{1,6}$/.test(cscId)) {
-      errors.push('O CSC ID deve ser apenas o numero identificador do token, normalmente 1 ou 2. O codigo grande da Sefaz deve ficar em CSC Token.');
-    }
-    if (!String(settings.csc_token || '').trim()) {
-      errors.push('Informe o CSC Token fornecido pela Sefaz.');
     }
   }
 
@@ -654,9 +645,9 @@ const FiscalSettings: React.FC = () => {
       setReadiness(data as FiscalReadiness);
 
       toast({
-        title: data?.ready ? 'Fiscal CE pronto para teste' : 'Ainda falta ajustar o fiscal',
+        title: data?.ready ? `Fiscal ${settings.endereco_uf} pronto para teste` : 'Ainda falta ajustar o fiscal',
         description: data?.ready
-          ? 'A configuração passou na validação inicial do piloto Ceará.'
+          ? 'A configuração passou na validação técnica inicial para homologação.'
           : (data?.checklist?.errors?.[0] || 'Veja os pontos pendentes no checklist.'),
         variant: data?.ready ? 'default' : 'destructive'
       });
@@ -798,7 +789,6 @@ const FiscalSettings: React.FC = () => {
   const renderCeReadinessSection = () => {
     const errors = readiness?.checklist?.errors || [];
     const warnings = readiness?.checklist?.warnings || [];
-    const isCe = settings.endereco_uf === 'CE';
 
     return (
       <div className={`rounded-2xl border p-4 ${readiness?.ready ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
@@ -810,19 +800,14 @@ const FiscalSettings: React.FC = () => {
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
             )}
             <div>
-              <h3 className="text-lg font-medium">Piloto NFC-e Ceará</h3>
+              <h3 className="text-lg font-medium">Diagnóstico NFC-e por estado</h3>
               <p className="mt-1 text-sm text-slate-700">
-                Este primeiro emissor próprio está preparado para validar empresas do CE antes de testar envio na Sefaz.
+                Valida cadastro, certificado A1, endpoints e requisitos técnicos da UF selecionada antes do teste na SEFAZ.
               </p>
-              {!isCe && (
-                <p className="mt-2 text-sm font-medium text-amber-800">
-                  Selecione UF CE para usar o piloto fiscal sem gateway.
-                </p>
-              )}
             </div>
           </div>
           <Button onClick={validateFiscalReadiness} disabled={loading} variant="outline">
-            Validar fiscal CE
+            Validar fiscal {settings.endereco_uf || 'UF'}
           </Button>
         </div>
 
@@ -833,7 +818,7 @@ const FiscalSettings: React.FC = () => {
                 Status: {readiness.ready ? 'Pronto para teste em homologação' : 'Ajustes pendentes'}
               </div>
               <div className="text-slate-600">
-                UF: {readiness.uf || '--'} | Ambiente: {readiness.ambiente || '--'} | Piloto: {readiness.pilot || 'CE'}
+                UF: {readiness.uf || '--'} | Ambiente: {readiness.ambiente || '--'} | Escopo: {readiness.scope || 'NFC-e 65'}
               </div>
             </div>
 
@@ -1093,7 +1078,7 @@ const FiscalSettings: React.FC = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="1">Simples Nacional</SelectItem>
-                        <SelectItem value="3">Regime Normal</SelectItem>
+                        <SelectItem value="3" disabled>Regime Normal (aguardando homologação)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1116,9 +1101,14 @@ const FiscalSettings: React.FC = () => {
                 </div>
               </div>
 
-              {/* CSC - Código de Segurança do Contribuinte */}
+              {/* CSC legado - opcional no QR Code v3 online */}
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">CSC - Código de Segurança</h3>
+                <div>
+                  <h3 className="text-lg font-medium">CSC legado (opcional)</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    O QR Code v3 online dispensa CSC. Preencha apenas para compatibilidade solicitada pela SEFAZ ou pelo especialista fiscal.
+                  </p>
+                </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

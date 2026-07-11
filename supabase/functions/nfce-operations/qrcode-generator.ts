@@ -1,6 +1,3 @@
-import forge from 'npm:node-forge@1.3.1';
-
-const NFE_TIMEZONE = 'America/Fortaleza';
 type AmbienteNFCe = 'producao' | 'homologacao';
 
 const QR_CODE_URLS: Record<AmbienteNFCe, Record<string, string>> = {
@@ -78,17 +75,8 @@ export function generateQRCodeData(
   const tpAmb = ambiente === 'producao' ? '1' : '2';
   const cleanChaveAcesso = onlyDigits(chaveAcesso);
 
-  if (!cscId || !cscToken) {
-    throw new Error('CSC ID e CSC Token sao obrigatorios para gerar QR Code da NFC-e');
-  }
-
-  const cIdToken = normalizeCscId(cscId);
-  const cleanCscToken = String(cscToken || '').trim();
-  const fields = [cleanChaveAcesso, '2', tpAmb, cIdToken];
-  const sha1 = forge.md.sha1.create();
-  sha1.update(fields.join('|') + cleanCscToken, 'utf8');
-  const hash = sha1.digest().toHex().toUpperCase();
-  const p = [...fields, hash].join('|');
+  // NT 2025.001 v1.03: NFC-e online no QR Code v3 dispensa CSC e hash.
+  const p = [cleanChaveAcesso, '3', tpAmb].join('|');
 
   return `${getQRCodeBaseUrl(uf, ambiente)}?p=${p}`;
 }
@@ -120,52 +108,10 @@ export function validateQRCodeMatchesAccessKey(qrCodeUrl: string, chaveAcesso: s
   }
 }
 
-function normalizeCscId(value?: string): string {
-  const id = onlyDigits(value);
-  if (!/^\d{1,6}$/.test(id)) {
-    throw new Error('CSC ID invalido. Informe apenas o identificador numerico do CSC, normalmente 1 ou 2. O codigo grande da Sefaz deve ficar no campo CSC Token.');
-  }
-  return id;
-}
-
 function normalizeQRCodeBaseUrl(value: string): string {
   let url = String(value || '').trim();
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
   }
   return url.replace(/[?&]+$/g, '');
-}
-
-function toHex(value: string): string {
-  return Array.from(new TextEncoder().encode(value))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
-    .toUpperCase();
-}
-
-function getNfeDateParts(date: Date) {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: NFE_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  });
-  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
-  return {
-    year: parts.year || String(date.getUTCFullYear()),
-    month: parts.month || String(date.getUTCMonth() + 1).padStart(2, '0'),
-    day: parts.day || String(date.getUTCDate()).padStart(2, '0'),
-    hour: parts.hour === '24' ? '00' : (parts.hour || '00'),
-    minute: parts.minute || '00',
-    second: parts.second || '00',
-  };
-}
-
-function formatNfeDate(date: Date): string {
-  const parts = getNfeDateParts(date);
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}-03:00`;
 }

@@ -127,6 +127,7 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
     const dataEmissao = new Date();
     const chaveAcesso = await generateAccessKey(supabase, fiscalSettings, numeroNFCe, dataEmissao);
     const fiscalItems = buildFiscalItems(orderItems, fiscalSettings, productFiscalById);
+    validateFiscalItemsForEmission(fiscalItems, fiscalSettings);
     const deliveryFee = money(order.delivery_fee || 0);
     const totalProdutos = money(fiscalItems.reduce((sum, item) => sum + item.valor_total, 0));
     const valorTotal = money(order.total || totalProdutos + deliveryFee);
@@ -371,7 +372,7 @@ async function validarConfiguracaoFiscal(supabase: any, userId: string) {
   return json({
     success: ready,
     ready,
-    pilot: 'CE',
+    scope: 'NFC-e 65 / Simples Nacional',
     ambiente: fiscalSettings.ambiente,
     uf: fiscalSettings.endereco_uf,
     checklist,
@@ -523,7 +524,7 @@ function buildFiscalReadiness(settings: any) {
   const requiredFields = [
     'cnpj', 'razao_social', 'endereco_logradouro', 'endereco_numero', 'endereco_bairro',
     'endereco_municipio', 'endereco_uf', 'endereco_cep', 'codigo_municipio',
-    'nfce_serie', 'nfce_numero_atual', 'csc_id', 'csc_token',
+    'nfce_serie', 'nfce_numero_atual',
   ];
   for (const field of requiredFields) {
     if (!String(settings[field] || '').trim()) errors.push(`Campo obrigatorio ausente: ${field}`);
@@ -555,6 +556,9 @@ function buildFiscalReadiness(settings: any) {
     try {
       getSefazEndpoint(uf, ambiente, 'status');
       getSefazEndpoint(uf, ambiente, 'autorizacao');
+      getSefazEndpoint(uf, ambiente, 'retAutorizacao');
+      getSefazEndpoint(uf, ambiente, 'consulta');
+      getSefazEndpoint(uf, ambiente, 'evento');
       getQRCodeBaseUrl(uf, ambiente);
     } catch (error) {
       errors.push(getErrorMessage(error));
@@ -568,8 +572,9 @@ function buildFiscalReadiness(settings: any) {
   const nextNumber = Number(settings.nfce_numero_atual);
   if (!Number.isInteger(nextNumber) || nextNumber < 1) errors.push('Proximo numero da NFC-e deve ser maior que zero');
   if (!String(settings.ambiente || '').match(/^(homologacao|producao)$/)) errors.push('Ambiente fiscal invalido');
-  if (!onlyDigits(settings.csc_id)) errors.push('CSC ID deve ser numerico');
-  if (String(settings.csc_token || '').trim().length < 8) warnings.push('Confira se o CSC Token esta completo antes de emitir em producao');
+  if (!settings.csc_id || !settings.csc_token) {
+    warnings.push('CSC não informado: o emissor usará QR Code v3 online, que dispensa CSC conforme NT 2025.001.');
+  }
   if (!settings.certificado_a1_base64 || !settings.certificado_senha) errors.push('Certificado A1 e senha sao obrigatorios');
   if (settings.ambiente === 'producao') {
     warnings.push('Producao exige credenciamento NFC-e ativo na Sefaz da UF e CSC de producao. Teste primeiro em homologacao.');
@@ -682,6 +687,40 @@ function buildCofinsXml(item: any) {
   return `<COFINS><COFINSOutr><CST>${cst}</CST><vBC>0.00</vBC><pCOFINS>0.0000</pCOFINS><vCOFINS>0.00</vCOFINS></COFINSOutr></COFINS>`;
 }
 
+function buildIcmsXml(item: any) {
+  const csosn = String(item.cst_icms || '').replace(/\D/g, '').padStart(3, '0').slice(0, 3);
+  const origem = String(item.origem || '0').replace(/\D/g, '').slice(0, 1) || '0';
+  if (['102', '103', '300', '400'].includes(csosn)) {
+    return `<ICMS><ICMSSN102><orig>${origem}</orig><CSOSN>${csosn}</CSOSN></ICMSSN102></ICMS>`;
+  }
+  if (csosn === '500') {
+    return `<ICMS><ICMSSN500><orig>${origem}</orig><CSOSN>500</CSOSN><vBCSTRet>0.00</vBCSTRet><pST>0.0000</pST><vICMSSubstituto>0.00</vICMSSubstituto><vICMSSTRet>0.00</vICMSSTRet></ICMSSN500></ICMS>`;
+  }
+  throw new Error(`CSOSN ${csosn || '(vazio)'} ainda não está homologado no motor fiscal. Revise a tributação do produto.`);
+}
+
+function validateFiscalItemsForEmission(items: any[], settings: any) {
+  const crt = Number(settings.regime_tributario || 0);
+  if (crt !== 1) {
+    throw new Error('O emissor próprio está liberado nesta fase somente para CRT 1 (Simples Nacional). Regime normal exige homologação do especialista fiscal.');
+  }
+
+  const errors: string[] = [];
+  for (const [index, item] of items.entries()) {
+    const label = `Item ${index + 1} (${item.descricao || item.codigo_produto})`;
+    if (!/^\d{8}$/.test(String(item.ncm || ''))) errors.push(`${label}: NCM deve ter 8 dígitos`);
+    if (!/^\d{4}$/.test(String(item.cfop || ''))) errors.push(`${label}: CFOP deve ter 4 dígitos`);
+    if (!/^\d{3}$/.test(String(item.cst_icms || ''))) errors.push(`${label}: CSOSN deve ter 3 dígitos`);
+    if (!['102', '103', '300', '400', '500'].includes(String(item.cst_icms || ''))) {
+      errors.push(`${label}: CSOSN ${item.cst_icms || '(vazio)'} ainda não homologado`);
+    }
+    if (!/^\d{2}$/.test(String(item.cst_pis || ''))) errors.push(`${label}: CST PIS deve ter 2 dígitos`);
+    if (!/^\d{2}$/.test(String(item.cst_cofins || ''))) errors.push(`${label}: CST COFINS deve ter 2 dígitos`);
+    if (item.cest && !/^\d{7}$/.test(String(item.cest))) errors.push(`${label}: CEST deve ter 7 dígitos`);
+  }
+  if (errors.length) throw new Error(`Cadastro fiscal dos produtos incompleto: ${errors.slice(0, 5).join('; ')}`);
+}
+
 function generateNFCeXML(input: {
   fiscalSettings: any;
   cupom: any;
@@ -721,7 +760,7 @@ function generateNFCeXML(input: {
     const cestXml = item.cest ? `<CEST>${escapeXml(item.cest)}</CEST>` : '';
     const benefitXml = item.cbenef ? `<cBenef>${escapeXml(item.cbenef)}</cBenef>` : '';
     const additionalXml = item.informacoes_adicionais ? `<infAdProd>${escapeXml(item.informacoes_adicionais)}</infAdProd>` : '';
-    return `<det nItem="${index + 1}"><prod><cProd>${escapeXml(item.codigo_produto)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${escapeXml(productName)}</xProd><NCM>${item.ncm}</NCM>${cestXml}${benefitXml}<CFOP>${item.cfop}</CFOP><uCom>${escapeXml(item.unidade)}</uCom><qCom>${fixed4(item.quantidade)}</qCom><vUnCom>${fixed4(item.valor_unitario)}</vUnCom><vProd>${fixed2(item.valor_total)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>${escapeXml(item.unidade)}</uTrib><qTrib>${fixed4(item.quantidade)}</qTrib><vUnTrib>${fixed4(item.valor_unitario)}</vUnTrib><indTot>1</indTot></prod><imposto><vTotTrib>${fixed2(item.valor_total * 0.0765)}</vTotTrib><ICMS><ICMSSN102><orig>${item.origem}</orig><CSOSN>${item.cst_icms}</CSOSN></ICMSSN102></ICMS>${buildPisXml(item)}${buildCofinsXml(item)}</imposto>${additionalXml}</det>`;
+    return `<det nItem="${index + 1}"><prod><cProd>${escapeXml(item.codigo_produto)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${escapeXml(productName)}</xProd><NCM>${item.ncm}</NCM>${cestXml}${benefitXml}<CFOP>${item.cfop}</CFOP><uCom>${escapeXml(item.unidade)}</uCom><qCom>${fixed4(item.quantidade)}</qCom><vUnCom>${fixed4(item.valor_unitario)}</vUnCom><vProd>${fixed2(item.valor_total)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>${escapeXml(item.unidade)}</uTrib><qTrib>${fixed4(item.quantidade)}</qTrib><vUnTrib>${fixed4(item.valor_unitario)}</vUnTrib><indTot>1</indTot></prod><imposto><vTotTrib>${fixed2(item.valor_total * 0.0765)}</vTotTrib>${buildIcmsXml(item)}${buildPisXml(item)}${buildCofinsXml(item)}</imposto>${additionalXml}</det>`;
   }).join('');
 
   const destXml = consumidorDoc
