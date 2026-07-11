@@ -24,6 +24,8 @@ const money = (value: unknown) => Number(Number(value || 0).toFixed(2));
 
 const onlyDigits = (value: unknown) => String(value || "").replace(/\D/g, "");
 
+const today = () => new Date().toISOString().slice(0, 10);
+
 const normalizeCpfCnpj = (value: unknown) => {
   const digits = onlyDigits(value);
   return digits.length === 11 || digits.length === 14 ? digits : null;
@@ -33,12 +35,6 @@ const isBillingDocumentError = (message: string) => /cpf|cnpj/i.test(message);
 
 const isRemovedCustomerError = (message: string) =>
   /cliente removido|customer.*(removed|deleted)|deleted customer/i.test(message);
-
-const addDays = (days: number) => {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-};
 
 const getAsaasBaseUrl = () => {
   const env = (Deno.env.get("ASAAS_ENVIRONMENT") || "production").toLowerCase();
@@ -105,12 +101,22 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const planId = Number(body.planId || 2);
     const storeCount = Math.max(1, Number(body.storeCount || 1));
+    const paymentMethod = String(body.paymentMethod || "PIX").toUpperCase();
+    if (!new Set(["PIX", "CREDIT_CARD"]).has(paymentMethod)) {
+      throw new Error("Forma de pagamento inválida. Escolha PIX ou cartão de crédito.");
+    }
     const metadata = (user.user_metadata || {}) as Record<string, unknown>;
 
     const { data: fiscalSettings } = await supabaseAdmin
       .from("fiscal_settings")
-      .select("cnpj,razao_social,nome_fantasia")
+      .select("cnpj,razao_social,nome_fantasia,endereco_cep,endereco_numero,endereco_complemento")
       .eq("user_id", user.id)
+      .maybeSingle();
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("phone")
+      .eq("id", user.id)
       .maybeSingle();
 
     const customerName = String(
@@ -193,9 +199,38 @@ serve(async (req) => {
       }
     }
 
-    const billingType = String(body.billingType || Deno.env.get("ASAAS_BILLING_TYPE") || "UNDEFINED").toUpperCase();
-    const dueDays = Math.max(0, Number(Deno.env.get("ASAAS_DUE_DAYS") || 1));
-    const nextDueDate = String(body.nextDueDate || addDays(dueDays));
+    const billingType = paymentMethod;
+    const nextDueDate = String(body.nextDueDate || today());
+
+    const creditCard = paymentMethod === "CREDIT_CARD" ? {
+      holderName: String(body.creditCard?.holderName || "").trim(),
+      number: onlyDigits(body.creditCard?.number),
+      expiryMonth: onlyDigits(body.creditCard?.expiryMonth).padStart(2, "0"),
+      expiryYear: onlyDigits(body.creditCard?.expiryYear),
+      ccv: onlyDigits(body.creditCard?.ccv),
+    } : null;
+
+    const creditCardHolderInfo = paymentMethod === "CREDIT_CARD" ? {
+      name: String(body.creditCardHolderInfo?.name || creditCard?.holderName || customerName).trim(),
+      email: String(body.creditCardHolderInfo?.email || user.email || "").trim(),
+      cpfCnpj: normalizeCpfCnpj(body.creditCardHolderInfo?.cpfCnpj) || billingDocument,
+      postalCode: onlyDigits(body.creditCardHolderInfo?.postalCode || fiscalSettings?.endereco_cep),
+      addressNumber: String(body.creditCardHolderInfo?.addressNumber || fiscalSettings?.endereco_numero || "").trim(),
+      addressComplement: String(body.creditCardHolderInfo?.addressComplement || fiscalSettings?.endereco_complemento || "").trim() || null,
+      mobilePhone: onlyDigits(body.creditCardHolderInfo?.mobilePhone || profile?.phone),
+    } : null;
+
+    if (creditCard) {
+      if (creditCard.number.length < 13 || creditCard.number.length > 19) throw new Error("Número do cartão inválido.");
+      if (!creditCard.holderName) throw new Error("Informe o nome impresso no cartão.");
+      if (!/^(0[1-9]|1[0-2])$/.test(creditCard.expiryMonth) || creditCard.expiryYear.length !== 4) {
+        throw new Error("Validade do cartão inválida.");
+      }
+      if (creditCard.ccv.length < 3 || creditCard.ccv.length > 4) throw new Error("Código de segurança inválido.");
+      if (!creditCardHolderInfo?.postalCode || !creditCardHolderInfo.addressNumber || !creditCardHolderInfo.mobilePhone) {
+        throw new Error("Informe CEP, número do endereço e celular do titular do cartão.");
+      }
+    }
 
     const createSubscription = () => asaasFetch("/subscriptions", {
       method: "POST",
@@ -207,6 +242,7 @@ serve(async (req) => {
         cycle: "MONTHLY",
         description: `PopSystem ${plan.name}${plan.id === 3 ? ` - ${storeCount} loja(s)` : ""}`,
         externalReference: `${user.id}:${plan.id}:${Date.now()}`,
+        ...(creditCard ? { creditCard, creditCardHolderInfo } : {}),
       }),
     });
 
@@ -224,9 +260,16 @@ serve(async (req) => {
       asaasSubscription = await createSubscription();
     }
 
-    const payments = await asaasFetch(`/payments?subscription=${encodeURIComponent(asaasSubscription.id)}&limit=1`);
-    const payment = Array.isArray(payments?.data) ? payments.data[0] : null;
-    const paymentUrl = payment?.invoiceUrl || payment?.bankSlipUrl || asaasSubscription?.invoiceUrl || null;
+    let payment = null;
+    for (let attempt = 0; attempt < 4 && !payment; attempt += 1) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 350));
+      const payments = await asaasFetch(`/subscriptions/${encodeURIComponent(asaasSubscription.id)}/payments?limit=1`);
+      payment = Array.isArray(payments?.data) ? payments.data[0] : null;
+    }
+    if (!payment?.id) throw new Error("A assinatura foi criada, mas a primeira cobrança ainda não foi disponibilizada pelo Asaas.");
+    const pix = paymentMethod === "PIX" && payment?.id
+      ? await asaasFetch(`/payments/${encodeURIComponent(payment.id)}/pixQrCode`)
+      : null;
 
     const periodStart = new Date();
     const periodEnd = new Date();
@@ -263,8 +306,12 @@ serve(async (req) => {
       subscriptionId: asaasSubscription.id,
       paymentId: payment?.id || null,
       value,
-      paymentUrl,
-      invoiceUrl: paymentUrl,
+      paymentMethod,
+      pix: pix ? {
+        encodedImage: pix.encodedImage,
+        payload: pix.payload,
+        expirationDate: pix.expirationDate,
+      } : null,
       status: payment?.status || asaasSubscription?.status || "PENDING",
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

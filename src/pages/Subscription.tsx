@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Check, Clock, AlertTriangle, Crown, ArrowRight, Store, ExternalLink } from 'lucide-react';
+import { Check, Clock, AlertTriangle, Crown, ArrowRight, Store, CreditCard, QrCode, Copy } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -20,16 +20,38 @@ const isValidCpfCnpj = (value: string) => {
   return digits.length === 11 || digits.length === 14;
 };
 
+type PaymentMethod = 'PIX' | 'CREDIT_CARD';
+
+type CheckoutPlan = {
+  planId: number;
+  storeCount: number;
+  planName: string;
+  value: number;
+};
+
+const emptyCardForm = {
+  holderName: '',
+  number: '',
+  expiryMonth: '',
+  expiryYear: '',
+  ccv: '',
+  postalCode: '',
+  addressNumber: '',
+  mobilePhone: '',
+};
+
 const Subscription = () => {
   const { subscription, refreshSubscription, user } = useAuth();
   const { toast } = useToast();
   const [loadingPlanId, setLoadingPlanId] = useState<number | null>(null);
   const [storeCounts, setStoreCounts] = useState<Record<number, number>>({ 3: 1 });
-  const [paymentFrameUrl, setPaymentFrameUrl] = useState<string | null>(null);
-  const [paymentSummary, setPaymentSummary] = useState<{ planName: string; value: number } | null>(null);
+  const [checkoutPlan, setCheckoutPlan] = useState<CheckoutPlan | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
+  const [pixPayment, setPixPayment] = useState<{ encodedImage: string; payload: string; expirationDate?: string } | null>(null);
+  const [creditPaymentComplete, setCreditPaymentComplete] = useState(false);
+  const [cardForm, setCardForm] = useState(emptyCardForm);
+  const [checkoutError, setCheckoutError] = useState('');
   const [billingDocument, setBillingDocument] = useState('');
-  const [billingDocumentError, setBillingDocumentError] = useState('');
-  const [pendingBillingPlan, setPendingBillingPlan] = useState<{ planId: number; storeCount: number } | null>(null);
 
   useEffect(() => {
     refreshSubscription();
@@ -48,7 +70,24 @@ const Subscription = () => {
 
   const formatCurrency = (value: number) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 
-  const handleSubscribeAsaas = async (planId: number, storeCount = 1, documentOverride?: string) => {
+  const openCheckout = (planId: number, storeCount = 1) => {
+    const plan = getPlanCatalogItem(planId);
+    if (!plan) return;
+    const additionalStores = Math.max(0, storeCount - plan.includedStores);
+    setCheckoutPlan({
+      planId,
+      storeCount,
+      planName: plan.name,
+      value: plan.monthlyPrice + additionalStores * Number(plan.extraStorePrice || 0),
+    });
+    setPaymentMethod('PIX');
+    setPixPayment(null);
+    setCreditPaymentComplete(false);
+    setCheckoutError('');
+  };
+
+  const handleSubscribeAsaas = async () => {
+    if (!checkoutPlan) return;
     if (!user) {
       toast({
         title: "Erro",
@@ -58,75 +97,83 @@ const Subscription = () => {
       return;
     }
 
-    setLoadingPlanId(planId);
+    if (!isValidCpfCnpj(billingDocument)) {
+      setCheckoutError('Informe um CPF com 11 números ou CNPJ com 14 números.');
+      return;
+    }
+
+    if (paymentMethod === 'CREDIT_CARD') {
+      const requiredCardFields = Object.values(cardForm).every((value) => value.trim());
+      if (!requiredCardFields) {
+        setCheckoutError('Preencha todos os dados do cartão e do titular.');
+        return;
+      }
+    }
+
+    setCheckoutError('');
+    setLoadingPlanId(checkoutPlan.planId);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-subscription', {
         body: {
-          planId,
-          storeCount,
-          billingDocument: documentOverride ? onlyDigits(documentOverride) : undefined,
+          planId: checkoutPlan.planId,
+          storeCount: checkoutPlan.storeCount,
+          paymentMethod,
+          billingDocument: onlyDigits(billingDocument),
+          ...(paymentMethod === 'CREDIT_CARD' ? {
+            creditCard: {
+              holderName: cardForm.holderName,
+              number: onlyDigits(cardForm.number),
+              expiryMonth: onlyDigits(cardForm.expiryMonth),
+              expiryYear: onlyDigits(cardForm.expiryYear),
+              ccv: onlyDigits(cardForm.ccv),
+            },
+            creditCardHolderInfo: {
+              name: cardForm.holderName,
+              cpfCnpj: onlyDigits(billingDocument),
+              postalCode: onlyDigits(cardForm.postalCode),
+              addressNumber: cardForm.addressNumber,
+              mobilePhone: onlyDigits(cardForm.mobilePhone),
+            },
+          } : {}),
         }
       });
 
       if (error) {
         let message = error.message;
-        let needsBillingDocument = false;
         const context = (error as any).context;
         if (context?.json) {
           const body = await context.json().catch(() => null);
           message = body?.message || body?.error || message;
-          needsBillingDocument = Boolean(body?.needsBillingDocument);
-        }
-
-        if (needsBillingDocument || /cpf|cnpj/i.test(message)) {
-          setPendingBillingPlan({ planId, storeCount });
-          setBillingDocument(documentOverride || billingDocument);
-          setBillingDocumentError('Informe o CPF ou CNPJ do cliente para gerar a cobrança.');
-          return;
         }
         throw new Error(message);
       }
 
-      const paymentUrl = data?.paymentUrl || data?.invoiceUrl || data?.url;
-      if (paymentUrl) {
-        const plan = getPlanCatalogItem(planId);
-        setPaymentSummary({
-          planName: plan?.name || 'Plano PopSystem',
-          value: Number(data?.value || plan?.monthlyPrice || 0)
-        });
-        setPaymentFrameUrl(paymentUrl);
+      if (paymentMethod === 'PIX') {
+        if (!data?.pix?.encodedImage || !data?.pix?.payload) {
+          throw new Error('O Asaas criou a cobrança, mas ainda não disponibilizou o QR Code. Tente novamente em instantes.');
+        }
+        setPixPayment(data.pix);
       } else {
+        setCreditPaymentComplete(true);
         toast({
-          title: "Assinatura criada",
-          description: "A cobrança foi registrada no Asaas. Assim que o pagamento for confirmado, o plano será liberado.",
+          title: "Pagamento enviado",
+          description: "O cartão foi processado. A confirmação do Asaas liberará o plano automaticamente.",
         });
         await refreshSubscription();
       }
     } catch (error: any) {
       console.error('Erro ao criar assinatura:', error);
       const errorMessage = error?.message || "Nao foi possivel criar a cobrança no Asaas. Tente novamente.";
-      toast({
-        title: "Erro ao criar cobrança",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      setCheckoutError(errorMessage);
     } finally {
       setLoadingPlanId(null);
     }
   };
 
-  const handleBillingDocumentSubmit = () => {
-    if (!pendingBillingPlan) return;
-
-    if (!isValidCpfCnpj(billingDocument)) {
-      setBillingDocumentError('Digite um CPF com 11 números ou CNPJ com 14 números.');
-      return;
-    }
-
-    const plan = pendingBillingPlan;
-    setBillingDocumentError('');
-    setPendingBillingPlan(null);
-    handleSubscribeAsaas(plan.planId, plan.storeCount, billingDocument);
+  const copyPixCode = async () => {
+    if (!pixPayment?.payload) return;
+    await navigator.clipboard.writeText(pixPayment.payload);
+    toast({ title: 'Código PIX copiado' });
   };
 
   const getPlanDisplay = (plan: PlanCatalogItem) => {
@@ -217,7 +264,7 @@ const Subscription = () => {
         {days <= 3 && (
           <CardFooter>
             <Button 
-              onClick={() => handleSubscribeAsaas(2)} 
+              onClick={() => openCheckout(2)}
               className="w-full bg-amber-600 hover:bg-amber-700"
               disabled={loadingPlanId !== null}
             >
@@ -433,7 +480,7 @@ const Subscription = () => {
                 <CardFooter className="pb-6 pt-4">
                   <Button
                     className={`w-full rounded-2xl text-base font-semibold text-white ${display.palette.button}`}
-                    onClick={() => handleSubscribeAsaas(plan.id, selectedStores)}
+                    onClick={() => openCheckout(plan.id, selectedStores)}
                     disabled={loadingPlanId !== null || isCurrentPlan}
                     variant={isCurrentPlan ? "outline" : "default"}
                     size="lg"
@@ -462,7 +509,7 @@ const Subscription = () => {
                   Mantenha todas as funcionalidades ativas escolhendo um plano hoje mesmo.
                 </p>
                 <Button 
-                  onClick={() => handleSubscribeAsaas(2)} 
+                  onClick={() => openCheckout(2)}
                   variant="secondary" 
                   size="lg"
                   disabled={loadingPlanId !== null}
@@ -474,93 +521,140 @@ const Subscription = () => {
             </CardContent>
           </Card>
         )}
-        <Dialog open={Boolean(pendingBillingPlan)} onOpenChange={(open) => {
+        <Dialog open={Boolean(checkoutPlan)} onOpenChange={(open) => {
           if (!open) {
-            setPendingBillingPlan(null);
-            setBillingDocumentError('');
+            setCheckoutPlan(null);
+            setPixPayment(null);
+            setCreditPaymentComplete(false);
+            setCheckoutError('');
+            setCardForm(emptyCardForm);
           }
         }}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Informe CPF ou CNPJ</DialogTitle>
-              <DialogDescription>
-                O Asaas precisa desse dado para criar a cobrança do plano.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-[#003223]">
-                  CPF ou CNPJ do cliente
-                </label>
-                <Input
-                  value={billingDocument}
-                  onChange={(event) => {
-                    setBillingDocument(event.target.value);
-                    setBillingDocumentError('');
-                  }}
-                  placeholder="Digite somente números"
-                  inputMode="numeric"
-                  autoFocus
-                />
-                {billingDocumentError && (
-                  <p className="mt-2 text-sm font-medium text-red-600">{billingDocumentError}</p>
-                )}
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setPendingBillingPlan(null);
-                    setBillingDocumentError('');
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  className="bg-[#003223] hover:bg-[#0b4733]"
-                  onClick={handleBillingDocumentSubmit}
-                  disabled={loadingPlanId !== null}
-                >
-                  Criar cobrança
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={Boolean(paymentFrameUrl)} onOpenChange={(open) => {
-          if (!open) {
-            setPaymentFrameUrl(null);
-            setPaymentSummary(null);
-          }
-        }}>
-          <DialogContent className="max-w-lg overflow-hidden p-0">
+          <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto p-0">
             <DialogHeader className="border-b px-6 py-4 text-left">
-              <DialogTitle>Pagamento pelo Asaas</DialogTitle>
+              <DialogTitle>Finalizar assinatura</DialogTitle>
               <DialogDescription>
-                {paymentSummary
-                  ? `${paymentSummary.planName} - ${formatCurrency(paymentSummary.value)}`
+                {checkoutPlan
+                  ? `${checkoutPlan.planName} - ${formatCurrency(checkoutPlan.value)} por mês`
                   : 'Finalize o pagamento para ativar o plano.'}
               </DialogDescription>
             </DialogHeader>
-            {paymentFrameUrl && (
-              <div className="space-y-5 bg-slate-50 px-6 py-8 text-center">
+
+            {creditPaymentComplete ? (
+              <div className="space-y-5 px-6 py-10 text-center">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">
                   <Check className="h-7 w-7 text-emerald-700" />
                 </div>
                 <div className="space-y-2">
-                  <p className="font-semibold text-slate-900">Sua cobrança foi criada</p>
+                  <p className="font-semibold text-slate-900">Pagamento enviado com sucesso</p>
                   <p className="text-sm leading-6 text-slate-600">
-                    Por segurança, o Asaas abre o pagamento em uma nova aba. Depois de pagar, a confirmação e a liberação do plano são automáticas.
+                    Assim que o Asaas confirmar a transação, o plano será liberado automaticamente.
                   </p>
                 </div>
-                <Button asChild className="w-full bg-[#003223] hover:bg-[#0b4733]">
-                  <a href={paymentFrameUrl} target="_blank" rel="noopener noreferrer">
-                    Ir para o pagamento
-                    <ExternalLink className="ml-2 h-4 w-4" />
-                  </a>
+                <Button className="w-full bg-[#003223] hover:bg-[#0b4733]" onClick={() => setCheckoutPlan(null)}>
+                  Concluir
+                </Button>
+              </div>
+            ) : pixPayment ? (
+              <div className="space-y-5 px-6 py-6 text-center">
+                <div>
+                  <p className="font-semibold text-slate-900">Escaneie o QR Code para pagar</p>
+                  <p className="mt-1 text-sm text-slate-600">A confirmação acontece automaticamente após o pagamento.</p>
+                </div>
+                <img
+                  src={`data:image/png;base64,${pixPayment.encodedImage}`}
+                  alt="QR Code PIX da assinatura"
+                  className="mx-auto h-56 w-56 rounded-xl border bg-white p-2"
+                />
+                <div className="rounded-xl border bg-slate-50 p-3 text-left">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">PIX copia e cola</p>
+                  <p className="break-all text-xs text-slate-700">{pixPayment.payload}</p>
+                </div>
+                <Button className="w-full bg-[#003223] hover:bg-[#0b4733]" onClick={copyPixCode}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copiar código PIX
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-5 px-6 py-6">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setPaymentMethod('PIX'); setCheckoutError(''); }}
+                    className={`flex items-center justify-center gap-2 rounded-xl border-2 p-3 font-semibold transition ${paymentMethod === 'PIX' ? 'border-[#003223] bg-emerald-50 text-[#003223]' : 'border-slate-200 text-slate-600'}`}
+                  >
+                    <QrCode className="h-5 w-5" /> PIX
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPaymentMethod('CREDIT_CARD'); setCheckoutError(''); }}
+                    className={`flex items-center justify-center gap-2 rounded-xl border-2 p-3 font-semibold transition ${paymentMethod === 'CREDIT_CARD' ? 'border-[#003223] bg-emerald-50 text-[#003223]' : 'border-slate-200 text-slate-600'}`}
+                  >
+                    <CreditCard className="h-5 w-5" /> Crédito
+                  </button>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-[#003223]">CPF ou CNPJ</label>
+                  <Input value={billingDocument} onChange={(event) => setBillingDocument(event.target.value)} inputMode="numeric" placeholder="Somente números" />
+                </div>
+
+                {paymentMethod === 'PIX' ? (
+                  <div className="rounded-xl bg-blue-50 p-4 text-sm leading-6 text-blue-900">
+                    O QR Code será exibido nesta tela. A renovação mensal gera uma nova cobrança PIX e o plano permanece ativo após cada confirmação.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-[#003223]">Nome impresso no cartão</label>
+                      <Input value={cardForm.holderName} onChange={(event) => setCardForm({ ...cardForm, holderName: event.target.value })} autoComplete="cc-name" />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-[#003223]">Número do cartão</label>
+                      <Input value={cardForm.number} onChange={(event) => setCardForm({ ...cardForm, number: event.target.value })} inputMode="numeric" autoComplete="cc-number" placeholder="0000 0000 0000 0000" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#003223]">Mês</label>
+                        <Input value={cardForm.expiryMonth} onChange={(event) => setCardForm({ ...cardForm, expiryMonth: event.target.value })} inputMode="numeric" autoComplete="cc-exp-month" placeholder="MM" maxLength={2} />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#003223]">Ano</label>
+                        <Input value={cardForm.expiryYear} onChange={(event) => setCardForm({ ...cardForm, expiryYear: event.target.value })} inputMode="numeric" autoComplete="cc-exp-year" placeholder="AAAA" maxLength={4} />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#003223]">CVV</label>
+                        <Input value={cardForm.ccv} onChange={(event) => setCardForm({ ...cardForm, ccv: event.target.value })} inputMode="numeric" autoComplete="cc-csc" placeholder="000" maxLength={4} type="password" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#003223]">CEP do titular</label>
+                        <Input value={cardForm.postalCode} onChange={(event) => setCardForm({ ...cardForm, postalCode: event.target.value })} inputMode="numeric" autoComplete="postal-code" />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-[#003223]">Número</label>
+                        <Input value={cardForm.addressNumber} onChange={(event) => setCardForm({ ...cardForm, addressNumber: event.target.value })} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-[#003223]">Celular do titular</label>
+                      <Input value={cardForm.mobilePhone} onChange={(event) => setCardForm({ ...cardForm, mobilePhone: event.target.value })} inputMode="tel" autoComplete="tel" />
+                    </div>
+                    <p className="text-xs leading-5 text-slate-500">Os dados do cartão são enviados por conexão segura diretamente ao Asaas e não são armazenados pelo PopSystem.</p>
+                  </div>
+                )}
+
+                {checkoutError && (
+                  <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-700">{checkoutError}</div>
+                )}
+
+                <Button className="w-full bg-[#003223] hover:bg-[#0b4733]" onClick={handleSubscribeAsaas} disabled={loadingPlanId !== null}>
+                  {loadingPlanId !== null
+                    ? 'Processando...'
+                    : paymentMethod === 'PIX'
+                      ? 'Gerar QR Code PIX'
+                      : `Pagar ${checkoutPlan ? formatCurrency(checkoutPlan.value) : ''}`}
                 </Button>
               </div>
             )}
