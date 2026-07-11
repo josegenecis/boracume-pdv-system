@@ -536,7 +536,7 @@ const Subscription = () => {
             setPaymentSummary(null);
           }
         }}>
-          <DialogContent className="max-w-5xl overflow-hidden p-0">
+          <DialogContent className="max-w-lg overflow-hidden p-0">
             <DialogHeader className="border-b px-6 py-4 text-left">
               <DialogTitle>Pagamento pelo Asaas</DialogTitle>
               <DialogDescription>
@@ -546,21 +546,22 @@ const Subscription = () => {
               </DialogDescription>
             </DialogHeader>
             {paymentFrameUrl && (
-              <div className="bg-slate-50">
-                <iframe
-                  title="Pagamento Asaas"
-                  src={paymentFrameUrl}
-                  className="h-[72vh] w-full border-0 bg-white"
-                />
-                <div className="flex items-center justify-between gap-3 border-t bg-white px-6 py-3 text-sm text-slate-600">
-                  <span>Quando o Asaas confirmar o pagamento, o PopSystem libera o plano automaticamente.</span>
-                  <Button asChild variant="outline" size="sm" className="shrink-0">
-                    <a href={paymentFrameUrl} target="_blank" rel="noreferrer">
-                      Abrir cobrança
-                      <ExternalLink className="ml-2 h-4 w-4" />
-                    </a>
-                  </Button>
+              <div className="space-y-5 bg-slate-50 px-6 py-8 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">
+                  <Check className="h-7 w-7 text-emerald-700" />
                 </div>
+                <div className="space-y-2">
+                  <p className="font-semibold text-slate-900">Sua cobrança foi criada</p>
+                  <p className="text-sm leading-6 text-slate-600">
+                    Por segurança, o Asaas abre o pagamento em uma nova aba. Depois de pagar, a confirmação e a liberação do plano são automáticas.
+                  </p>
+                </div>
+                <Button asChild className="w-full bg-[#003223] hover:bg-[#0b4733]">
+                  <a href={paymentFrameUrl} target="_blank" rel="noopener noreferrer">
+                    Ir para o pagamento
+                    <ExternalLink className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
               </div>
             )}
           </DialogContent>
