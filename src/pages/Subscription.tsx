@@ -49,6 +49,7 @@ const Subscription = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
   const [pixPayment, setPixPayment] = useState<{ encodedImage: string; payload: string; expirationDate?: string } | null>(null);
   const [creditPaymentComplete, setCreditPaymentComplete] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [cardForm, setCardForm] = useState(emptyCardForm);
   const [checkoutError, setCheckoutError] = useState('');
   const [billingDocument, setBillingDocument] = useState('');
@@ -56,6 +57,37 @@ const Subscription = () => {
   useEffect(() => {
     refreshSubscription();
   }, []); // Remove refreshSubscription from dependencies to avoid infinite loop
+
+  useEffect(() => {
+    if (!pixPayment || !user?.id) return;
+
+    let stopped = false;
+    const checkPaymentStatus = async () => {
+      const { data } = await supabase
+        .from('subscriptions')
+        .select('status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!stopped && data?.status === 'active') {
+        setPixPayment(null);
+        setPaymentConfirmed(true);
+        setCreditPaymentComplete(true);
+        await refreshSubscription();
+        toast({
+          title: 'Pagamento confirmado',
+          description: 'Seu plano já está ativo no PopSystem.',
+        });
+      }
+    };
+
+    void checkPaymentStatus();
+    const intervalId = window.setInterval(checkPaymentStatus, 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(intervalId);
+    };
+  }, [pixPayment, user?.id]);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A';
@@ -83,6 +115,7 @@ const Subscription = () => {
     setPaymentMethod('PIX');
     setPixPayment(null);
     setCreditPaymentComplete(false);
+    setPaymentConfirmed(false);
     setCheckoutError('');
   };
 
@@ -155,6 +188,7 @@ const Subscription = () => {
         setPixPayment(data.pix);
       } else {
         setCreditPaymentComplete(true);
+        setPaymentConfirmed(false);
         toast({
           title: "Pagamento enviado",
           description: "O cartão foi processado. A confirmação do Asaas liberará o plano automaticamente.",
@@ -526,6 +560,7 @@ const Subscription = () => {
             setCheckoutPlan(null);
             setPixPayment(null);
             setCreditPaymentComplete(false);
+            setPaymentConfirmed(false);
             setCheckoutError('');
             setCardForm(emptyCardForm);
           }
@@ -546,9 +581,13 @@ const Subscription = () => {
                   <Check className="h-7 w-7 text-emerald-700" />
                 </div>
                 <div className="space-y-2">
-                  <p className="font-semibold text-slate-900">Pagamento enviado com sucesso</p>
+                  <p className="font-semibold text-slate-900">
+                    {paymentConfirmed ? 'Pagamento confirmado' : 'Pagamento enviado com sucesso'}
+                  </p>
                   <p className="text-sm leading-6 text-slate-600">
-                    Assim que o Asaas confirmar a transação, o plano será liberado automaticamente.
+                    {paymentConfirmed
+                      ? 'Seu plano está ativo e todos os recursos contratados já foram liberados.'
+                      : 'Assim que o Asaas confirmar a transação, o plano será liberado automaticamente.'}
                   </p>
                 </div>
                 <Button className="w-full bg-[#003223] hover:bg-[#0b4733]" onClick={() => setCheckoutPlan(null)}>
