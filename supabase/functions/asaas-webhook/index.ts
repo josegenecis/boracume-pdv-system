@@ -34,6 +34,25 @@ const tokenFromHeaders = (req: Request) => {
     || authorization.replace(/^Bearer\s+/i, "");
 };
 
+const getAsaasBaseUrl = () => {
+  const env = (Deno.env.get("ASAAS_ENVIRONMENT") || "production").toLowerCase();
+  return env === "sandbox" || env === "homologacao" || env === "homologação"
+    ? "https://sandbox.asaas.com/api/v3"
+    : "https://api.asaas.com/v3";
+};
+
+const cancelAsaasSubscription = async (subscriptionId: string) => {
+  const apiKey = Deno.env.get("ASAAS_API_KEY");
+  if (!apiKey) throw new Error("ASAAS_API_KEY não configurada para cancelar a assinatura anterior.");
+  const response = await fetch(`${getAsaasBaseUrl()}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: "DELETE",
+    headers: { access_token: apiKey },
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Asaas respondeu HTTP ${response.status} ao cancelar a assinatura anterior.`);
+  }
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -58,6 +77,7 @@ serve(async (req) => {
     const event = String(payload.event || "");
     const payment = payload.payment || {};
     const subscriptionId = payment.subscription || payload.subscription?.id || null;
+    const externalReference = String(payment.externalReference || "");
 
     await supabase.from("asaas_webhook_events").insert({
       event_id: payload.id || payment.id || crypto.randomUUID(),
@@ -66,6 +86,63 @@ serve(async (req) => {
       asaas_subscription_id: subscriptionId,
       payload,
     });
+
+    const upgradeIdFromReference = externalReference.startsWith("subscription-upgrade:")
+      ? externalReference.replace("subscription-upgrade:", "")
+      : null;
+    const { data: planChange } = upgradeIdFromReference
+      ? await supabase.from("subscription_plan_changes").select("*").eq("id", upgradeIdFromReference).maybeSingle()
+      : payment.id
+        ? await supabase.from("subscription_plan_changes").select("*").eq("asaas_payment_id", payment.id).maybeSingle()
+        : { data: null };
+
+    if (planChange && paidEvents.has(event) && planChange.status !== "paid") {
+      const { data: targetPlan } = await supabase
+        .from("subscription_plans")
+        .select("included_stores,extra_store_price")
+        .eq("id", planChange.to_plan_id)
+        .maybeSingle();
+      const storeCount = Math.max(1, Number(planChange.to_store_count || 1));
+      const includedStores = Math.max(1, Number(targetPlan?.included_stores || 1));
+      const periodStart = new Date();
+      const periodEnd = new Date();
+      periodEnd.setDate(periodEnd.getDate() + 30);
+
+      const { error: activateError } = await supabase
+        .from("subscriptions")
+        .update({
+          plan_id: planChange.to_plan_id,
+          status: "active",
+          billing_provider: "asaas",
+          asaas_customer_id: planChange.new_asaas_customer_id,
+          asaas_subscription_id: planChange.new_asaas_subscription_id,
+          asaas_payment_id: payment.id || planChange.asaas_payment_id,
+          store_count: storeCount,
+          additional_store_count: Math.max(0, storeCount - includedStores),
+          extra_store_price: Number(targetPlan?.extra_store_price || 0),
+          current_period_start: periodStart.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", planChange.user_id);
+      if (activateError) throw activateError;
+
+      await supabase
+        .from("subscription_plan_changes")
+        .update({ status: "paid", completed_at: new Date().toISOString() })
+        .eq("id", planChange.id);
+
+      if (planChange.old_asaas_subscription_id) {
+        await cancelAsaasSubscription(planChange.old_asaas_subscription_id).catch((cancelError) => {
+          console.error("Falha ao cancelar assinatura anterior do upgrade:", cancelError);
+        });
+      }
+    } else if (planChange && canceledEvents.has(event) && planChange.status === "pending") {
+      await supabase
+        .from("subscription_plan_changes")
+        .update({ status: "canceled" })
+        .eq("id", planChange.id);
+    }
 
     if (subscriptionId) {
       const status = paidEvents.has(event)

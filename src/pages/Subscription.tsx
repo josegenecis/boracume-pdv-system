@@ -27,6 +27,9 @@ type CheckoutPlan = {
   storeCount: number;
   planName: string;
   value: number;
+  monthlyValue: number;
+  creditAmount: number;
+  isUpgrade: boolean;
 };
 
 const emptyCardForm = {
@@ -65,11 +68,14 @@ const Subscription = () => {
     const checkPaymentStatus = async () => {
       const { data } = await supabase
         .from('subscriptions')
-        .select('status')
+        .select('status,plan_id,store_count')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (!stopped && data?.status === 'active') {
+      const expectedPlanActive = data?.status === 'active'
+        && Number(data.plan_id) === Number(checkoutPlan?.planId)
+        && Number(data.store_count || 1) === Number(checkoutPlan?.storeCount || 1);
+      if (!stopped && expectedPlanActive) {
         setPixPayment(null);
         setPaymentConfirmed(true);
         setCreditPaymentComplete(true);
@@ -87,7 +93,7 @@ const Subscription = () => {
       stopped = true;
       window.clearInterval(intervalId);
     };
-  }, [pixPayment, user?.id]);
+  }, [pixPayment, user?.id, checkoutPlan?.planId, checkoutPlan?.storeCount]);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A';
@@ -106,11 +112,32 @@ const Subscription = () => {
     const plan = getPlanCatalogItem(planId);
     if (!plan) return;
     const additionalStores = Math.max(0, storeCount - plan.includedStores);
+    const monthlyValue = plan.monthlyPrice + additionalStores * Number(plan.extraStorePrice || 0);
+    const oldPlan = getPlanCatalogItem(subscription?.plan_id);
+    const oldStoreCount = Math.max(1, Number(subscription?.store_count || 1));
+    const oldAdditionalStores = oldPlan ? Math.max(0, oldStoreCount - oldPlan.includedStores) : 0;
+    const oldMonthlyValue = oldPlan
+      ? oldPlan.monthlyPrice + oldAdditionalStores * Number(oldPlan.extraStorePrice || 0)
+      : 0;
+    const periodStart = subscription?.current_period_start ? new Date(subscription.current_period_start).getTime() : 0;
+    const periodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end).getTime() : 0;
+    const now = Date.now();
+    const hasActiveBalance = subscription?.status === 'active' && periodEnd > now && periodEnd > periodStart;
+    const isUpgrade = Boolean(
+      hasActiveBalance && monthlyValue > oldMonthlyValue &&
+      (subscription?.plan_id !== planId || oldStoreCount !== storeCount)
+    );
+    const creditAmount = isUpgrade
+      ? Number((oldMonthlyValue * ((periodEnd - now) / (periodEnd - periodStart))).toFixed(2))
+      : 0;
     setCheckoutPlan({
       planId,
       storeCount,
       planName: plan.name,
-      value: plan.monthlyPrice + additionalStores * Number(plan.extraStorePrice || 0),
+      value: isUpgrade ? Number(Math.max(0.01, monthlyValue - creditAmount).toFixed(2)) : monthlyValue,
+      monthlyValue,
+      creditAmount,
+      isUpgrade,
     });
     setPaymentMethod('PIX');
     setPixPayment(null);
@@ -184,6 +211,15 @@ const Subscription = () => {
       if (paymentMethod === 'PIX') {
         if (!data?.pix?.encodedImage || !data?.pix?.payload) {
           throw new Error('O Asaas criou a cobrança, mas ainda não disponibilizou o QR Code. Tente novamente em instantes.');
+        }
+        if (data?.proration) {
+          setCheckoutPlan((current) => current ? {
+            ...current,
+            value: Number(data.proration.chargeAmount),
+            monthlyValue: Number(data.proration.newMonthlyValue),
+            creditAmount: Number(data.proration.creditAmount),
+            isUpgrade: true,
+          } : current);
         }
         setPixPayment(data.pix);
       } else {
@@ -570,7 +606,7 @@ const Subscription = () => {
               <DialogTitle>Finalizar assinatura</DialogTitle>
               <DialogDescription>
                 {checkoutPlan
-                  ? `${checkoutPlan.planName} - ${formatCurrency(checkoutPlan.value)} por mês`
+                  ? `${checkoutPlan.planName} - ${formatCurrency(checkoutPlan.monthlyValue)} por mês`
                   : 'Finalize o pagamento para ativar o plano.'}
               </DialogDescription>
             </DialogHeader>
@@ -598,7 +634,9 @@ const Subscription = () => {
               <div className="space-y-5 px-6 py-6 text-center">
                 <div>
                   <p className="font-semibold text-slate-900">Escaneie o QR Code para pagar</p>
-                  <p className="mt-1 text-sm text-slate-600">A confirmação acontece automaticamente após o pagamento.</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Valor: {checkoutPlan ? formatCurrency(checkoutPlan.value) : ''}. A confirmação acontece automaticamente após o pagamento.
+                  </p>
                 </div>
                 <img
                   src={`data:image/png;base64,${pixPayment.encodedImage}`}
@@ -616,6 +654,25 @@ const Subscription = () => {
               </div>
             ) : (
               <div className="space-y-5 px-6 py-6">
+                {checkoutPlan?.isUpgrade && (
+                  <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Novo plano mensal</span>
+                      <span>{formatCurrency(checkoutPlan.monthlyValue)}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-700">
+                      <span>Crédito do plano atual</span>
+                      <span>- {formatCurrency(checkoutPlan.creditAmount)}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-emerald-200 pt-2 font-bold text-[#003223]">
+                      <span>Total a pagar agora</span>
+                      <span>{formatCurrency(checkoutPlan.value)}</span>
+                    </div>
+                    <p className="pt-1 text-xs leading-5 text-slate-500">
+                      O próximo vencimento será em 30 dias pelo valor mensal integral do novo plano.
+                    </p>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"

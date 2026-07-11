@@ -46,6 +46,7 @@ interface Subscription {
   trial_end?: string;
   current_period_start?: string;
   current_period_end?: string;
+  store_count?: number;
   created_at: string;
   updated_at: string;
 }

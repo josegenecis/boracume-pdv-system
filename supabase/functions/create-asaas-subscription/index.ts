@@ -153,9 +153,52 @@ serve(async (req) => {
 
     const { data: existingSubscription } = await supabaseAdmin
       .from("subscriptions")
-      .select("id,asaas_customer_id")
+      .select("id,plan_id,status,store_count,current_period_start,current_period_end,asaas_customer_id,asaas_subscription_id")
       .eq("user_id", user.id)
       .maybeSingle();
+
+    let oldMonthlyValue = 0;
+    if (existingSubscription?.plan_id) {
+      const { data: oldPlanRow } = await supabaseAdmin
+        .from("subscription_plans")
+        .select("price,included_stores,extra_store_price")
+        .eq("id", existingSubscription.plan_id)
+        .maybeSingle();
+      const oldFallback = fallbackPlans[Number(existingSubscription.plan_id)] || fallbackPlans[1];
+      const oldStoreCount = Math.max(1, Number(existingSubscription.store_count || 1));
+      const oldIncludedStores = Number(oldPlanRow?.included_stores || oldFallback.includedStores);
+      const oldExtraStores = Math.max(0, oldStoreCount - oldIncludedStores);
+      oldMonthlyValue = money(
+        Number(oldPlanRow?.price ?? oldFallback.price) +
+        oldExtraStores * Number(oldPlanRow?.extra_store_price ?? oldFallback.extraStorePrice),
+      );
+    }
+
+    const periodStartDate = existingSubscription?.current_period_start
+      ? new Date(existingSubscription.current_period_start)
+      : null;
+    const periodEndDate = existingSubscription?.current_period_end
+      ? new Date(existingSubscription.current_period_end)
+      : null;
+    const now = new Date();
+    const hasValidActivePeriod = existingSubscription?.status === "active"
+      && periodStartDate && periodEndDate
+      && Number.isFinite(periodStartDate.getTime())
+      && Number.isFinite(periodEndDate.getTime())
+      && periodEndDate.getTime() > now.getTime();
+    const isUpgrade = Boolean(
+      hasValidActivePeriod
+      && value > oldMonthlyValue
+      && (Number(existingSubscription?.plan_id) !== plan.id || Number(existingSubscription?.store_count || 1) !== storeCount),
+    );
+    const periodMs = hasValidActivePeriod
+      ? Math.max(1, periodEndDate!.getTime() - periodStartDate!.getTime())
+      : 30 * 24 * 60 * 60 * 1000;
+    const remainingMs = hasValidActivePeriod
+      ? Math.max(0, periodEndDate!.getTime() - now.getTime())
+      : 0;
+    const creditAmount = isUpgrade ? money(oldMonthlyValue * (remainingMs / periodMs)) : 0;
+    const chargeValue = isUpgrade ? money(Math.max(0.01, value - creditAmount)) : value;
 
     let customerId = existingSubscription?.asaas_customer_id || null;
 
@@ -200,7 +243,9 @@ serve(async (req) => {
     }
 
     const billingType = paymentMethod;
-    const nextDueDate = String(body.nextDueDate || today());
+    const renewalDate = new Date();
+    renewalDate.setDate(renewalDate.getDate() + 30);
+    const nextDueDate = String(body.nextDueDate || (isUpgrade ? renewalDate.toISOString().slice(0, 10) : today()));
 
     const creditCard = paymentMethod === "CREDIT_CARD" ? {
       holderName: String(body.creditCard?.holderName || "").trim(),
@@ -261,12 +306,62 @@ serve(async (req) => {
     }
 
     let payment = null;
-    for (let attempt = 0; attempt < 4 && !payment; attempt += 1) {
-      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 350));
-      const payments = await asaasFetch(`/subscriptions/${encodeURIComponent(asaasSubscription.id)}/payments?limit=1`);
-      payment = Array.isArray(payments?.data) ? payments.data[0] : null;
+    let planChangeId: string | null = null;
+
+    if (isUpgrade) {
+      const { data: planChange, error: planChangeError } = await supabaseAdmin
+        .from("subscription_plan_changes")
+        .insert({
+          user_id: user.id,
+          from_plan_id: existingSubscription!.plan_id,
+          to_plan_id: plan.id,
+          from_store_count: Number(existingSubscription!.store_count || 1),
+          to_store_count: storeCount,
+          old_monthly_value: oldMonthlyValue,
+          new_monthly_value: value,
+          credit_amount: creditAmount,
+          charge_amount: chargeValue,
+          remaining_days: remainingMs / (24 * 60 * 60 * 1000),
+          period_days: periodMs / (24 * 60 * 60 * 1000),
+          payment_method: paymentMethod,
+          old_asaas_subscription_id: existingSubscription!.asaas_subscription_id,
+          new_asaas_customer_id: customerId,
+          new_asaas_subscription_id: asaasSubscription.id,
+        })
+        .select("id")
+        .single();
+      if (planChangeError || !planChange) {
+        throw new Error(`Não foi possível registrar o upgrade: ${planChangeError?.message || "erro desconhecido"}`);
+      }
+      planChangeId = planChange.id;
+
+      payment = await asaasFetch("/payments", {
+        method: "POST",
+        body: JSON.stringify({
+          customer: customerId,
+          billingType,
+          value: chargeValue,
+          dueDate: today(),
+          description: `Upgrade PopSystem para ${plan.name} - crédito de R$ ${creditAmount.toFixed(2)}`,
+          externalReference: `subscription-upgrade:${planChangeId}`,
+          ...(creditCard ? { creditCard, creditCardHolderInfo } : {}),
+        }),
+      });
+
+      const { error: paymentLinkError } = await supabaseAdmin
+        .from("subscription_plan_changes")
+        .update({ asaas_payment_id: payment.id })
+        .eq("id", planChangeId);
+      if (paymentLinkError) throw new Error(`Não foi possível vincular a cobrança do upgrade: ${paymentLinkError.message}`);
+    } else {
+      for (let attempt = 0; attempt < 4 && !payment; attempt += 1) {
+        if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 350));
+        const payments = await asaasFetch(`/subscriptions/${encodeURIComponent(asaasSubscription.id)}/payments?limit=1`);
+        payment = Array.isArray(payments?.data) ? payments.data[0] : null;
+      }
+      if (!payment?.id) throw new Error("A assinatura foi criada, mas a primeira cobrança ainda não foi disponibilizada pelo Asaas.");
     }
-    if (!payment?.id) throw new Error("A assinatura foi criada, mas a primeira cobrança ainda não foi disponibilizada pelo Asaas.");
+
     const pix = paymentMethod === "PIX" && payment?.id
       ? await asaasFetch(`/payments/${encodeURIComponent(payment.id)}/pixQrCode`)
       : null;
@@ -291,9 +386,11 @@ serve(async (req) => {
       updated_at: new Date().toISOString(),
     };
 
-    const { error: subscriptionError } = existingSubscription?.id
-      ? await supabaseAdmin.from("subscriptions").update(subscriptionPayload).eq("id", existingSubscription.id)
-      : await supabaseAdmin.from("subscriptions").insert(subscriptionPayload);
+    const { error: subscriptionError } = isUpgrade
+      ? { error: null }
+      : existingSubscription?.id
+        ? await supabaseAdmin.from("subscriptions").update(subscriptionPayload).eq("id", existingSubscription.id)
+        : await supabaseAdmin.from("subscriptions").insert(subscriptionPayload);
 
     if (subscriptionError) {
       throw new Error(`Cobrança criada no Asaas, mas falhou ao salvar no PopSystem: ${subscriptionError.message}`);
@@ -305,7 +402,16 @@ serve(async (req) => {
       customerId,
       subscriptionId: asaasSubscription.id,
       paymentId: payment?.id || null,
-      value,
+      value: chargeValue,
+      monthlyValue: value,
+      isUpgrade,
+      proration: isUpgrade ? {
+        oldMonthlyValue,
+        newMonthlyValue: value,
+        creditAmount,
+        chargeAmount: chargeValue,
+        remainingDays: Number((remainingMs / (24 * 60 * 60 * 1000)).toFixed(2)),
+      } : null,
       paymentMethod,
       pix: pix ? {
         encodedImage: pix.encodedImage,
