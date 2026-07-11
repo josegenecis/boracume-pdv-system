@@ -106,6 +106,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.3.0",
+    "@playwright/test": "^1.56.1",
     "@types/google.maps": "^3.55.12",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.3",

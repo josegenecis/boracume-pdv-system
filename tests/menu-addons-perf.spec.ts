@@ -1,4 +1,4 @@
-import { test, expect } from 'playwright/test';
+import { test, expect } from '@playwright/test';
 
 test('Complementos carregam em <1s após selecionar produto', async ({ page, baseURL }) => {
   const userId = process.env.MENU_TEST_USER_ID;

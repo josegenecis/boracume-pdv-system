@@ -1,4 +1,4 @@
-import { test, expect, chromium, Page } from 'playwright/test';
+import { test, expect, chromium, Page } from '@playwright/test';
 
 async function enable3G(page: Page) {
   const browser = page.context().browser();
@@ -79,4 +79,3 @@ test('Carrinho atualiza em <500ms em 95% (10 usuários)', async ({ baseURL }) =>
   const ok = results.filter((ms) => ms < 500).length;
   expect(ok).toBeGreaterThanOrEqual(9);
 });
-

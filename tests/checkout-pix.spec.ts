@@ -1,4 +1,4 @@
-import { test, expect } from 'playwright/test';
+import { test, expect } from '@playwright/test';
 
 test('Finalizar Pedido habilita com PIX padrão selecionado', async ({ page, baseURL }) => {
   const userId = process.env.MENU_TEST_USER_ID;

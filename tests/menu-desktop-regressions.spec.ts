@@ -1,4 +1,4 @@
-import { expect, Page, test } from 'playwright/test';
+import { expect, Page, test } from '@playwright/test';
 
 const defaultUserId = process.env.MENU_TEST_USER_ID || 'd15f067d-a0db-4fdc-9487-b210474e5f2e';
 const productCardAddButtons = 'div.bg-white.rounded-2xl.shadow-sm.border.border-boracume-light button';
