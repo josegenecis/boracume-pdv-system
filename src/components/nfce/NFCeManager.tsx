@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Receipt, Search, Download, Eye, X, RotateCcw, PlayCircle, AlertTriangle } from 'lucide-react';
+import { Receipt, Search, Download, Eye, X, RotateCcw, PlayCircle, AlertTriangle, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,6 +17,7 @@ import { ptBR } from 'date-fns/locale';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
+import { PrinterService } from '@/utils/printerService';
 
 interface NFCeCupom {
   id: string;
@@ -247,7 +248,7 @@ const NFCeManager: React.FC = () => {
   const handleCancelarCupom = async (cupomId: string) => {
     const ok = await confirm({
       title: 'Cancelar cupom fiscal',
-      description: 'Tem certeza que deseja cancelar este cupom fiscal?',
+      description: 'O cancelamento fiscal vale para a NFC-e inteira, não apenas para um item. Confirme somente se a operação foi desfeita e ainda está dentro do prazo permitido pela SEFAZ do seu estado.',
       confirmText: 'Cancelar cupom',
       cancelText: 'Voltar',
       variant: 'destructive',
@@ -303,6 +304,34 @@ const NFCeManager: React.FC = () => {
         description: "Erro ao baixar XML do cupom.",
         variant: "destructive"
       });
+    }
+  };
+
+  const handleReprintCupom = async (cupom: NFCeCupom) => {
+    try {
+      if (!cupom.order_id) throw new Error('Este cupom não possui o pedido original vinculado.');
+      setLoading(true);
+      const { data: order, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', cupom.order_id)
+        .eq('user_id', user?.id)
+        .single();
+      if (error || !order) throw new Error('Pedido original não encontrado para reimpressão.');
+
+      await PrinterService.printOrder({ ...order, nfce: cupom });
+      toast({
+        title: 'Reimpressão enviada',
+        description: `DANFE NFC-e nº ${cupom.numero} enviado para impressão.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao reimprimir',
+        description: error?.message || 'Não foi possível reimprimir o DANFE NFC-e.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -510,6 +539,16 @@ const NFCeManager: React.FC = () => {
 
                   {cupom.status === 'autorizado' && (
                     <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReprintCupom(cupom)}
+                        disabled={loading}
+                      >
+                        <Printer className="w-4 h-4 mr-1" />
+                        Reimprimir DANFE
+                      </Button>
+
                       <Button
                         variant="outline"
                         size="sm"

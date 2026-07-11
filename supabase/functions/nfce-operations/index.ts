@@ -12,7 +12,14 @@ const corsHeaders = {
 
 type Ambiente = 'producao' | 'homologacao';
 
-const NFE_TIMEZONE = 'America/Fortaleza';
+const NFE_TIMEZONES: Partial<Record<string, string>> = {
+  AC: 'America/Rio_Branco',
+  AM: 'America/Manaus',
+  RR: 'America/Boa_Vista',
+  RO: 'America/Porto_Velho',
+  MT: 'America/Cuiaba',
+  MS: 'America/Campo_Grande',
+};
 const MUNICIPALITY_CODE_OVERRIDES: Record<string, string> = {
   'CE|FORTALEZA': '2304400',
 };
@@ -102,10 +109,24 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
     const orderItems = normalizeOrderItems(order.items);
     if (orderItems.length === 0) throw new Error('Pedido sem itens para emissao fiscal');
 
+    const productIds = Array.from(new Set(
+      orderItems.map((item) => String(item.product_id || '').trim()).filter(Boolean),
+    ));
+    const productFiscalById = new Map<string, any>();
+    if (productIds.length > 0) {
+      const { data: productFiscalRows, error: productFiscalError } = await supabase
+        .from('products')
+        .select('id,fiscal_ncm,fiscal_cfop,fiscal_csosn,fiscal_cst_pis,fiscal_cst_cofins,fiscal_origem,fiscal_cest,fiscal_beneficio,fiscal_observacao')
+        .in('id', productIds)
+        .eq('user_id', userId);
+      if (productFiscalError) throw new Error(`Erro ao carregar tributacao dos produtos: ${productFiscalError.message}`);
+      for (const row of productFiscalRows || []) productFiscalById.set(String(row.id), row);
+    }
+
     const numeroNFCe = await getNextNFCeNumber(supabase, userId, fiscalSettings.nfce_serie);
     const dataEmissao = new Date();
     const chaveAcesso = await generateAccessKey(supabase, fiscalSettings, numeroNFCe, dataEmissao);
-    const fiscalItems = buildFiscalItems(orderItems, fiscalSettings);
+    const fiscalItems = buildFiscalItems(orderItems, fiscalSettings, productFiscalById);
     const deliveryFee = money(order.delivery_fee || 0);
     const totalProdutos = money(fiscalItems.reduce((sum, item) => sum + item.valor_total, 0));
     const valorTotal = money(order.total || totalProdutos + deliveryFee);
@@ -564,7 +585,7 @@ async function getNextNFCeNumber(supabase: any, userId: string, serie: string): 
 }
 
 async function generateAccessKey(supabase: any, fiscalSettings: any, numero: number, dataEmissao: Date): Promise<string> {
-  const parts = getNfeDateParts(dataEmissao);
+  const parts = getNfeDateParts(dataEmissao, fiscalSettings.endereco_uf);
   const aamm = `${parts.year.slice(-2)}${parts.month}`;
   const codigoNumerico = crypto.getRandomValues(new Uint32Array(1))[0].toString().slice(0, 8).padStart(8, '0');
   const { data, error } = await supabase.rpc('generate_nfce_access_key', {
@@ -594,30 +615,35 @@ function normalizeOrderItems(rawItems: unknown): any[] {
   return [];
 }
 
-function buildFiscalItems(orderItems: any[], settings: any) {
+function buildFiscalItems(orderItems: any[], settings: any, productFiscalById: Map<string, any> = new Map()) {
   return orderItems.map((item, index) => {
+    const productFiscal = item.product_id ? productFiscalById.get(String(item.product_id)) || {} : {};
     const quantity = Math.max(Number(item.quantity || 1), 0.0001);
     const unitPrice = money(item.price || item.valor_unitario || 0);
     const total = money(item.subtotal ?? unitPrice * quantity);
-    const ncm = String(item.ncm || item.fiscal_ncm || settings.ncm_padrao || '21069090').replace(/\D/g, '').padStart(8, '0').slice(0, 8);
+    const ncm = String(item.ncm || item.fiscal_ncm || productFiscal.fiscal_ncm || settings.ncm_padrao || '21069090').replace(/\D/g, '').padStart(8, '0').slice(0, 8);
     return {
       product_id: item.product_id || null,
       codigo_produto: sanitizeCode(item.sku || item.codigo_produto || item.product_id || String(index + 1).padStart(6, '0')),
       descricao: String(item.product_name || item.name || item.descricao || `Item ${index + 1}`),
       ncm,
-      cfop: String(item.cfop || item.fiscal_cfop || settings.cfop_padrao || '5102'),
+      cfop: String(item.cfop || item.fiscal_cfop || productFiscal.fiscal_cfop || settings.cfop_padrao || '5102'),
       unidade: String(item.unidade || 'UN'),
       quantidade: quantity,
       valor_unitario: unitPrice,
       valor_total: total,
       valor_desconto: money(item.discount || 0),
-      cst_icms: String(item.csosn || item.cst_icms || settings.csosn_padrao || '102'),
+      origem: String(item.fiscal_origem || productFiscal.fiscal_origem || '0').replace(/\D/g, '').slice(0, 1) || '0',
+      cest: String(item.fiscal_cest || productFiscal.fiscal_cest || '').replace(/\D/g, '').slice(0, 7) || null,
+      cbenef: String(item.fiscal_beneficio || productFiscal.fiscal_beneficio || '').trim() || null,
+      informacoes_adicionais: String(item.fiscal_observacao || productFiscal.fiscal_observacao || '').trim() || null,
+      cst_icms: String(item.csosn || item.cst_icms || item.fiscal_csosn || productFiscal.fiscal_csosn || settings.csosn_padrao || '102'),
       aliquota_icms: Number(item.aliquota_icms || 0),
       valor_icms: Number(item.valor_icms || 0),
-      cst_pis: String(item.cst_pis || settings.cst_pis_padrao || '07'),
+      cst_pis: String(item.cst_pis || item.fiscal_cst_pis || productFiscal.fiscal_cst_pis || settings.cst_pis_padrao || '07'),
       aliquota_pis: Number(item.aliquota_pis || 0),
       valor_pis: Number(item.valor_pis || 0),
-      cst_cofins: String(item.cst_cofins || settings.cst_cofins_padrao || '07'),
+      cst_cofins: String(item.cst_cofins || item.fiscal_cst_cofins || productFiscal.fiscal_cst_cofins || settings.cst_cofins_padrao || '07'),
       aliquota_cofins: Number(item.aliquota_cofins || 0),
       valor_cofins: Number(item.valor_cofins || 0),
     };
@@ -685,14 +711,17 @@ function generateNFCeXML(input: {
     valorTributos,
   } = input;
   const isHomologacao = fiscalSettings.ambiente !== 'producao';
-  const dhEmi = formatNfeDate(new Date(cupom.data_hora_emissao));
+  const dhEmi = formatNfeDate(new Date(cupom.data_hora_emissao), fiscalSettings.endereco_uf);
   const codigoMunicipio = resolveMunicipalityCode(fiscalSettings);
   const consumidorDoc = onlyDigits(consumerData?.cpf_cnpj);
   const detXml = items.map((item, index) => {
     const productName = isHomologacao && index === 0
       ? 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
       : item.descricao;
-    return `<det nItem="${index + 1}"><prod><cProd>${escapeXml(item.codigo_produto)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${escapeXml(productName)}</xProd><NCM>${item.ncm}</NCM><CFOP>${item.cfop}</CFOP><uCom>${escapeXml(item.unidade)}</uCom><qCom>${fixed4(item.quantidade)}</qCom><vUnCom>${fixed4(item.valor_unitario)}</vUnCom><vProd>${fixed2(item.valor_total)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>${escapeXml(item.unidade)}</uTrib><qTrib>${fixed4(item.quantidade)}</qTrib><vUnTrib>${fixed4(item.valor_unitario)}</vUnTrib><indTot>1</indTot></prod><imposto><vTotTrib>${fixed2(item.valor_total * 0.0765)}</vTotTrib><ICMS><ICMSSN102><orig>0</orig><CSOSN>${item.cst_icms}</CSOSN></ICMSSN102></ICMS>${buildPisXml(item)}${buildCofinsXml(item)}</imposto></det>`;
+    const cestXml = item.cest ? `<CEST>${escapeXml(item.cest)}</CEST>` : '';
+    const benefitXml = item.cbenef ? `<cBenef>${escapeXml(item.cbenef)}</cBenef>` : '';
+    const additionalXml = item.informacoes_adicionais ? `<infAdProd>${escapeXml(item.informacoes_adicionais)}</infAdProd>` : '';
+    return `<det nItem="${index + 1}"><prod><cProd>${escapeXml(item.codigo_produto)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${escapeXml(productName)}</xProd><NCM>${item.ncm}</NCM>${cestXml}${benefitXml}<CFOP>${item.cfop}</CFOP><uCom>${escapeXml(item.unidade)}</uCom><qCom>${fixed4(item.quantidade)}</qCom><vUnCom>${fixed4(item.valor_unitario)}</vUnCom><vProd>${fixed2(item.valor_total)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>${escapeXml(item.unidade)}</uTrib><qTrib>${fixed4(item.quantidade)}</qTrib><vUnTrib>${fixed4(item.valor_unitario)}</vUnTrib><indTot>1</indTot></prod><imposto><vTotTrib>${fixed2(item.valor_total * 0.0765)}</vTotTrib><ICMS><ICMSSN102><orig>${item.origem}</orig><CSOSN>${item.cst_icms}</CSOSN></ICMSSN102></ICMS>${buildPisXml(item)}${buildCofinsXml(item)}</imposto>${additionalXml}</det>`;
   }).join('');
 
   const destXml = consumidorDoc
@@ -840,9 +869,14 @@ function fixed4(value: number): string {
   return Number(value || 0).toFixed(4);
 }
 
-function getNfeDateParts(date: Date) {
+function getNfeTimeZone(uf: string): string {
+  return NFE_TIMEZONES[String(uf || '').toUpperCase()] || 'America/Sao_Paulo';
+}
+
+function getNfeDateParts(date: Date, uf: string) {
+  const timeZone = getNfeTimeZone(uf);
   const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: NFE_TIMEZONE,
+    timeZone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -852,6 +886,9 @@ function getNfeDateParts(date: Date) {
     hourCycle: 'h23',
   });
   const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  const offsetFormatter = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' });
+  const offsetName = offsetFormatter.formatToParts(date).find((part) => part.type === 'timeZoneName')?.value || 'GMT-03:00';
+  const offset = offsetName.replace(/^GMT/i, '') || '-03:00';
   return {
     year: parts.year || String(date.getUTCFullYear()),
     month: parts.month || String(date.getUTCMonth() + 1).padStart(2, '0'),
@@ -859,12 +896,13 @@ function getNfeDateParts(date: Date) {
     hour: parts.hour === '24' ? '00' : (parts.hour || '00'),
     minute: parts.minute || '00',
     second: parts.second || '00',
+    offset: /^[+-]\d{2}:\d{2}$/.test(offset) ? offset : '-03:00',
   };
 }
 
-function formatNfeDate(date: Date): string {
-  const parts = getNfeDateParts(date);
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}-03:00`;
+function formatNfeDate(date: Date, uf: string): string {
+  const parts = getNfeDateParts(date, uf);
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${parts.offset}`;
 }
 
 function normalizeTextKey(value: string): string {

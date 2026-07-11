@@ -462,6 +462,27 @@ const Products = () => {
       fetchProducts();
     } catch (error: any) {
       const msg = error?.message || error?.details || error?.hint || 'Não foi possível excluir este produto.';
+      const preservesHistory = String(error?.code || '') === '23503'
+        || /nfce_items|movimenta[cç][aã]o|pedido|cupom|fiscal/i.test(msg);
+
+      if (preservesHistory) {
+        try {
+          await updateProductAvailabilityFields(productId, false);
+          toast({
+            title: 'Produto arquivado',
+            description: 'Como este produto já faz parte de uma venda ou NFC-e, ele foi desativado para preservar o histórico fiscal.',
+          });
+          await fetchProducts();
+          return;
+        } catch (archiveError: any) {
+          toast({
+            title: 'Erro ao arquivar produto',
+            description: archiveError?.message || 'Não foi possível desativar este produto.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
       toast({
         title: 'Erro ao excluir produto',
         description: msg,
