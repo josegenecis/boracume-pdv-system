@@ -1,96 +1,22 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChefHat, Mail, MapPin, ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Mail, MapPin, MessageCircle } from 'lucide-react';
 
-const Footer = () => {
-  const currentYear = new Date().getFullYear();
+const SUPPORT_PHONE = '5585992918273';
+const WHATSAPP_URL = `https://wa.me/${SUPPORT_PHONE}?text=${encodeURIComponent('Olá! Quero conhecer o PopSystem.')}`;
 
-  return (
-    <footer className="bg-slate-950 text-white border-t border-slate-900">
-      
-      {/* CTA Final */}
-      <div className="border-b border-slate-900">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-          <h2 className="text-3xl md:text-5xl font-extrabold mb-8 max-w-4xl mx-auto leading-tight">
-            Pronto para modernizar seu restaurante?
-          </h2>
-          <Link to="/signup">
-            <Button className="bg-white text-slate-950 hover:bg-gray-100 font-bold px-10 py-8 text-xl rounded-2xl shadow-[0_0_50px_-15px_rgba(255,255,255,0.3)] transition-all transform hover:scale-105">
-              Agendar demonstração
-              <ArrowRight className="ml-2 w-6 h-6" />
-            </Button>
-          </Link>
-          <p className="mt-6 text-slate-500">
-            Conheça uma plataforma completa para gestão, operação, atendimento e marketing.
-          </p>
-        </div>
+const Footer = () => (
+  <footer className="bg-[#061712] text-white">
+    <div className="container grid gap-10 py-14 md:grid-cols-2 lg:grid-cols-[1.4fr_.8fr_.8fr_1fr]">
+      <div className="max-w-sm">
+        <img src="/LOGOMARCA/logo-pop.webp" alt="PopSystem" className="h-9 w-auto brightness-0 invert" />
+        <p className="mt-5 text-sm font-medium leading-6 text-white/50">A plataforma que conecta operação, gestão e crescimento para restaurantes que querem trabalhar com mais controle.</p>
       </div>
-
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {/* Logo e Descrição */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-boracume-orange rounded-lg flex items-center justify-center">
-                <ChefHat className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold">PopSystem</span>
-            </div>
-            <p className="text-slate-400 text-sm leading-relaxed">
-              O Sistema Operacional do Restaurante Moderno: PDV, delivery, cardápio digital, WhatsApp, marketing, financeiro, estoque e equipe em uma única plataforma.
-            </p>
-          </div>
-
-          {/* Links */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-bold text-white">Plataforma</h3>
-            <ul className="space-y-2 text-sm">
-              <li><a href="#funcionalidades" className="text-slate-400 hover:text-boracume-orange transition-colors">Funcionalidades</a></li>
-              <li><a href="#ia" className="text-slate-400 hover:text-boracume-orange transition-colors">Inteligência Artificial</a></li>
-              <li><a href="#marketing" className="text-slate-400 hover:text-boracume-orange transition-colors">Marketing</a></li>
-              <li><a href="#precos" className="text-slate-400 hover:text-boracume-orange transition-colors">Planos</a></li>
-              <li><Link to="/login" className="text-slate-400 hover:text-boracume-orange transition-colors">Login</Link></li>
-            </ul>
-          </div>
-
-          {/* Legal */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-bold text-white">Legal</h3>
-            <ul className="space-y-2 text-sm">
-              <li><Link to="/termos" className="text-slate-400 hover:text-boracume-orange transition-colors">Termos de Uso</Link></li>
-              <li><Link to="/privacidade" className="text-slate-400 hover:text-boracume-orange transition-colors">Política de Privacidade</Link></li>
-              <li><Link to="/lgpd" className="text-slate-400 hover:text-boracume-orange transition-colors">LGPD</Link></li>
-            </ul>
-          </div>
-
-          {/* Contato */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-bold text-white">Fale Conosco</h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center space-x-2 text-slate-400">
-                <Mail className="w-4 h-4 text-boracume-orange" />
-                <span>contato@popsystem.com.br</span>
-              </div>
-              <div className="flex items-center space-x-2 text-slate-400">
-                <MapPin className="w-4 h-4 text-boracume-orange" />
-                <span>São Paulo, SP</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-slate-900 mt-12 pt-8 text-center md:text-left flex flex-col md:flex-row justify-between items-center">
-          <p className="text-slate-500 text-sm">
-            © {currentYear} PopSystem Tecnologia Ltda.
-          </p>
-          <div className="flex space-x-4 mt-4 md:mt-0">
-             {/* Social icons if needed */}
-          </div>
-        </div>
-      </div>
-    </footer>
-  );
-};
+      <div><h3 className="text-sm font-black">Plataforma</h3><div className="mt-4 space-y-3 text-sm font-medium text-white/50"><a className="block hover:text-white" href="#funcionalidades">Funcionalidades</a><a className="block hover:text-white" href="#inteligencia">Inteligência</a><a className="block hover:text-white" href="#planos">Planos</a><Link className="block hover:text-white" to="/login">Entrar</Link></div></div>
+      <div><h3 className="text-sm font-black">Legal</h3><div className="mt-4 space-y-3 text-sm font-medium text-white/50"><Link className="block hover:text-white" to="/termos">Termos de uso</Link><Link className="block hover:text-white" to="/privacidade">Privacidade</Link><Link className="block hover:text-white" to="/lgpd">LGPD</Link></div></div>
+      <div><h3 className="text-sm font-black">Fale conosco</h3><div className="mt-4 space-y-3 text-sm font-medium text-white/50"><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:text-white"><MessageCircle className="h-4 w-4 text-[#83c44a]" />WhatsApp</a><a href="mailto:contato@popsystem.com.br" className="flex items-center gap-2 hover:text-white"><Mail className="h-4 w-4 text-[#83c44a]" />contato@popsystem.com.br</a><span className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#83c44a]" />Atendimento em todo o Brasil</span></div></div>
+    </div>
+    <div className="border-t border-white/10"><div className="container flex flex-col gap-2 py-6 text-xs font-medium text-white/35 sm:flex-row sm:items-center sm:justify-between"><span>© {new Date().getFullYear()} PopSystem Tecnologia Ltda.</span><span>Feito para quem vive a rotina do restaurante.</span></div></div>
+  </footer>
+);
 
 export default Footer;

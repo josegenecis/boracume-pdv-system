@@ -1,109 +1,47 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { ArrowRight, Menu, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { motion, AnimatePresence } from 'framer-motion';
 import Logo from '@/components/Logo';
+
+const menuItems = [
+  { href: '#funcionalidades', label: 'Plataforma' },
+  { href: '#inteligencia', label: 'Inteligência' },
+  { href: '#planos', label: 'Planos' },
+  { href: '#duvidas', label: 'Dúvidas' },
+];
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
-
-  const menuItems = [
-    { href: '#funcionalidades', label: 'Funcionalidades' },
-    { href: '#ia', label: 'IA' },
-    { href: '#marketing', label: 'Marketing' },
-    { href: '#precos', label: 'Planos' },
-  ];
-
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-boracume-orange/10 shadow-sm">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
-          {/* Logo */}
-          <Link to="/" className="flex items-center">
-            <Logo size="md" />
-          </Link>
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-[#dfe8e1]/80 bg-white/95 backdrop-blur-xl">
+      <div className="container flex h-[72px] items-center justify-between">
+        <Link to="/" aria-label="Página inicial PopSystem"><Logo size="md" /></Link>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            {menuItems.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className="text-gray-600 hover:text-boracume-orange transition-colors duration-200 font-medium text-sm tracking-wide"
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
+        <nav className="hidden items-center gap-7 lg:flex" aria-label="Navegação principal">
+          {menuItems.map(item => <a key={item.href} href={item.href} className="text-sm font-bold text-[#4f675e] transition hover:text-[#ef6c20]">{item.label}</a>)}
+        </nav>
 
-          {/* Desktop CTA */}
-          <div className="hidden md:flex items-center space-x-4">
-            <Link to="/login">
-              <Button variant="ghost" className="text-gray-600 hover:text-boracume-orange font-medium">
-                Entrar
-              </Button>
-            </Link>
-            <Link to="/signup">
-              <Button className="bg-boracume-orange hover:bg-boracume-orange/90 text-white shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 transition-all duration-300 transform hover:-translate-y-0.5 font-bold px-6">
-                Ver demonstração
-              </Button>
-            </Link>
-          </div>
-
-          {/* Mobile Menu Button */}
-          <button
-            onClick={toggleMenu}
-            className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            {isMenuOpen ? (
-              <X className="w-6 h-6 text-gray-600" />
-            ) : (
-              <Menu className="w-6 h-6 text-gray-600" />
-            )}
-          </button>
+        <div className="hidden items-center gap-2 md:flex">
+          <Link to="/login"><Button variant="ghost" className="font-bold text-[#315548] hover:bg-[#edf5ee] hover:text-[#064733]">Entrar</Button></Link>
+          <Link to="/signup"><Button className="rounded-xl bg-[#ef6c20] px-5 font-black text-white shadow-lg shadow-orange-200/60 hover:bg-[#dc5c14]">Começar agora <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
         </div>
 
-        {/* Mobile Menu */}
-        <AnimatePresence>
-          {isMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="md:hidden border-t border-gray-100 bg-white shadow-xl rounded-b-2xl overflow-hidden"
-            >
-              <div className="py-4 space-y-2 px-4">
-                {menuItems.map((item) => (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    className="block px-4 py-3 text-gray-600 hover:text-boracume-orange hover:bg-orange-50 rounded-xl transition-all font-medium"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {item.label}
-                  </a>
-                ))}
-                <div className="pt-4 space-y-3 border-t border-gray-100 mt-2">
-                  <Link to="/login" className="block">
-                    <Button variant="ghost" className="w-full justify-center text-gray-600 hover:text-boracume-orange">
-                      Entrar
-                    </Button>
-                  </Link>
-                  <Link to="/signup" className="block">
-                    <Button className="w-full bg-boracume-orange hover:bg-boracume-orange/90 text-white font-bold shadow-lg shadow-orange-500/20">
-                      Ver demonstração
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <button type="button" onClick={() => setIsMenuOpen(value => !value)} className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#f1f5f1] text-[#064733] md:hidden" aria-label={isMenuOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={isMenuOpen}>
+          {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
       </div>
+
+      <AnimatePresence>
+        {isMenuOpen && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-[#e7ece8] bg-white md:hidden">
+          <nav className="container space-y-1 py-4" aria-label="Navegação móvel">
+            {menuItems.map(item => <a key={item.href} href={item.href} onClick={() => setIsMenuOpen(false)} className="block rounded-xl px-4 py-3 text-sm font-bold text-[#315548] hover:bg-[#f1f6f1]">{item.label}</a>)}
+            <div className="grid grid-cols-2 gap-2 pt-3"><Link to="/login"><Button variant="outline" className="w-full rounded-xl font-bold">Entrar</Button></Link><Link to="/signup"><Button className="w-full rounded-xl bg-[#ef6c20] font-black text-white">Começar</Button></Link></div>
+          </nav>
+        </motion.div>}
+      </AnimatePresence>
     </header>
   );
 };
