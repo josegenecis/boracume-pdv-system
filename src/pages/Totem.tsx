@@ -1,37 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import {
-  ArrowRight,
-  ChefHat,
-  CreditCard,
-  Download,
   Expand,
   LockKeyhole,
-  Minus,
-  Plus,
   Printer,
   Search,
   ShoppingBag,
-  Sparkles,
-  Trash2,
-  Utensils,
   Wifi,
   WifiOff,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
+import type { SelectedVariationDetail } from '@/hooks/useSimpleVariations';
 import { useMenuData } from '@/hooks/useMenuData';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
-import CartBottomBar from '@/components/menu/CartBottomBar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import TotemCheckoutModal from '@/components/totem/TotemCheckoutModal';
+import TotemCheckoutBar from '@/components/totem/TotemCheckoutBar';
+import TotemIdleScreen from '@/components/totem/TotemIdleScreen';
 import TotemProductCard from '@/components/totem/TotemProductCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { PrinterService } from '@/utils/printerService';
-import MarketingBanners from '@/components/marketing/MarketingBanners';
 import MarketingPixels from '@/components/marketing/MarketingPixels';
 import { getSavedTotemRestaurantId, useTotemPwa } from '@/hooks/useTotemPwa';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -59,9 +51,6 @@ interface Category {
   is_pizza?: boolean;
   pizza_half_price_mode?: 'highest' | 'split_halves';
 }
-
-const formatBRL = (value: number) =>
-  `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function Totem() {
   const { userId } = useParams();
@@ -123,9 +112,8 @@ export default function Totem() {
   const filteredProductsByCategory = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const byCat: Record<string, Product[]> = {};
-    for (const c of categories as any[]) byCat[c.id] = [];
-    for (const p of products as any[]) {
-      const prod = p as Product;
+    for (const c of categories as Category[]) byCat[c.id] = [];
+    for (const prod of products as Product[]) {
       if (!prod?.is_available) continue;
       if (q) {
         const hay = `${prod.name} ${prod.description}`.toLowerCase();
@@ -157,13 +145,15 @@ export default function Totem() {
     }
     try {
       await fetchVariations(product.id);
-    } catch {}
+    } catch {
+      // O modal ainda pode abrir sem adicionais quando a consulta falhar.
+    }
     setStarted(true);
     setSelectedProduct(product);
     setShowVariationModal(true);
   };
 
-  const handleAddToCartFromModal = (product: any, quantity: number, variations: string[], notes: string, variationPrice: number, optionDetails?: any[]) => {
+  const handleAddToCartFromModal = (product: Product, quantity: number, variations: string[], notes: string, variationPrice: number, optionDetails?: SelectedVariationDetail[]) => {
     addToCart(product, quantity, variations, notes, variationPrice, optionDetails);
     setShowVariationModal(false);
     setSelectedProduct(null);
@@ -249,94 +239,18 @@ export default function Totem() {
       <MarketingPixels userId={finalUserId} />
 
       {!started ? (
-        <section className="relative min-h-screen overflow-hidden bg-[#073a2d] text-white">
-          <div className="absolute inset-0 opacity-20">
-            <div className="h-full w-full bg-[radial-gradient(circle_at_20%_20%,rgba(239,108,32,0.65),transparent_32%),radial-gradient(circle_at_82%_18%,rgba(133,196,65,0.7),transparent_30%),linear-gradient(135deg,#073a2d,#10261f)]" />
-          </div>
-          <div className="absolute right-5 top-5 z-10 flex items-center gap-2">
-            <div className={`flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold backdrop-blur ${isOnline ? 'border-white/15 bg-white/10 text-white/80' : 'border-red-300/30 bg-red-500/20 text-red-100'}`}>
-              {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-              {isOnline ? 'Online' : 'Sem conexão'}
-            </div>
-            <Button type="button" variant="ghost" size="icon" onClick={toggleFullscreen} className="h-11 w-11 rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/20 hover:text-white" aria-label={isFullscreen ? 'Sair da tela cheia' : 'Abrir em tela cheia'}>
-              <Expand className="h-5 w-5" />
-            </Button>
-          </div>
-          <div className="relative mx-auto grid min-h-screen max-w-7xl grid-cols-1 items-center gap-10 px-6 py-20 lg:grid-cols-[1fr_520px]">
-            <div className="space-y-8">
-              <div className="flex items-center gap-4">
-                {profile?.logo_url ? <img src={profile.logo_url} alt={profile.restaurant_name || 'Restaurante'} className="h-16 w-16 rounded-2xl border border-white/15 bg-white object-contain p-1 shadow-xl" /> : <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[#073a2d]"><Utensils className="h-8 w-8" /></div>}
-                <div>
-                  <div className="text-sm font-bold uppercase tracking-[.16em] text-[#a9df78]">Autoatendimento</div>
-                  <div className="mt-1 text-2xl font-black">{profile?.restaurant_name || 'PopSystem Totem'}</div>
-                </div>
-              </div>
-              <div className="space-y-5">
-                <h1 className="max-w-4xl text-5xl font-black leading-[1.02] tracking-normal sm:text-6xl lg:text-7xl">
-                  Faça seu pedido no seu ritmo
-                </h1>
-                <p className="max-w-2xl text-xl font-medium leading-relaxed text-white/82">
-                  Escolha os produtos, personalize os adicionais, pague e retire no balcão com a senha do pedido.
-                </p>
-              </div>
-              <div className="grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-3">
-                {[
-                  ['1', 'Escolha'],
-                  ['2', 'Pague'],
-                  ['3', 'Retire'],
-                ].map(([step, label]) => (
-                  <div key={step} className="rounded-lg border border-white/15 bg-white/10 p-4">
-                    <div className="text-sm font-bold text-white/70">Passo {step}</div>
-                    <div className="mt-1 text-2xl font-black">{label}</div>
-                  </div>
-                ))}
-              </div>
-              <Button
-                type="button"
-                onClick={() => setStarted(true)}
-                className="h-20 rounded-lg bg-boracume-orange px-10 text-2xl font-black text-white shadow-2xl hover:bg-boracume-orange/90"
-              >
-                Tocar para começar
-                <ArrowRight className="ml-3 h-7 w-7" />
-              </Button>
-              {!isInstalled ? (
-                <button type="button" onClick={handleInstall} className="flex items-center gap-2 text-sm font-bold text-white/65 transition hover:text-white">
-                  <Download className="h-4 w-4" />
-                  {canInstall ? 'Instalar este totem como aplicativo' : 'Como instalar neste equipamento'}
-                </button>
-              ) : (
-                <div className="flex items-center gap-2 text-sm font-bold text-[#a9df78]"><CheckCircle2 className="h-4 w-4" />Totem instalado neste equipamento</div>
-              )}
-            </div>
-
-            <div className="hidden space-y-4 lg:block">
-              {featuredProducts.length > 0 ? (
-                featuredProducts.map((product, index) => (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() => handleProductClick(product)}
-                    className="flex w-full items-center gap-4 rounded-lg border border-white/15 bg-white/10 p-4 text-left backdrop-blur transition hover:bg-white/15"
-                  >
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-white text-2xl font-black text-[#073a2d]">
-                      {index + 1}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-xl font-black">{product.name}</div>
-                      <div className="mt-1 text-sm font-semibold text-white/70">{formatBRL(product.price)}</div>
-                    </div>
-                    <Sparkles className="h-6 w-6 text-boracume-orange" />
-                  </button>
-                ))
-              ) : (
-                <div className="rounded-lg border border-white/15 bg-white/10 p-8">
-                  <ChefHat className="mb-4 h-10 w-10 text-boracume-orange" />
-                  <div className="text-2xl font-black">Cardápio pronto para o cliente</div>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
+        <TotemIdleScreen
+          restaurantId={finalUserId}
+          profile={profile}
+          featuredProducts={featuredProducts}
+          isOnline={isOnline}
+          isFullscreen={isFullscreen}
+          isInstalled={isInstalled}
+          canInstall={canInstall}
+          onStart={() => setStarted(true)}
+          onInstall={() => void handleInstall()}
+          onToggleFullscreen={() => void toggleFullscreen()}
+        />
       ) : null}
 
       <div className={started ? 'block' : 'hidden'}>
@@ -406,16 +320,8 @@ export default function Totem() {
           </div>
         </header>
 
-        <main className="mx-auto grid max-w-[1600px] grid-cols-1 gap-6 px-4 py-6 pb-28 lg:grid-cols-[1fr_390px] lg:px-6 lg:pb-8">
+        <main className="totem-menu-main mx-auto max-w-[1600px] px-4 py-6 pb-44 lg:px-6">
           <section className="min-w-0 space-y-8">
-            <MarketingBanners
-              restaurantId={finalUserId}
-              onSelectProductId={(productId) => {
-                const p = (products as any[]).find((x: any) => String(x?.id) === String(productId));
-                if (p) void handleProductClick(p as any);
-              }}
-            />
-
             {menuLoading ? (
               <div className="rounded-lg border border-stone-200 bg-white p-8 text-lg font-bold text-stone-500">
                 Carregando cardapio...
@@ -449,9 +355,9 @@ export default function Totem() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                      <div className="totem-product-grid grid grid-cols-1 gap-4 sm:grid-cols-2">
                         {items.map((product: Product) => (
-                          <TotemProductCard key={product.id} product={product as any} onSelect={handleProductClick} />
+                          <TotemProductCard key={product.id} product={product} onSelect={handleProductClick} />
                         ))}
                       </div>
                     </section>
@@ -461,92 +367,14 @@ export default function Totem() {
             )}
           </section>
 
-          <aside className="sticky top-[154px] hidden h-[calc(100vh-178px)] rounded-lg border border-stone-200 bg-white shadow-sm lg:flex lg:flex-col">
-            <div className="border-b border-stone-100 p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-bold uppercase tracking-wide text-stone-400">Meu pedido</div>
-                  <div className="text-2xl font-black text-stone-950">{itemCount} item{itemCount === 1 ? '' : 's'}</div>
-                </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-boracume-orange text-white">
-                  <ShoppingBag className="h-6 w-6" />
-                </div>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {cart.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center rounded-lg border border-dashed border-stone-200 p-6 text-center">
-                  <ChefHat className="mb-3 h-10 w-10 text-stone-300" />
-                  <div className="text-lg font-black text-stone-800">Seu pedido está vazio</div>
-                  <div className="mt-1 text-sm font-medium text-stone-500">Adicione um produto para finalizar.</div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {cart.map((item: any) => (
-                    <div key={item.uniqueId} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-base font-black text-stone-950">{item.product.name}</div>
-                          {item.variations?.length ? (
-                            <div className="mt-1 line-clamp-2 text-xs font-medium text-stone-500">{item.variations.join(', ')}</div>
-                          ) : null}
-                          <div className="mt-2 text-lg font-black text-boracume-orange">{formatBRL(item.totalPrice)}</div>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.uniqueId)} className="h-9 w-9 rounded-lg" aria-label={`Remover ${item.product.name} do pedido`}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-10 w-10 rounded-lg bg-white"
-                            onClick={() => updateQuantity(item.uniqueId, item.quantity - 1)}
-                            disabled={item.quantity <= 1}
-                            aria-label={`Diminuir quantidade de ${item.product.name}`}
-                          >
-                            <Minus className="h-4 w-4" />
-                          </Button>
-                          <div className="w-8 text-center text-lg font-black">{item.quantity}</div>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-10 w-10 rounded-lg bg-white"
-                            onClick={() => updateQuantity(item.uniqueId, item.quantity + 1)}
-                            aria-label={`Aumentar quantidade de ${item.product.name}`}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3 border-t border-stone-100 p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-base font-bold text-stone-500">Total</span>
-                <span className="text-3xl font-black text-stone-950">{formatBRL(total)}</span>
-              </div>
-              <Button
-                type="button"
-                disabled={cart.length === 0}
-                onClick={() => setShowCheckoutModal(true)}
-                className="h-16 w-full rounded-lg bg-boracume-orange text-xl font-black text-white hover:bg-boracume-orange/90"
-              >
-                <CreditCard className="mr-3 h-6 w-6" />
-                Pagar pedido
-              </Button>
-              <Button type="button" variant="ghost" onClick={handleNewSession} className="h-11 w-full rounded-lg font-bold">
-                Cancelar pedido
-              </Button>
-            </div>
-          </aside>
         </main>
+
+        <TotemCheckoutBar
+          itemCount={itemCount}
+          total={total}
+          onCheckout={() => setShowCheckoutModal(true)}
+          onCancel={handleNewSession}
+        />
       </div>
 
       <SimpleVariationModal
@@ -556,7 +384,7 @@ export default function Totem() {
           setSelectedProduct(null);
         }}
         product={selectedProduct}
-        categoryConfig={categories.find((category: any) => category.id === selectedProduct?.category_id) as any}
+        categoryConfig={(categories as Category[]).find((category) => category.id === selectedProduct?.category_id)}
         onAddToCart={handleAddToCartFromModal}
       />
 
@@ -564,16 +392,12 @@ export default function Totem() {
         isOpen={showCheckoutModal}
         onClose={() => setShowCheckoutModal(false)}
         userId={finalUserId}
-        cart={cart as any}
+        cart={cart}
         total={total}
         onUpdateQuantity={updateQuantity}
         onRemoveItem={removeFromCart}
         onClearCart={clearCart}
       />
-
-      <div className="lg:hidden">
-        <CartBottomBar itemCount={itemCount} total={total} onOpenCart={() => setShowCheckoutModal(true)} />
-      </div>
 
       <Dialog open={idleSecondsLeft !== null}>
         <DialogContent className="max-w-lg rounded-[28px] border-0 p-8 text-center" onPointerDownOutside={(event) => event.preventDefault()}>

@@ -116,3 +116,165 @@
     display: none;
   }
 }
+
+@media (orientation: portrait) {
+  .totem-idle-header {
+    padding: 2rem;
+  }
+
+  .totem-idle-logo {
+    width: 4rem;
+    height: 4rem;
+  }
+
+  .totem-idle-brand {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+
+  .totem-idle-shade {
+    height: 58%;
+  }
+
+  .totem-idle-content {
+    padding-right: 2.5rem;
+    padding-bottom: max(3rem, env(safe-area-inset-bottom));
+    padding-left: 2.5rem;
+  }
+
+  .totem-idle-eyebrow {
+    font-size: 1.125rem;
+    line-height: 1.75rem;
+  }
+
+  .totem-idle-title {
+    font-size: clamp(3.5rem, 7vw, 5rem);
+  }
+
+  .totem-idle-description {
+    font-size: 1.5rem;
+    line-height: 2.25rem;
+  }
+
+  .totem-idle-price {
+    font-size: 3rem;
+    line-height: 1;
+  }
+
+  .totem-idle-start {
+    height: 6rem;
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+
+  .totem-idle-arrow {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .totem-menu-main {
+    padding-right: 1.5rem;
+    padding-bottom: 16rem;
+    padding-left: 1.5rem;
+  }
+
+  .totem-checkout-shell {
+    padding-right: 1.5rem;
+    padding-left: 1.5rem;
+    padding-top: 1.25rem;
+  }
+
+  .totem-checkout-inner {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .totem-checkout-summary {
+    flex-basis: 55%;
+  }
+
+  .totem-checkout-item-label {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+
+  .totem-checkout-total {
+    display: block;
+  }
+
+  .totem-checkout-total-value {
+    font-size: 2.25rem;
+    line-height: 2.5rem;
+  }
+
+  .totem-checkout-cancel {
+    order: 3;
+    flex: 1 1 0%;
+  }
+
+  .totem-checkout-button {
+    order: 4;
+    width: 100%;
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+}
+
+@media (orientation: landscape) {
+  .totem-idle-header {
+    padding: 1.75rem;
+  }
+
+  .totem-idle-shade {
+    height: 80%;
+  }
+
+  .totem-idle-content {
+    padding-right: 3rem;
+    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+    padding-left: 3rem;
+  }
+
+  .totem-idle-description {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+}
+
+@media (orientation: landscape) and (min-width: 1024px) {
+  .totem-idle-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 420px;
+    align-items: end;
+    gap: 3.5rem;
+  }
+
+  .totem-idle-action {
+    margin-top: 0;
+  }
+
+  .totem-idle-title {
+    font-size: 3.75rem;
+    line-height: 1;
+  }
+
+  .totem-product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (orientation: landscape) and (min-width: 1280px) {
+  .totem-product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (orientation: landscape) and (min-width: 1536px) {
+  .totem-idle-title {
+    font-size: 4.5rem;
+  }
+
+  .totem-product-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}

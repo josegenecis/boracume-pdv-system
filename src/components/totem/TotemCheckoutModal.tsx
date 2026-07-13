@@ -12,7 +12,7 @@ import { PrinterService } from '@/utils/printerService';
 import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 import { useToast } from '@/hooks/use-toast';
 
-interface TotemCartItem {
+export interface TotemCartItem {
   product: { id: string; name: string; price: number; image_url?: string };
   quantity: number;
   variations: string[];

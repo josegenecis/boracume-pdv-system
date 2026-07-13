@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Copy, ExternalLink, MonitorUp, QrCode, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Copy, ExternalLink, Megaphone, Monitor, MonitorUp, QrCode, ShieldCheck, Smartphone } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -44,6 +44,23 @@ export default function TotemSettings() {
             <Button type="button" className="h-12 rounded-xl bg-[#ef6c20] font-black text-white hover:bg-[#da5e17]" onClick={() => window.open(totemUrl, '_blank', 'noopener,noreferrer')} disabled={!totemUrl}>
               <ExternalLink className="mr-2 h-4 w-4" />Abrir módulo
             </Button>
+          </div>
+          <div className="rounded-2xl border border-orange-100 bg-orange-50 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-boracume-orange text-white"><Megaphone className="h-5 w-5" /></div>
+              <div className="min-w-0 flex-1">
+                <div className="font-black text-stone-900">Propagandas da tela de espera</div>
+                <p className="mt-1 text-sm font-semibold leading-6 text-stone-600">Os banners ativos da loja passam automaticamente em tela cheia enquanto o totem não está em uso.</p>
+                <Button type="button" variant="link" className="mt-1 h-auto p-0 font-black text-boracume-orange" onClick={() => window.location.assign('/marketing?tab=banners')}>
+                  Gerenciar artes e banners
+                  <ExternalLink className="ml-1.5 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#dfe7e1] p-4"><Smartphone className="h-6 w-6 text-[#67a83f]" /><div><div className="font-black text-[#164b39]">Modo vertical</div><div className="text-xs font-semibold text-[#789087]">Layout touch para totens em pé</div></div></div>
+            <div className="flex items-center gap-3 rounded-2xl border border-[#dfe7e1] p-4"><Monitor className="h-6 w-6 text-[#67a83f]" /><div><div className="font-black text-[#164b39]">Modo horizontal</div><div className="text-xs font-semibold text-[#789087]">Mais produtos por linha</div></div></div>
           </div>
           <div className="space-y-3">
             {[

@@ -1,18 +1,22 @@
-# Totem PopSystem PWA - versao 1
+# Totem PopSystem PWA - versao 2
 
 ## Escopo entregue
 
 - Rota publica e isolada por loja: `/totem/:userId`.
 - Vinculo persistente do equipamento com a loja.
 - Manifesto PWA proprio, inicializacao em `/totem` e modo `fullscreen`.
-- Tela inicial com identidade do restaurante e produtos em destaque.
+- Tela ociosa com propaganda em tela cheia e rotacao automatica dos banners ativos da loja.
+- Fallback automatico para capa e produtos em destaque quando nao existem banners cadastrados.
+- Layout responsivo especifico para totens verticais e horizontais.
 - Cardapio touch-first, busca, categorias, adicionais, observacoes e carrinho.
+- Resumo do pedido e acesso ao checkout sempre fixos no rodape, em qualquer orientacao.
 - Checkout PIX integrado ao fluxo ja existente.
 - Cartao e dinheiro tratados como pagamento posterior no caixa/maquininha.
 - Indicador online/offline, Wake Lock e controle de tela cheia.
 - Carrinho separado por loja e limpeza de sessao apos inatividade.
 - Cache apenas do shell, imagens e arquivos estaticos. APIs, pedidos e pagamentos nao sao armazenados pelo service worker.
 - Area administrativa em `Configuracoes > Totem` com link, QR Code e instrucoes de instalacao.
+- Gestao das propagandas reaproveita os banners em `Marketing > Artes e Banners`.
 
 ## Limites intencionais do PWA
 
