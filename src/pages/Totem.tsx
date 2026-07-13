@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import {
   ArrowRight,
   ChefHat,
   CreditCard,
+  Download,
+  Expand,
+  LockKeyhole,
   Minus,
   Plus,
   Printer,
@@ -12,6 +15,8 @@ import {
   Sparkles,
   Trash2,
   Utensils,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
@@ -28,6 +33,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PrinterService } from '@/utils/printerService';
 import MarketingBanners from '@/components/marketing/MarketingBanners';
 import MarketingPixels from '@/components/marketing/MarketingPixels';
+import { getSavedTotemRestaurantId, useTotemPwa } from '@/hooks/useTotemPwa';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 interface Product {
   id: string;
@@ -62,10 +69,12 @@ export default function Totem() {
   const queryParams = new URLSearchParams(location.search);
   const userIdFromQuery = queryParams.get('userId');
   const { user } = useAuth();
-  const finalUserId = userId || userIdFromQuery || user?.id || '';
+  const [savedRestaurantId] = useState(getSavedTotemRestaurantId);
+  const finalUserId = userId || userIdFromQuery || user?.id || savedRestaurantId || '';
 
   const { toast } = useToast();
-  const { cart, addToCart, removeFromCart, updateQuantity, clearCart, getCartTotal, getCartItemCount } = useSimpleCart();
+  const { cart, addToCart, removeFromCart, updateQuantity, clearCart, getCartTotal, getCartItemCount } = useSimpleCart(finalUserId ? `totem:${finalUserId}` : 'totem');
+  const clearCartRef = useRef(clearCart);
   const { fetchVariations } = useSimpleVariations();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showVariationModal, setShowVariationModal] = useState(false);
@@ -73,13 +82,19 @@ export default function Totem() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [started, setStarted] = useState(false);
+  const [idleSecondsLeft, setIdleSecondsLeft] = useState<number | null>(null);
 
-  const { products, categories, isLoading: menuLoading, error: menuError } = useMenuData({ userId: finalUserId, enableCache: false });
+  const { products, categories, profile, isLoading: menuLoading, error: menuError } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 60 });
+  const { canInstall, install, isInstalled, isOnline, isFullscreen, toggleFullscreen } = useTotemPwa(finalUserId);
 
-  const categoryIds = categories.map((cat: any) => `category-${cat.id}`);
+  const categoryIds = useMemo(() => categories.map((category) => `category-${category.id}`), [categories]);
   const { activeSection, registerSection } = useScrollSpy(categoryIds);
   const itemCount = getCartItemCount();
   const total = getCartTotal();
+
+  useEffect(() => {
+    clearCartRef.current = clearCart;
+  }, [clearCart]);
 
   useEffect(() => {
     if (activeSection) {
@@ -137,7 +152,7 @@ export default function Totem() {
 
   const handleProductClick = async (product: Product) => {
     if (!finalUserId) {
-      toast({ title: 'Erro', description: 'Totem nao configurado para este restaurante.', variant: 'destructive' });
+      toast({ title: 'Erro', description: 'Totem não configurado para este restaurante.', variant: 'destructive' });
       return;
     }
     try {
@@ -154,21 +169,64 @@ export default function Totem() {
     setSelectedProduct(null);
   };
 
-  const handleNewSession = () => {
-    clearCart();
+  const handleNewSession = useCallback(() => {
+    clearCartRef.current();
     setSearchQuery('');
     setShowCheckoutModal(false);
+    setShowVariationModal(false);
+    setSelectedProduct(null);
+    setIdleSecondsLeft(null);
     setStarted(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    if (!started) {
+      setIdleSecondsLeft(null);
+      return;
+    }
+
+    let lastInteraction = Date.now();
+    const resetIdle = () => {
+      lastInteraction = Date.now();
+      setIdleSecondsLeft(null);
+    };
+    const events: Array<keyof WindowEventMap> = ['pointerdown', 'touchstart', 'keydown'];
+    events.forEach((eventName) => window.addEventListener(eventName, resetIdle, { passive: true }));
+
+    const interval = window.setInterval(() => {
+      const idleSeconds = Math.floor((Date.now() - lastInteraction) / 1000);
+      if (idleSeconds >= 180) {
+        handleNewSession();
+        return;
+      }
+      setIdleSecondsLeft(idleSeconds >= 150 ? 180 - idleSeconds : null);
+    }, 1000);
+
+    return () => {
+      window.clearInterval(interval);
+      events.forEach((eventName) => window.removeEventListener(eventName, resetIdle));
+    };
+  }, [started, handleNewSession]);
+
+  const handleInstall = async () => {
+    const outcome = await install();
+    if (outcome === 'unavailable') {
+      toast({ title: 'Instalar Totem', description: 'No Chrome ou Edge, abra o menu do navegador e escolha “Instalar Totem PopSystem”.' });
+    }
   };
 
   if (!finalUserId) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-stone-50 p-6">
-        <div className="w-full max-w-md rounded-lg border bg-white p-6 shadow-sm">
-          <div className="text-xl font-bold">Totem</div>
-          <div className="mt-2 text-sm text-muted-foreground">
-            Acesse com /totem?userId=SEU_ID para vincular o restaurante.
+      <div className="flex min-h-screen items-center justify-center bg-[#063d2e] p-6 text-white">
+        <div className="w-full max-w-xl rounded-[28px] border border-white/15 bg-white/10 p-8 text-center shadow-2xl backdrop-blur">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[#063d2e]"><LockKeyhole className="h-8 w-8" /></div>
+          <div className="mt-6 text-3xl font-black">Totem ainda não vinculado</div>
+          <p className="mx-auto mt-3 max-w-md text-base font-medium leading-7 text-white/70">
+            Entre no PopSystem como administrador e abra o link de instalação deste totem. O vínculo da loja ficará salvo neste equipamento.
+          </p>
+          <div className="mt-6 rounded-2xl bg-black/15 p-4 text-sm font-bold text-white/75">
+            Endereço de configuração: /totem/ID-DA-LOJA
           </div>
         </div>
       </div>
@@ -195,18 +253,30 @@ export default function Totem() {
           <div className="absolute inset-0 opacity-20">
             <div className="h-full w-full bg-[radial-gradient(circle_at_20%_20%,rgba(239,108,32,0.65),transparent_32%),radial-gradient(circle_at_82%_18%,rgba(133,196,65,0.7),transparent_30%),linear-gradient(135deg,#073a2d,#10261f)]" />
           </div>
-          <div className="relative mx-auto grid min-h-screen max-w-7xl grid-cols-1 items-center gap-10 px-6 py-10 lg:grid-cols-[1fr_520px]">
+          <div className="absolute right-5 top-5 z-10 flex items-center gap-2">
+            <div className={`flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold backdrop-blur ${isOnline ? 'border-white/15 bg-white/10 text-white/80' : 'border-red-300/30 bg-red-500/20 text-red-100'}`}>
+              {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+              {isOnline ? 'Online' : 'Sem conexão'}
+            </div>
+            <Button type="button" variant="ghost" size="icon" onClick={toggleFullscreen} className="h-11 w-11 rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/20 hover:text-white" aria-label={isFullscreen ? 'Sair da tela cheia' : 'Abrir em tela cheia'}>
+              <Expand className="h-5 w-5" />
+            </Button>
+          </div>
+          <div className="relative mx-auto grid min-h-screen max-w-7xl grid-cols-1 items-center gap-10 px-6 py-20 lg:grid-cols-[1fr_520px]">
             <div className="space-y-8">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white">
-                <Utensils className="h-4 w-4" />
-                Autoatendimento PopSystem
+              <div className="flex items-center gap-4">
+                {profile?.logo_url ? <img src={profile.logo_url} alt={profile.restaurant_name || 'Restaurante'} className="h-16 w-16 rounded-2xl border border-white/15 bg-white object-contain p-1 shadow-xl" /> : <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[#073a2d]"><Utensils className="h-8 w-8" /></div>}
+                <div>
+                  <div className="text-sm font-bold uppercase tracking-[.16em] text-[#a9df78]">Autoatendimento</div>
+                  <div className="mt-1 text-2xl font-black">{profile?.restaurant_name || 'PopSystem Totem'}</div>
+                </div>
               </div>
               <div className="space-y-5">
                 <h1 className="max-w-4xl text-5xl font-black leading-[1.02] tracking-normal sm:text-6xl lg:text-7xl">
-                  Faca seu pedido no seu ritmo
+                  Faça seu pedido no seu ritmo
                 </h1>
                 <p className="max-w-2xl text-xl font-medium leading-relaxed text-white/82">
-                  Escolha os produtos, personalize os adicionais, pague e retire no balcao com a senha do pedido.
+                  Escolha os produtos, personalize os adicionais, pague e retire no balcão com a senha do pedido.
                 </p>
               </div>
               <div className="grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-3">
@@ -226,9 +296,17 @@ export default function Totem() {
                 onClick={() => setStarted(true)}
                 className="h-20 rounded-lg bg-boracume-orange px-10 text-2xl font-black text-white shadow-2xl hover:bg-boracume-orange/90"
               >
-                Tocar para comecar
+                Tocar para começar
                 <ArrowRight className="ml-3 h-7 w-7" />
               </Button>
+              {!isInstalled ? (
+                <button type="button" onClick={handleInstall} className="flex items-center gap-2 text-sm font-bold text-white/65 transition hover:text-white">
+                  <Download className="h-4 w-4" />
+                  {canInstall ? 'Instalar este totem como aplicativo' : 'Como instalar neste equipamento'}
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 text-sm font-bold text-[#a9df78]"><CheckCircle2 className="h-4 w-4" />Totem instalado neste equipamento</div>
+              )}
             </div>
 
             <div className="hidden space-y-4 lg:block">
@@ -253,7 +331,7 @@ export default function Totem() {
               ) : (
                 <div className="rounded-lg border border-white/15 bg-white/10 p-8">
                   <ChefHat className="mb-4 h-10 w-10 text-boracume-orange" />
-                  <div className="text-2xl font-black">Cardapio pronto para o cliente</div>
+                  <div className="text-2xl font-black">Cardápio pronto para o cliente</div>
                 </div>
               )}
             </div>
@@ -266,12 +344,10 @@ export default function Totem() {
           <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 lg:px-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-[#073a2d] text-white">
-                  <ShoppingBag className="h-7 w-7" />
-                </div>
+                {profile?.logo_url ? <img src={profile.logo_url} alt="" className="h-14 w-14 rounded-xl border border-stone-200 bg-white object-contain p-1" /> : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#073a2d] text-white"><ShoppingBag className="h-7 w-7" /></div>}
                 <div>
-                  <div className="text-2xl font-black leading-tight text-[#073a2d]">Autoatendimento</div>
-                  <div className="text-sm font-semibold text-stone-500">Pedido para retirada no balcao</div>
+                  <div className="text-2xl font-black leading-tight text-[#073a2d]">{profile?.restaurant_name || 'Autoatendimento'}</div>
+                  <div className="text-sm font-semibold text-stone-500">Peça, pague e retire no balcão</div>
                 </div>
               </div>
 
@@ -296,6 +372,13 @@ export default function Totem() {
                 >
                   <Printer className="mr-2 h-5 w-5" />
                   Impressora
+                </Button>
+                <div className={`hidden h-14 items-center gap-2 rounded-xl border px-4 text-sm font-bold xl:flex ${isOnline ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
+                  {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+                  {isOnline ? 'Online' : 'Offline'}
+                </div>
+                <Button variant="outline" size="icon" className="hidden h-14 w-14 rounded-xl lg:inline-flex" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Sair da tela cheia' : 'Abrir em tela cheia'}>
+                  <Expand className="h-5 w-5" />
                 </Button>
               </div>
             </div>
@@ -395,7 +478,7 @@ export default function Totem() {
               {cart.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center rounded-lg border border-dashed border-stone-200 p-6 text-center">
                   <ChefHat className="mb-3 h-10 w-10 text-stone-300" />
-                  <div className="text-lg font-black text-stone-800">Seu pedido esta vazio</div>
+                  <div className="text-lg font-black text-stone-800">Seu pedido está vazio</div>
                   <div className="mt-1 text-sm font-medium text-stone-500">Adicione um produto para finalizar.</div>
                 </div>
               ) : (
@@ -410,7 +493,7 @@ export default function Totem() {
                           ) : null}
                           <div className="mt-2 text-lg font-black text-boracume-orange">{formatBRL(item.totalPrice)}</div>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.uniqueId)} className="h-9 w-9 rounded-lg">
+                        <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.uniqueId)} className="h-9 w-9 rounded-lg" aria-label={`Remover ${item.product.name} do pedido`}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -422,6 +505,7 @@ export default function Totem() {
                             className="h-10 w-10 rounded-lg bg-white"
                             onClick={() => updateQuantity(item.uniqueId, item.quantity - 1)}
                             disabled={item.quantity <= 1}
+                            aria-label={`Diminuir quantidade de ${item.product.name}`}
                           >
                             <Minus className="h-4 w-4" />
                           </Button>
@@ -431,6 +515,7 @@ export default function Totem() {
                             size="icon"
                             className="h-10 w-10 rounded-lg bg-white"
                             onClick={() => updateQuantity(item.uniqueId, item.quantity + 1)}
+                            aria-label={`Aumentar quantidade de ${item.product.name}`}
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
@@ -489,6 +574,21 @@ export default function Totem() {
       <div className="lg:hidden">
         <CartBottomBar itemCount={itemCount} total={total} onOpenCart={() => setShowCheckoutModal(true)} />
       </div>
+
+      <Dialog open={idleSecondsLeft !== null}>
+        <DialogContent className="max-w-lg rounded-[28px] border-0 p-8 text-center" onPointerDownOutside={(event) => event.preventDefault()}>
+          <DialogTitle className="text-3xl font-black text-[#073a2d]">Você ainda está aí?</DialogTitle>
+          <p className="mt-3 text-base font-medium leading-7 text-stone-600">
+            Por segurança, este pedido será cancelado e o totem voltará ao início em
+          </p>
+          <div className="mx-auto my-6 flex h-28 w-28 items-center justify-center rounded-full bg-orange-50 text-5xl font-black text-boracume-orange">
+            {idleSecondsLeft ?? 30}
+          </div>
+          <Button type="button" className="h-16 w-full rounded-2xl bg-[#073a2d] text-xl font-black text-white hover:bg-[#0a4b3a]" onClick={() => setIdleSecondsLeft(null)}>
+            Continuar meu pedido
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

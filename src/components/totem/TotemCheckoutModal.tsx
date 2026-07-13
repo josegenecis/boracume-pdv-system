@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import TotemPixCheckoutModal from '@/components/totem/TotemPixCheckoutModal';
 import { PrinterService } from '@/utils/printerService';
 import { notifyOrderCreatedById } from '@/utils/orderNotifications';
+import { useToast } from '@/hooks/use-toast';
 
 interface TotemCartItem {
   product: { id: string; name: string; price: number; image_url?: string };
@@ -48,6 +49,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
   const [successOrder, setSuccessOrder] = useState<any | null>(null);
   const [orderNumber, setOrderNumber] = useState(() => `TOT${Date.now().toString().slice(-6)}`);
   const senha = useMemo(() => String(orderNumber).slice(-4), [orderNumber]);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -91,7 +93,9 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
   const printCoupon = async (order: any) => {
     try {
       await PrinterService.printOrder(order);
-    } catch {}
+    } catch {
+      // A reimpressao continua disponivel mesmo quando a impressora nao esta conectada.
+    }
   };
 
   const finalizeNonPix = async () => {
@@ -210,7 +214,13 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
         return;
       }
       await finalizeNonPix();
-    } catch {}
+    } catch (error) {
+      toast({
+        title: 'Não foi possível finalizar',
+        description: error instanceof Error ? error.message : 'Confira a conexão e tente novamente.',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (successOrder) {
@@ -233,6 +243,12 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                 Pedido {successOrder?.order_number ? `#${successOrder.order_number}` : ''}
               </div>
             </Card>
+
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center text-sm font-bold leading-6 text-emerald-800">
+              {String(successOrder?.payment_method || '').includes('pix')
+                ? 'Pagamento confirmado. Aguarde sua senha ser chamada.'
+                : 'Dirija-se ao caixa ou à maquininha com esta senha para concluir o pagamento.'}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Button variant="outline" className="h-14 rounded-lg text-base font-bold" onClick={() => printCoupon(successOrder)}>
@@ -287,15 +303,15 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                     </div>
 
                     <div className="flex flex-col items-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => onRemoveItem(item.uniqueId)} disabled={isSubmitting}>
+                      <Button variant="ghost" size="icon" onClick={() => onRemoveItem(item.uniqueId)} disabled={isSubmitting} aria-label={`Remover ${item.product.name} do pedido`}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="icon" className="h-11 w-11 rounded-lg" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity - 1)} disabled={isSubmitting || item.quantity <= 1}>
+                        <Button variant="outline" size="icon" className="h-11 w-11 rounded-lg" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity - 1)} disabled={isSubmitting || item.quantity <= 1} aria-label={`Diminuir quantidade de ${item.product.name}`}>
                           <Minus className="h-4 w-4" />
                         </Button>
                         <div className="w-8 text-center text-lg font-black">{item.quantity}</div>
-                        <Button variant="outline" size="icon" className="h-11 w-11 rounded-lg" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)} disabled={isSubmitting}>
+                        <Button variant="outline" size="icon" className="h-11 w-11 rounded-lg" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)} disabled={isSubmitting} aria-label={`Aumentar quantidade de ${item.product.name}`}>
                           <Plus className="h-4 w-4" />
                         </Button>
                       </div>
@@ -359,6 +375,11 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                   Débito
                 </Button>
               </div>
+              {payment !== 'pix' ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-5 text-amber-900">
+                  O pagamento será concluído no caixa ou na maquininha do restaurante. A integração direta com o terminal será habilitada no aplicativo dedicado para totens.
+                </div>
+              ) : null}
             </div>
 
             {payment === 'dinheiro' ? (
@@ -388,7 +409,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
             onClick={handleConfirm}
             disabled={!canSubmit || isSubmitting}
           >
-            {payment === 'pix' ? 'Pagar com PIX' : 'Confirmar e imprimir'}
+            {payment === 'pix' ? 'Pagar com PIX' : 'Gerar senha para pagar'}
           </Button>
         </DialogFooter>
       </DialogContent>

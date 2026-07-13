@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface ScrollSpyResult {
   activeSection: string;
-  registerSection: (id: string, element: HTMLElement) => void;
+  registerSection: (id: string, element: HTMLElement | null) => void;
 }
 
 export const useScrollSpy = (sectionIds: string[], options?: IntersectionObserverInit): ScrollSpyResult => {
@@ -44,12 +44,18 @@ export const useScrollSpy = (sectionIds: string[], options?: IntersectionObserve
     };
   }, [sectionIds, options]);
 
-  const registerSection = (id: string, element: HTMLElement) => {
-    sectionElements.current.set(id, element);
-    if (observer.current) {
-      observer.current.observe(element);
+  const registerSection = useCallback((id: string, element: HTMLElement | null) => {
+    const previous = sectionElements.current.get(id);
+    if (previous && observer.current) observer.current.unobserve(previous);
+
+    if (!element) {
+      sectionElements.current.delete(id);
+      return;
     }
-  };
+
+    sectionElements.current.set(id, element);
+    if (observer.current) observer.current.observe(element);
+  }, []);
 
   return { activeSection, registerSection };
 };
