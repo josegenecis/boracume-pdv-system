@@ -134,6 +134,18 @@ serve(async (req) => {
     if (!new Set(["PIX", "CREDIT_CARD"]).has(paymentMethod)) {
       throw new Error("Forma de pagamento inválida. Escolha PIX ou cartão de crédito.");
     }
+    const installmentCount = Number(body.installmentCount || 1);
+    const maxInstallmentCount = Math.min(12, billingPeriod.months);
+    if (!Number.isInteger(installmentCount) || installmentCount < 1) {
+      throw new Error("Quantidade de parcelas inválida.");
+    }
+    if (paymentMethod !== "CREDIT_CARD" && installmentCount !== 1) {
+      throw new Error("O parcelamento está disponível somente no cartão de crédito.");
+    }
+    if (installmentCount > maxInstallmentCount) {
+      throw new Error(`Este período pode ser parcelado em no máximo ${maxInstallmentCount} vezes.`);
+    }
+    const isInstallmentPayment = paymentMethod === "CREDIT_CARD" && installmentCount > 1;
     const metadata = (user.user_metadata || {}) as Record<string, unknown>;
 
     const { data: fiscalSettings } = await supabaseAdmin
@@ -296,7 +308,9 @@ serve(async (req) => {
 
     const billingType = paymentMethod;
     const renewalDate = addMonths(new Date(), billingPeriod.months);
-    const nextDueDate = String(body.nextDueDate || (isUpgrade ? renewalDate.toISOString().slice(0, 10) : today()));
+    const nextDueDate = String(body.nextDueDate || (
+      isUpgrade || isInstallmentPayment ? renewalDate.toISOString().slice(0, 10) : today()
+    ));
 
     const creditCard = paymentMethod === "CREDIT_CARD" ? {
       holderName: String(body.creditCard?.holderName || "").trim(),
@@ -315,6 +329,11 @@ serve(async (req) => {
       addressComplement: String(body.creditCardHolderInfo?.addressComplement || fiscalSettings?.endereco_complemento || "").trim() || null,
       mobilePhone: onlyDigits(body.creditCardHolderInfo?.mobilePhone || profile?.phone),
     } : null;
+    const customerRemoteIp = String(
+      req.headers.get("x-forwarded-for")?.split(",")[0]
+      || req.headers.get("cf-connecting-ip")
+      || "",
+    ).trim();
 
     if (creditCard) {
       if (creditCard.number.length < 13 || creditCard.number.length > 19) throw new Error("Número do cartão inválido.");
@@ -377,6 +396,7 @@ serve(async (req) => {
           from_billing_amount: oldBillingAmount,
           to_billing_amount: value,
           billing_discount_percent: billingPeriod.discountPercent,
+          to_installment_count: installmentCount,
           credit_amount: creditAmount,
           charge_amount: chargeValue,
           remaining_days: remainingMs / (24 * 60 * 60 * 1000),
@@ -393,24 +413,63 @@ serve(async (req) => {
       }
       planChangeId = planChange.id;
 
-      payment = await asaasFetch("/payments", {
-        method: "POST",
-        body: JSON.stringify({
-          customer: customerId,
-          billingType,
-          value: chargeValue,
-          dueDate: today(),
-          description: `Upgrade PopSystem para ${plan.name} ${billingPeriod.label} - crédito de R$ ${creditAmount.toFixed(2)}`,
-          externalReference: `subscription-upgrade:${planChangeId}`,
-          ...(creditCard ? { creditCard, creditCardHolderInfo } : {}),
-        }),
-      });
+      try {
+        payment = await asaasFetch("/payments", {
+          method: "POST",
+          body: JSON.stringify({
+            customer: customerId,
+            billingType,
+            value: chargeValue,
+            dueDate: today(),
+            description: `Upgrade PopSystem para ${plan.name} ${billingPeriod.label} - crédito de R$ ${creditAmount.toFixed(2)}`,
+            externalReference: `subscription-upgrade:${planChangeId}`,
+            ...(isInstallmentPayment ? {
+              installmentCount,
+              totalValue: chargeValue,
+            } : {}),
+            ...(creditCard ? {
+              creditCard,
+              creditCardHolderInfo,
+              ...(customerRemoteIp ? { remoteIp: customerRemoteIp } : {}),
+            } : {}),
+          }),
+        });
+      } catch (paymentError) {
+        await asaasFetch(`/subscriptions/${encodeURIComponent(asaasSubscription.id)}`, { method: "DELETE" }).catch(() => null);
+        await supabaseAdmin
+          .from("subscription_plan_changes")
+          .update({ status: "failed" })
+          .eq("id", planChangeId);
+        throw paymentError;
+      }
 
       const { error: paymentLinkError } = await supabaseAdmin
         .from("subscription_plan_changes")
         .update({ asaas_payment_id: payment.id })
         .eq("id", planChangeId);
       if (paymentLinkError) throw new Error(`Não foi possível vincular a cobrança do upgrade: ${paymentLinkError.message}`);
+    } else if (isInstallmentPayment) {
+      try {
+        payment = await asaasFetch("/payments", {
+          method: "POST",
+          body: JSON.stringify({
+            customer: customerId,
+            billingType,
+            value: chargeValue,
+            totalValue: chargeValue,
+            installmentCount,
+            dueDate: today(),
+            description: `PopSystem ${plan.name} ${billingPeriod.label} em ${installmentCount} parcelas`,
+            externalReference: `subscription-initial:${user.id}:${asaasSubscription.id}`,
+            creditCard,
+            creditCardHolderInfo,
+            ...(customerRemoteIp ? { remoteIp: customerRemoteIp } : {}),
+          }),
+        });
+      } catch (paymentError) {
+        await asaasFetch(`/subscriptions/${encodeURIComponent(asaasSubscription.id)}`, { method: "DELETE" }).catch(() => null);
+        throw paymentError;
+      }
     } else {
       for (let attempt = 0; attempt < 4 && !payment; attempt += 1) {
         if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 350));
@@ -426,11 +485,13 @@ serve(async (req) => {
 
     const periodStart = new Date();
     const periodEnd = addMonths(periodStart, billingPeriod.months);
+    const paymentApproved = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"])
+      .has(String(payment?.status || "").toUpperCase());
 
     const subscriptionPayload = {
       user_id: user.id,
       plan_id: plan.id,
-      status: "pending",
+      status: !isUpgrade && paymentApproved ? "active" : "pending",
       billing_provider: "asaas",
       asaas_customer_id: customerId,
       asaas_subscription_id: asaasSubscription.id,
@@ -438,6 +499,7 @@ serve(async (req) => {
       store_count: storeCount,
       additional_store_count: additionalStoreCount,
       extra_store_price: plan.extraStorePrice,
+      installment_count: installmentCount,
       billing_cycle: billingPeriod.cycle,
       billing_months: billingPeriod.months,
       billing_discount_percent: billingPeriod.discountPercent,
@@ -470,6 +532,8 @@ serve(async (req) => {
       billingCycle: billingPeriod.cycle,
       billingMonths: billingPeriod.months,
       discountPercent: billingPeriod.discountPercent,
+      installmentCount,
+      installmentValue: money(chargeValue / installmentCount),
       isUpgrade,
       proration: isUpgrade ? {
         oldMonthlyValue,

@@ -20,7 +20,6 @@ const overdueEvents = new Set([
 const canceledEvents = new Set([
   "PAYMENT_DELETED",
   "PAYMENT_REFUNDED",
-  "PAYMENT_REFUND_DENIED",
   "PAYMENT_CHARGEBACK_REQUESTED",
   "PAYMENT_CHARGEBACK_DISPUTE",
   "PAYMENT_CHARGEBACK_DISPUTE_LOST",
@@ -100,6 +99,9 @@ serve(async (req) => {
     const upgradeIdFromReference = externalReference.startsWith("subscription-upgrade:")
       ? externalReference.replace("subscription-upgrade:", "")
       : null;
+    const initialSubscriptionIdFromReference = externalReference.startsWith("subscription-initial:")
+      ? externalReference.split(":").at(-1) || null
+      : null;
     const { data: planChange } = upgradeIdFromReference
       ? await supabase.from("subscription_plan_changes").select("*").eq("id", upgradeIdFromReference).maybeSingle()
       : payment.id
@@ -134,6 +136,7 @@ serve(async (req) => {
           billing_months: billingMonths,
           billing_discount_percent: Number(planChange.billing_discount_percent || 0),
           billing_amount: Number(planChange.to_billing_amount || planChange.new_monthly_value || 0),
+          installment_count: Math.max(1, Number(planChange.to_installment_count || 1)),
           current_period_start: periodStart.toISOString(),
           current_period_end: periodEnd.toISOString(),
           updated_at: new Date().toISOString(),
@@ -151,11 +154,59 @@ serve(async (req) => {
           console.error("Falha ao cancelar assinatura anterior do upgrade:", cancelError);
         });
       }
-    } else if (planChange && canceledEvents.has(event) && planChange.status === "pending") {
+    } else if (planChange && canceledEvents.has(event)) {
       await supabase
         .from("subscription_plan_changes")
         .update({ status: "canceled" })
         .eq("id", planChange.id);
+      if (planChange.status === "paid") {
+        await supabase
+          .from("subscriptions")
+          .update({ status: "canceled", updated_at: new Date().toISOString() })
+          .eq("user_id", planChange.user_id)
+          .eq("asaas_subscription_id", planChange.new_asaas_subscription_id);
+        if (planChange.new_asaas_subscription_id) {
+          await cancelAsaasSubscription(planChange.new_asaas_subscription_id).catch((cancelError) => {
+            console.error("Falha ao cancelar assinatura após estorno ou chargeback:", cancelError);
+          });
+        }
+      }
+    }
+
+    if (!subscriptionId && !planChange && (payment.id || initialSubscriptionIdFromReference)) {
+      const directPaymentStatus = paidEvents.has(event)
+        ? "active"
+        : overdueEvents.has(event)
+          ? "past_due"
+          : canceledEvents.has(event)
+            ? "canceled"
+            : null;
+
+      if (directPaymentStatus) {
+        let directSubscriptionQuery = supabase
+          .from("subscriptions")
+          .select("id,billing_months");
+        directSubscriptionQuery = initialSubscriptionIdFromReference
+          ? directSubscriptionQuery.eq("asaas_subscription_id", initialSubscriptionIdFromReference)
+          : directSubscriptionQuery.eq("asaas_payment_id", payment.id);
+        const { data: directSubscription } = await directSubscriptionQuery.maybeSingle();
+
+        if (directSubscription) {
+          const directUpdate: Record<string, unknown> = {
+            status: directPaymentStatus,
+            updated_at: new Date().toISOString(),
+          };
+          if (paidEvents.has(event)) {
+            const periodStart = new Date();
+            directUpdate.current_period_start = periodStart.toISOString();
+            directUpdate.current_period_end = addMonths(
+              periodStart,
+              Math.max(1, Number(directSubscription.billing_months || 1)),
+            ).toISOString();
+          }
+          await supabase.from("subscriptions").update(directUpdate).eq("id", directSubscription.id);
+        }
+      }
     }
 
     if (subscriptionId) {
