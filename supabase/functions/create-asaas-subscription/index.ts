@@ -145,7 +145,6 @@ const ensureAsaasWebhook = (fallbackEmail?: string | null) => {
         "PAYMENT_REFUNDED",
         "PAYMENT_CHARGEBACK_REQUESTED",
         "PAYMENT_CHARGEBACK_DISPUTE",
-        "PAYMENT_CHARGEBACK_DISPUTE_LOST",
       ],
     };
 
