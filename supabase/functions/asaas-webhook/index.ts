@@ -18,6 +18,8 @@ const overdueEvents = new Set([
 ]);
 
 const canceledEvents = new Set([
+  "PAYMENT_REPROVED_BY_RISK_ANALYSIS",
+  "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
   "PAYMENT_DELETED",
   "PAYMENT_REFUNDED",
   "PAYMENT_CHARGEBACK_REQUESTED",
