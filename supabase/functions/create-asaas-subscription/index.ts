@@ -165,6 +165,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let releaseCheckoutLock: (() => Promise<void>) | null = null;
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -213,6 +215,31 @@ serve(async (req) => {
     if (installmentCount > maxInstallmentCount) {
       throw new Error(`Este período pode ser parcelado em no máximo ${maxInstallmentCount} vezes.`);
     }
+    const checkoutRequestId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      .test(String(body.checkoutRequestId || ""))
+      ? String(body.checkoutRequestId)
+      : crypto.randomUUID();
+    const { data: checkoutLockAcquired, error: checkoutLockError } = await supabaseAdmin.rpc(
+      "claim_subscription_checkout",
+      {
+        p_user_id: user.id,
+        p_request_id: checkoutRequestId,
+        p_lock_seconds: 180,
+      },
+    );
+    if (checkoutLockError) {
+      throw new Error(`Não foi possível proteger esta cobrança contra duplicidade: ${checkoutLockError.message}`);
+    }
+    if (!checkoutLockAcquired) {
+      throw new Error("Já existe uma cobrança deste cliente sendo processada. Aguarde alguns instantes para evitar duplicidade.");
+    }
+    releaseCheckoutLock = async () => {
+      await supabaseAdmin
+        .from("subscription_checkout_locks")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("request_id", checkoutRequestId);
+    };
     const isInstallmentPayment = paymentMethod === "CREDIT_CARD" && installmentCount > 1;
     const metadata = (user.user_metadata || {}) as Record<string, unknown>;
 
@@ -264,7 +291,7 @@ serve(async (req) => {
 
     const { data: existingSubscription } = await supabaseAdmin
       .from("subscriptions")
-      .select("id,plan_id,status,store_count,current_period_start,current_period_end,asaas_customer_id,asaas_subscription_id,asaas_environment,billing_cycle,billing_months,billing_discount_percent,billing_amount")
+      .select("id,plan_id,status,store_count,current_period_start,current_period_end,asaas_customer_id,asaas_subscription_id,asaas_payment_id,asaas_environment,billing_cycle,billing_months,billing_discount_percent,billing_amount")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -334,6 +361,73 @@ serve(async (req) => {
       throw new Error("O saldo do plano atual cobre integralmente o novo período. Fale com o suporte para transferirmos esse saldo sem gerar cobrança simbólica.");
     }
     const chargeValue = isUpgrade ? money(Math.max(0.01, value - creditAmount)) : value;
+
+    const matchingPendingPayment = sameAsaasEnvironment
+      && existingSubscription?.status === "pending"
+      && Number(existingSubscription.plan_id) === plan.id
+      && Number(existingSubscription.store_count || 1) === storeCount
+      && String(existingSubscription.billing_cycle || "MONTHLY") === billingPeriod.cycle
+      && existingSubscription.asaas_payment_id;
+
+    if (matchingPendingPayment) {
+      const existingPayment = await asaasFetch(
+        `/payments/${encodeURIComponent(String(existingSubscription.asaas_payment_id))}`,
+      );
+      const existingStatus = String(existingPayment?.status || "PENDING").toUpperCase();
+      const reusablePayment = !new Set([
+        "DELETED",
+        "REFUNDED",
+        "REFUND_REQUESTED",
+        "CHARGEBACK_REQUESTED",
+        "CHARGEBACK_DISPUTE",
+      ]).has(existingStatus);
+
+      if (reusablePayment) {
+        const existingPix = paymentMethod === "PIX"
+          ? await asaasFetch(`/payments/${encodeURIComponent(String(existingSubscription.asaas_payment_id))}/pixQrCode`)
+          : null;
+        await supabaseAdmin
+          .from("subscription_checkout_locks")
+          .update({
+            locked_until: new Date(Date.now() + 60 * 1000).toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user.id)
+          .eq("request_id", checkoutRequestId);
+        releaseCheckoutLock = null;
+
+        return new Response(JSON.stringify({
+          ok: true,
+          provider: "asaas",
+          asaasEnvironment,
+          resumed: true,
+          customerId: existingSubscription.asaas_customer_id,
+          subscriptionId: existingSubscription.asaas_subscription_id,
+          paymentId: existingSubscription.asaas_payment_id,
+          value: chargeValue,
+          monthlyValue,
+          periodValue: value,
+          billingPeriod: billingPeriodKey,
+          billingCycle: billingPeriod.cycle,
+          billingMonths: billingPeriod.months,
+          discountPercent: billingPeriod.discountPercent,
+          installmentCount,
+          installmentValue: money(chargeValue / installmentCount),
+          isUpgrade: false,
+          proration: null,
+          paymentMethod,
+          pix: existingPix ? {
+            encodedImage: existingPix.encodedImage,
+            payload: existingPix.payload,
+            expirationDate: existingPix.expirationDate,
+          } : null,
+          status: existingPayment?.status || "PENDING",
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+    }
 
     let customerId = sameAsaasEnvironment ? existingSubscription?.asaas_customer_id || null : null;
 
@@ -591,6 +685,16 @@ serve(async (req) => {
       throw new Error(`Cobrança criada no Asaas, mas falhou ao salvar no PopSystem: ${subscriptionError.message}`);
     }
 
+    await supabaseAdmin
+      .from("subscription_checkout_locks")
+      .update({
+        locked_until: new Date(Date.now() + 60 * 1000).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.id)
+      .eq("request_id", checkoutRequestId);
+    releaseCheckoutLock = null;
+
     return new Response(JSON.stringify({
       ok: true,
       provider: "asaas",
@@ -628,6 +732,7 @@ serve(async (req) => {
       status: 200,
     });
   } catch (error) {
+    if (releaseCheckoutLock) await releaseCheckoutLock().catch(() => undefined);
     console.error("create-asaas-subscription error:", error);
     const message = error instanceof Error ? error.message : "Erro ao criar cobrança no Asaas.";
     return new Response(JSON.stringify({

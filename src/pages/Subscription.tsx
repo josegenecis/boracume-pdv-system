@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -75,6 +75,8 @@ const Subscription = () => {
   const [billingDocument, setBillingDocument] = useState('');
   const [pricingMode, setPricingMode] = useState<'monthly' | 'yearly'>('monthly');
   const [periodOffer, setPeriodOffer] = useState<PeriodOffer | null>(null);
+  const checkoutInFlightRef = useRef(false);
+  const checkoutRequestIdRef = useRef(crypto.randomUUID());
 
   useEffect(() => {
     refreshSubscription();
@@ -189,6 +191,7 @@ const Subscription = () => {
     setCreditPaymentComplete(false);
     setPaymentConfirmed(false);
     setCheckoutError('');
+    checkoutRequestIdRef.current = crypto.randomUUID();
   };
 
   const handlePlanClick = (planId: number, storeCount = 1) => {
@@ -200,7 +203,7 @@ const Subscription = () => {
   };
 
   const handleSubscribeAsaas = async () => {
-    if (!checkoutPlan) return;
+    if (!checkoutPlan || checkoutInFlightRef.current) return;
     if (!user) {
       toast({
         title: "Erro",
@@ -223,6 +226,7 @@ const Subscription = () => {
       }
     }
 
+    checkoutInFlightRef.current = true;
     setCheckoutError('');
     setLoadingPlanId(checkoutPlan.planId);
     try {
@@ -234,6 +238,7 @@ const Subscription = () => {
           paymentMethod,
           installmentCount: paymentMethod === 'CREDIT_CARD' ? installmentCount : 1,
           billingDocument: onlyDigits(billingDocument),
+          checkoutRequestId: checkoutRequestIdRef.current,
           ...(paymentMethod === 'CREDIT_CARD' ? {
             creditCard: {
               holderName: cardForm.holderName,
@@ -294,6 +299,7 @@ const Subscription = () => {
         : "Não foi possível criar a cobrança no Asaas. Tente novamente.";
       setCheckoutError(errorMessage);
     } finally {
+      checkoutInFlightRef.current = false;
       setLoadingPlanId(null);
     }
   };
