@@ -1463,6 +1463,7 @@ export type Database = {
       subscriptions: {
         Row: {
           additional_store_count: number | null
+          asaas_environment: string
           billing_amount: number | null
           billing_cycle: string | null
           billing_discount_percent: number | null
@@ -1485,6 +1486,7 @@ export type Database = {
         }
         Insert: {
           additional_store_count?: number | null
+          asaas_environment?: string
           billing_amount?: number | null
           billing_cycle?: string | null
           billing_discount_percent?: number | null
@@ -1507,6 +1509,7 @@ export type Database = {
         }
         Update: {
           additional_store_count?: number | null
+          asaas_environment?: string
           billing_amount?: number | null
           billing_cycle?: string | null
           billing_discount_percent?: number | null

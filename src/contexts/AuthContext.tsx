@@ -52,6 +52,7 @@ interface Subscription {
   billing_discount_percent?: number;
   billing_amount?: number;
   installment_count?: number;
+  asaas_environment?: 'sandbox' | 'production';
   created_at: string;
   updated_at: string;
 }

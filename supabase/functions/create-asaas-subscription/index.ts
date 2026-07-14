@@ -58,11 +58,17 @@ const normalizeCpfCnpj = (value: unknown) => {
 const isBillingDocumentError = (message: string) => /cpf|cnpj/i.test(message);
 
 const isRemovedCustomerError = (message: string) =>
-  /cliente removido|customer.*(removed|deleted)|deleted customer/i.test(message);
+  /cliente.*(removido|inexistente|não encontrado|nao encontrado)|customer.*(removed|deleted|not found)|deleted customer|invalid customer/i.test(message);
 
-const getAsaasBaseUrl = () => {
+const getAsaasEnvironment = (): "sandbox" | "production" => {
   const env = (Deno.env.get("ASAAS_ENVIRONMENT") || "production").toLowerCase();
   return env === "sandbox" || env === "homologacao" || env === "homologação"
+    ? "sandbox"
+    : "production";
+};
+
+const getAsaasBaseUrl = () => {
+  return getAsaasEnvironment() === "sandbox"
     ? "https://sandbox.asaas.com/api/v3"
     : "https://api.asaas.com/v3";
 };
@@ -94,6 +100,67 @@ const asaasFetch = async (path: string, init: RequestInit = {}) => {
   return data;
 };
 
+let webhookSetupPromise: Promise<void> | null = null;
+
+const ensureAsaasWebhook = (fallbackEmail?: string | null) => {
+  if (webhookSetupPromise) return webhookSetupPromise;
+
+  webhookSetupPromise = (async () => {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const authToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN");
+    if (!supabaseUrl || !authToken || authToken.length < 32) {
+      throw new Error("Webhook do Asaas não está configurado com URL e token seguro.");
+    }
+
+    const webhookUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/asaas-webhook`;
+    const response = await asaasFetch("/webhooks?limit=100");
+    const webhooks = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+    const existing = webhooks.find((webhook: { url?: string }) => webhook.url === webhookUrl) as { id?: string } | undefined;
+
+    const adminEmail = String(
+      Deno.env.get("ASAAS_WEBHOOK_EMAIL")
+      || Deno.env.get("POPSYSTEM_ADMIN_EMAILS")?.split(",")[0]
+      || fallbackEmail
+      || "suporte@popsystem.com.br",
+    ).trim();
+
+    const webhookConfig = {
+      name: "PopSystem - pagamentos e assinaturas",
+      url: webhookUrl,
+      email: adminEmail,
+      enabled: true,
+      interrupted: false,
+      apiVersion: 3,
+      authToken,
+      sendType: "SEQUENTIALLY",
+      events: [
+        "PAYMENT_RECEIVED",
+        "PAYMENT_CONFIRMED",
+        "PAYMENT_APPROVED_BY_RISK_ANALYSIS",
+        "PAYMENT_REPROVED_BY_RISK_ANALYSIS",
+        "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
+        "PAYMENT_OVERDUE",
+        "PAYMENT_AWAITING_RISK_ANALYSIS",
+        "PAYMENT_DELETED",
+        "PAYMENT_REFUNDED",
+        "PAYMENT_CHARGEBACK_REQUESTED",
+        "PAYMENT_CHARGEBACK_DISPUTE",
+        "PAYMENT_CHARGEBACK_DISPUTE_LOST",
+      ],
+    };
+
+    await asaasFetch(existing?.id ? `/webhooks/${encodeURIComponent(existing.id)}` : "/webhooks", {
+      method: existing?.id ? "PUT" : "POST",
+      body: JSON.stringify(webhookConfig),
+    });
+  })().catch((error) => {
+    webhookSetupPromise = null;
+    throw error;
+  });
+
+  return webhookSetupPromise;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -122,6 +189,8 @@ serve(async (req) => {
     }
 
     const user = userData.user;
+    const asaasEnvironment = getAsaasEnvironment();
+    await ensureAsaasWebhook(user.email);
     const body = await req.json().catch(() => ({}));
     const planId = Number(body.planId || 2);
     const storeCount = Math.max(1, Number(body.storeCount || 1));
@@ -196,9 +265,11 @@ serve(async (req) => {
 
     const { data: existingSubscription } = await supabaseAdmin
       .from("subscriptions")
-      .select("id,plan_id,status,store_count,current_period_start,current_period_end,asaas_customer_id,asaas_subscription_id,billing_cycle,billing_months,billing_discount_percent,billing_amount")
+      .select("id,plan_id,status,store_count,current_period_start,current_period_end,asaas_customer_id,asaas_subscription_id,asaas_environment,billing_cycle,billing_months,billing_discount_percent,billing_amount")
       .eq("user_id", user.id)
       .maybeSingle();
+
+    const sameAsaasEnvironment = String(existingSubscription?.asaas_environment || "sandbox") === asaasEnvironment;
 
     let oldMonthlyValue = 0;
     if (existingSubscription?.plan_id) {
@@ -228,7 +299,8 @@ serve(async (req) => {
       ? new Date(existingSubscription.current_period_end)
       : null;
     const now = new Date();
-    const hasValidActivePeriod = existingSubscription?.status === "active"
+    const hasValidActivePeriod = sameAsaasEnvironment
+      && existingSubscription?.status === "active"
       && periodStartDate && periodEndDate
       && Number.isFinite(periodStartDate.getTime())
       && Number.isFinite(periodEndDate.getTime())
@@ -264,7 +336,7 @@ serve(async (req) => {
     }
     const chargeValue = isUpgrade ? money(Math.max(0.01, value - creditAmount)) : value;
 
-    let customerId = existingSubscription?.asaas_customer_id || null;
+    let customerId = sameAsaasEnvironment ? existingSubscription?.asaas_customer_id || null : null;
 
     if (!billingDocument) {
       throw new Error("Para criar esta cobrança é necessário preencher o CPF ou CNPJ do cliente.");
@@ -493,6 +565,7 @@ serve(async (req) => {
       plan_id: plan.id,
       status: !isUpgrade && paymentApproved ? "active" : "pending",
       billing_provider: "asaas",
+      asaas_environment: asaasEnvironment,
       asaas_customer_id: customerId,
       asaas_subscription_id: asaasSubscription.id,
       asaas_payment_id: payment?.id || null,
@@ -522,6 +595,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       ok: true,
       provider: "asaas",
+      asaasEnvironment,
       customerId,
       subscriptionId: asaasSubscription.id,
       paymentId: payment?.id || null,
