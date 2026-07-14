@@ -1463,6 +1463,10 @@ export type Database = {
       subscriptions: {
         Row: {
           additional_store_count: number | null
+          billing_amount: number | null
+          billing_cycle: string | null
+          billing_discount_percent: number | null
+          billing_months: number | null
           created_at: string
           current_period_end: string | null
           current_period_start: string | null
@@ -1480,6 +1484,10 @@ export type Database = {
         }
         Insert: {
           additional_store_count?: number | null
+          billing_amount?: number | null
+          billing_cycle?: string | null
+          billing_discount_percent?: number | null
+          billing_months?: number | null
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
@@ -1497,6 +1505,10 @@ export type Database = {
         }
         Update: {
           additional_store_count?: number | null
+          billing_amount?: number | null
+          billing_cycle?: string | null
+          billing_discount_percent?: number | null
+          billing_months?: number | null
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null

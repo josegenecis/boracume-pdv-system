@@ -47,6 +47,10 @@ interface Subscription {
   current_period_start?: string;
   current_period_end?: string;
   store_count?: number;
+  billing_cycle?: 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY';
+  billing_months?: number;
+  billing_discount_percent?: number;
+  billing_amount?: number;
   created_at: string;
   updated_at: string;
 }

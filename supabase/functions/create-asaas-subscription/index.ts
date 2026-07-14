@@ -14,6 +14,20 @@ type PlanConfig = {
   extraStorePrice: number;
 };
 
+type BillingPeriod = "monthly" | "quarterly" | "semiannual" | "yearly";
+
+const billingPeriods: Record<BillingPeriod, {
+  months: number;
+  discountPercent: number;
+  cycle: "MONTHLY" | "QUARTERLY" | "SEMIANNUALLY" | "YEARLY";
+  label: string;
+}> = {
+  monthly: { months: 1, discountPercent: 0, cycle: "MONTHLY", label: "mensal" },
+  quarterly: { months: 3, discountPercent: 10, cycle: "QUARTERLY", label: "trimestral" },
+  semiannual: { months: 6, discountPercent: 15, cycle: "SEMIANNUALLY", label: "semestral" },
+  yearly: { months: 12, discountPercent: 20, cycle: "YEARLY", label: "anual" },
+};
+
 const fallbackPlans: Record<number, PlanConfig> = {
   1: { id: 1, name: "Essencial", price: 159, includedStores: 1, extraStorePrice: 0 },
   2: { id: 2, name: "Pro", price: 229, includedStores: 1, extraStorePrice: 0 },
@@ -25,6 +39,16 @@ const money = (value: unknown) => Number(Number(value || 0).toFixed(2));
 const onlyDigits = (value: unknown) => String(value || "").replace(/\D/g, "");
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+const addMonths = (date: Date, months: number) => {
+  const result = new Date(date);
+  const originalDay = result.getDate();
+  result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(originalDay, lastDay));
+  return result;
+};
 
 const normalizeCpfCnpj = (value: unknown) => {
   const digits = onlyDigits(value);
@@ -101,6 +125,11 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const planId = Number(body.planId || 2);
     const storeCount = Math.max(1, Number(body.storeCount || 1));
+    const billingPeriodKey = String(body.billingPeriod || "monthly").toLowerCase() as BillingPeriod;
+    const billingPeriod = billingPeriods[billingPeriodKey];
+    if (!billingPeriod) {
+      throw new Error("Período de cobrança inválido.");
+    }
     const paymentMethod = String(body.paymentMethod || "PIX").toUpperCase();
     if (!new Set(["PIX", "CREDIT_CARD"]).has(paymentMethod)) {
       throw new Error("Forma de pagamento inválida. Escolha PIX ou cartão de crédito.");
@@ -149,11 +178,13 @@ serve(async (req) => {
     };
 
     const additionalStoreCount = Math.max(0, storeCount - plan.includedStores);
-    const value = money(plan.price + additionalStoreCount * plan.extraStorePrice);
+    const monthlyValue = money(plan.price + additionalStoreCount * plan.extraStorePrice);
+    const grossPeriodValue = money(monthlyValue * billingPeriod.months);
+    const value = money(grossPeriodValue * (1 - billingPeriod.discountPercent / 100));
 
     const { data: existingSubscription } = await supabaseAdmin
       .from("subscriptions")
-      .select("id,plan_id,status,store_count,current_period_start,current_period_end,asaas_customer_id,asaas_subscription_id")
+      .select("id,plan_id,status,store_count,current_period_start,current_period_end,asaas_customer_id,asaas_subscription_id,billing_cycle,billing_months,billing_discount_percent,billing_amount")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -174,6 +205,10 @@ serve(async (req) => {
       );
     }
 
+    const oldBillingMonths = Math.max(1, Number(existingSubscription?.billing_months || 1));
+    const oldBillingCycle = String(existingSubscription?.billing_cycle || "MONTHLY");
+    const oldBillingAmount = money(existingSubscription?.billing_amount || oldMonthlyValue * oldBillingMonths);
+
     const periodStartDate = existingSubscription?.current_period_start
       ? new Date(existingSubscription.current_period_start)
       : null;
@@ -186,18 +221,35 @@ serve(async (req) => {
       && Number.isFinite(periodStartDate.getTime())
       && Number.isFinite(periodEndDate.getTime())
       && periodEndDate.getTime() > now.getTime();
-    const isUpgrade = Boolean(
+    const subscriptionConfigChanged = Boolean(
       hasValidActivePeriod
-      && value > oldMonthlyValue
-      && (Number(existingSubscription?.plan_id) !== plan.id || Number(existingSubscription?.store_count || 1) !== storeCount),
+      && (
+        Number(existingSubscription?.plan_id) !== plan.id
+        || Number(existingSubscription?.store_count || 1) !== storeCount
+        || oldBillingCycle !== billingPeriod.cycle
+      )
     );
+    if (hasValidActivePeriod && !subscriptionConfigChanged) {
+      throw new Error("Este plano e período já estão ativos na sua conta.");
+    }
+    const isPlanOrStoreUpgrade = monthlyValue > oldMonthlyValue;
+    const isLongerCommitment = Number(existingSubscription?.plan_id) === plan.id
+      && Number(existingSubscription?.store_count || 1) === storeCount
+      && billingPeriod.months > oldBillingMonths;
+    const isUpgrade = subscriptionConfigChanged && (isPlanOrStoreUpgrade || isLongerCommitment);
+    if (subscriptionConfigChanged && !isUpgrade) {
+      throw new Error("Reduções de plano ou de período são aplicadas no próximo vencimento. Fale com o suporte para programar esta alteração sem perder saldo.");
+    }
     const periodMs = hasValidActivePeriod
       ? Math.max(1, periodEndDate!.getTime() - periodStartDate!.getTime())
       : 30 * 24 * 60 * 60 * 1000;
     const remainingMs = hasValidActivePeriod
       ? Math.max(0, periodEndDate!.getTime() - now.getTime())
       : 0;
-    const creditAmount = isUpgrade ? money(oldMonthlyValue * (remainingMs / periodMs)) : 0;
+    const creditAmount = isUpgrade ? money(oldBillingAmount * (remainingMs / periodMs)) : 0;
+    if (isUpgrade && creditAmount >= value) {
+      throw new Error("O saldo do plano atual cobre integralmente o novo período. Fale com o suporte para transferirmos esse saldo sem gerar cobrança simbólica.");
+    }
     const chargeValue = isUpgrade ? money(Math.max(0.01, value - creditAmount)) : value;
 
     let customerId = existingSubscription?.asaas_customer_id || null;
@@ -243,8 +295,7 @@ serve(async (req) => {
     }
 
     const billingType = paymentMethod;
-    const renewalDate = new Date();
-    renewalDate.setDate(renewalDate.getDate() + 30);
+    const renewalDate = addMonths(new Date(), billingPeriod.months);
     const nextDueDate = String(body.nextDueDate || (isUpgrade ? renewalDate.toISOString().slice(0, 10) : today()));
 
     const creditCard = paymentMethod === "CREDIT_CARD" ? {
@@ -284,9 +335,9 @@ serve(async (req) => {
         billingType,
         value,
         nextDueDate,
-        cycle: "MONTHLY",
-        description: `PopSystem ${plan.name}${plan.id === 3 ? ` - ${storeCount} loja(s)` : ""}`,
-        externalReference: `${user.id}:${plan.id}:${Date.now()}`,
+        cycle: billingPeriod.cycle,
+        description: `PopSystem ${plan.name} - plano ${billingPeriod.label}${plan.id === 3 ? ` - ${storeCount} loja(s)` : ""}`,
+        externalReference: `${user.id}:${plan.id}:${billingPeriod.cycle}:${Date.now()}`,
         ...(creditCard ? { creditCard, creditCardHolderInfo } : {}),
       }),
     });
@@ -318,7 +369,14 @@ serve(async (req) => {
           from_store_count: Number(existingSubscription!.store_count || 1),
           to_store_count: storeCount,
           old_monthly_value: oldMonthlyValue,
-          new_monthly_value: value,
+          new_monthly_value: monthlyValue,
+          from_billing_cycle: oldBillingCycle,
+          to_billing_cycle: billingPeriod.cycle,
+          from_billing_months: oldBillingMonths,
+          to_billing_months: billingPeriod.months,
+          from_billing_amount: oldBillingAmount,
+          to_billing_amount: value,
+          billing_discount_percent: billingPeriod.discountPercent,
           credit_amount: creditAmount,
           charge_amount: chargeValue,
           remaining_days: remainingMs / (24 * 60 * 60 * 1000),
@@ -342,7 +400,7 @@ serve(async (req) => {
           billingType,
           value: chargeValue,
           dueDate: today(),
-          description: `Upgrade PopSystem para ${plan.name} - crédito de R$ ${creditAmount.toFixed(2)}`,
+          description: `Upgrade PopSystem para ${plan.name} ${billingPeriod.label} - crédito de R$ ${creditAmount.toFixed(2)}`,
           externalReference: `subscription-upgrade:${planChangeId}`,
           ...(creditCard ? { creditCard, creditCardHolderInfo } : {}),
         }),
@@ -367,8 +425,7 @@ serve(async (req) => {
       : null;
 
     const periodStart = new Date();
-    const periodEnd = new Date();
-    periodEnd.setDate(periodEnd.getDate() + 30);
+    const periodEnd = addMonths(periodStart, billingPeriod.months);
 
     const subscriptionPayload = {
       user_id: user.id,
@@ -381,6 +438,10 @@ serve(async (req) => {
       store_count: storeCount,
       additional_store_count: additionalStoreCount,
       extra_store_price: plan.extraStorePrice,
+      billing_cycle: billingPeriod.cycle,
+      billing_months: billingPeriod.months,
+      billing_discount_percent: billingPeriod.discountPercent,
+      billing_amount: value,
       current_period_start: periodStart.toISOString(),
       current_period_end: periodEnd.toISOString(),
       updated_at: new Date().toISOString(),
@@ -403,11 +464,17 @@ serve(async (req) => {
       subscriptionId: asaasSubscription.id,
       paymentId: payment?.id || null,
       value: chargeValue,
-      monthlyValue: value,
+      monthlyValue,
+      periodValue: value,
+      billingPeriod: billingPeriodKey,
+      billingCycle: billingPeriod.cycle,
+      billingMonths: billingPeriod.months,
+      discountPercent: billingPeriod.discountPercent,
       isUpgrade,
       proration: isUpgrade ? {
         oldMonthlyValue,
-        newMonthlyValue: value,
+        newMonthlyValue: monthlyValue,
+        newPeriodValue: value,
         creditAmount,
         chargeAmount: chargeValue,
         remainingDays: Number((remainingMs / (24 * 60 * 60 * 1000)).toFixed(2)),

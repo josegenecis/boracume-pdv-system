@@ -5,13 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Check, Clock, AlertTriangle, Crown, ArrowRight, Store, CreditCard, QrCode, Copy } from 'lucide-react';
+import { Check, Clock, AlertTriangle, Crown, ArrowRight, Store, CreditCard, QrCode, Copy, CalendarDays, Sparkles } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
-import { PLAN_CATALOG, getPlanCatalogItem, type PlanCatalogItem } from '@/data/planCatalog';
+import {
+  BILLING_PERIODS,
+  PLAN_CATALOG,
+  calculatePeriodPrice,
+  getBillingPeriodConfig,
+  getPlanCatalogItem,
+  type BillingPeriod,
+  type PlanCatalogItem,
+} from '@/data/planCatalog';
 
 const onlyDigits = (value: string) => value.replace(/\D/g, '');
 
@@ -28,9 +36,17 @@ type CheckoutPlan = {
   planName: string;
   value: number;
   monthlyValue: number;
+  periodValue: number;
+  monthlyEquivalent: number;
   creditAmount: number;
   isUpgrade: boolean;
+  billingPeriod: BillingPeriod;
+  billingMonths: number;
+  billingLabel: string;
+  discountPercent: number;
 };
+
+type PeriodOffer = { planId: number; storeCount: number };
 
 const emptyCardForm = {
   holderName: '',
@@ -47,7 +63,7 @@ const Subscription = () => {
   const { subscription, refreshSubscription, user } = useAuth();
   const { toast } = useToast();
   const [loadingPlanId, setLoadingPlanId] = useState<number | null>(null);
-  const [storeCounts, setStoreCounts] = useState<Record<number, number>>({ 3: 1 });
+  const [storeCounts, setStoreCounts] = useState<Record<number, number>>({});
   const [checkoutPlan, setCheckoutPlan] = useState<CheckoutPlan | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
   const [pixPayment, setPixPayment] = useState<{ encodedImage: string; payload: string; expirationDate?: string } | null>(null);
@@ -56,10 +72,14 @@ const Subscription = () => {
   const [cardForm, setCardForm] = useState(emptyCardForm);
   const [checkoutError, setCheckoutError] = useState('');
   const [billingDocument, setBillingDocument] = useState('');
+  const [pricingMode, setPricingMode] = useState<'monthly' | 'yearly'>('monthly');
+  const [periodOffer, setPeriodOffer] = useState<PeriodOffer | null>(null);
 
   useEffect(() => {
     refreshSubscription();
-  }, []); // Remove refreshSubscription from dependencies to avoid infinite loop
+    // O contexto recria esta função; esta leitura deve acontecer somente ao abrir a página.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!pixPayment || !user?.id) return;
@@ -68,13 +88,14 @@ const Subscription = () => {
     const checkPaymentStatus = async () => {
       const { data } = await supabase
         .from('subscriptions')
-        .select('status,plan_id,store_count')
+        .select('status,plan_id,store_count,billing_cycle')
         .eq('user_id', user.id)
         .maybeSingle();
 
       const expectedPlanActive = data?.status === 'active'
         && Number(data.plan_id) === Number(checkoutPlan?.planId)
-        && Number(data.store_count || 1) === Number(checkoutPlan?.storeCount || 1);
+        && Number(data.store_count || 1) === Number(checkoutPlan?.storeCount || 1)
+        && String(data.billing_cycle || 'MONTHLY') === getBillingPeriodConfig(checkoutPlan?.billingPeriod || 'monthly').asaasCycle;
       if (!stopped && expectedPlanActive) {
         setPixPayment(null);
         setPaymentConfirmed(true);
@@ -93,7 +114,9 @@ const Subscription = () => {
       stopped = true;
       window.clearInterval(intervalId);
     };
-  }, [pixPayment, user?.id, checkoutPlan?.planId, checkoutPlan?.storeCount]);
+    // As funções do contexto são instáveis; o polling deve reiniciar apenas quando a cobrança mudar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pixPayment, user?.id, checkoutPlan?.planId, checkoutPlan?.storeCount, checkoutPlan?.billingPeriod]);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A';
@@ -108,11 +131,12 @@ const Subscription = () => {
 
   const formatCurrency = (value: number) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 
-  const openCheckout = (planId: number, storeCount = 1) => {
+  const openCheckout = (planId: number, storeCount = 1, billingPeriod: BillingPeriod = 'monthly') => {
     const plan = getPlanCatalogItem(planId);
     if (!plan) return;
     const additionalStores = Math.max(0, storeCount - plan.includedStores);
     const monthlyValue = plan.monthlyPrice + additionalStores * Number(plan.extraStorePrice || 0);
+    const periodPricing = calculatePeriodPrice(monthlyValue, billingPeriod);
     const oldPlan = getPlanCatalogItem(subscription?.plan_id);
     const oldStoreCount = Math.max(1, Number(subscription?.store_count || 1));
     const oldAdditionalStores = oldPlan ? Math.max(0, oldStoreCount - oldPlan.includedStores) : 0;
@@ -123,27 +147,54 @@ const Subscription = () => {
     const periodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end).getTime() : 0;
     const now = Date.now();
     const hasActiveBalance = subscription?.status === 'active' && periodEnd > now && periodEnd > periodStart;
-    const isUpgrade = Boolean(
-      hasActiveBalance && monthlyValue > oldMonthlyValue &&
-      (subscription?.plan_id !== planId || oldStoreCount !== storeCount)
-    );
+    const oldBillingMonths = Math.max(1, Number(subscription?.billing_months || 1));
+    const oldPeriod: BillingPeriod = oldBillingMonths === 12
+      ? 'yearly'
+      : oldBillingMonths === 6
+        ? 'semiannual'
+        : oldBillingMonths === 3
+          ? 'quarterly'
+          : 'monthly';
+    const oldBillingAmount = Number(subscription?.billing_amount)
+      || calculatePeriodPrice(oldMonthlyValue, oldPeriod).totalValue;
+    const configurationChanged = subscription?.plan_id !== planId
+      || oldStoreCount !== storeCount
+      || String(subscription?.billing_cycle || 'MONTHLY') !== periodPricing.asaasCycle;
+    const isUpgrade = Boolean(hasActiveBalance && configurationChanged && (
+      monthlyValue > oldMonthlyValue
+      || (subscription?.plan_id === planId && oldStoreCount === storeCount && periodPricing.months > oldBillingMonths)
+    ));
     const creditAmount = isUpgrade
-      ? Number((oldMonthlyValue * ((periodEnd - now) / (periodEnd - periodStart))).toFixed(2))
+      ? Number((oldBillingAmount * ((periodEnd - now) / (periodEnd - periodStart))).toFixed(2))
       : 0;
     setCheckoutPlan({
       planId,
       storeCount,
       planName: plan.name,
-      value: isUpgrade ? Number(Math.max(0.01, monthlyValue - creditAmount).toFixed(2)) : monthlyValue,
+      value: isUpgrade ? Number(Math.max(0.01, periodPricing.totalValue - creditAmount).toFixed(2)) : periodPricing.totalValue,
       monthlyValue,
+      periodValue: periodPricing.totalValue,
+      monthlyEquivalent: periodPricing.monthlyEquivalent,
       creditAmount,
       isUpgrade,
+      billingPeriod,
+      billingMonths: periodPricing.months,
+      billingLabel: periodPricing.label,
+      discountPercent: periodPricing.discountPercent,
     });
     setPaymentMethod('PIX');
     setPixPayment(null);
     setCreditPaymentComplete(false);
     setPaymentConfirmed(false);
     setCheckoutError('');
+  };
+
+  const handlePlanClick = (planId: number, storeCount = 1) => {
+    if (pricingMode === 'yearly') {
+      openCheckout(planId, storeCount, 'yearly');
+      return;
+    }
+    setPeriodOffer({ planId, storeCount });
   };
 
   const handleSubscribeAsaas = async () => {
@@ -177,6 +228,7 @@ const Subscription = () => {
         body: {
           planId: checkoutPlan.planId,
           storeCount: checkoutPlan.storeCount,
+          billingPeriod: checkoutPlan.billingPeriod,
           paymentMethod,
           billingDocument: onlyDigits(billingDocument),
           ...(paymentMethod === 'CREDIT_CARD' ? {
@@ -200,9 +252,9 @@ const Subscription = () => {
 
       if (error) {
         let message = error.message;
-        const context = (error as any).context;
+        const context = (error as { context?: Response }).context;
         if (context?.json) {
-          const body = await context.json().catch(() => null);
+          const body = await context.json().catch(() => null) as { message?: string; error?: string } | null;
           message = body?.message || body?.error || message;
         }
         throw new Error(message);
@@ -217,6 +269,7 @@ const Subscription = () => {
             ...current,
             value: Number(data.proration.chargeAmount),
             monthlyValue: Number(data.proration.newMonthlyValue),
+            periodValue: Number(data.proration.newPeriodValue),
             creditAmount: Number(data.proration.creditAmount),
             isUpgrade: true,
           } : current);
@@ -231,9 +284,11 @@ const Subscription = () => {
         });
         await refreshSubscription();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao criar assinatura:', error);
-      const errorMessage = error?.message || "Nao foi possivel criar a cobrança no Asaas. Tente novamente.";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Não foi possível criar a cobrança no Asaas. Tente novamente.";
       setCheckoutError(errorMessage);
     } finally {
       setLoadingPlanId(null);
@@ -334,7 +389,7 @@ const Subscription = () => {
         {days <= 3 && (
           <CardFooter>
             <Button 
-              onClick={() => openCheckout(2)}
+              onClick={() => handlePlanClick(2)}
               className="w-full bg-amber-600 hover:bg-amber-700"
               disabled={loadingPlanId !== null}
             >
@@ -353,9 +408,20 @@ const Subscription = () => {
     const currentPlan = getPlanCatalogItem(subscription.plan_id);
     if (!currentPlan) return null;
     const display = getPlanDisplay(currentPlan);
-    const storeCount = Math.max(1, Number((subscription as any)?.store_count || currentPlan.includedStores || 1));
+    const storeCount = Math.max(1, Number(subscription.store_count || currentPlan.includedStores || 1));
     const extraStores = currentPlan.slug === 'multi' ? Math.max(0, storeCount - currentPlan.includedStores) : 0;
     const monthlyTotal = currentPlan.monthlyPrice + extraStores * Number(currentPlan.extraStorePrice || 0);
+    const currentBillingMonths = Math.max(1, Number(subscription.billing_months || 1));
+    const currentPeriod: BillingPeriod = currentBillingMonths === 12
+      ? 'yearly'
+      : currentBillingMonths === 6
+        ? 'semiannual'
+        : currentBillingMonths === 3
+          ? 'quarterly'
+          : 'monthly';
+    const currentPeriodConfig = getBillingPeriodConfig(currentPeriod);
+    const recurringAmount = Number(subscription.billing_amount)
+      || calculatePeriodPrice(monthlyTotal, currentPeriod).totalValue;
 
     return (
       <Card className={`mb-8 overflow-hidden border-2 ${display.palette.border} ${display.palette.glow}`}>
@@ -378,9 +444,9 @@ const Subscription = () => {
             </div>
             <div className="text-left md:text-right">
               <span className="text-3xl font-bold text-slate-900">
-                {formatCurrency(monthlyTotal)}
+                {formatCurrency(recurringAmount)}
               </span>
-              <p className="text-xs text-slate-500">por mês</p>
+              <p className="text-xs text-slate-500">por período {currentPeriodConfig.label.toLowerCase()}</p>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 mt-5 sm:grid-cols-2">
@@ -390,7 +456,9 @@ const Subscription = () => {
             </div>
             <div>
               <p className="text-sm font-medium text-slate-700">Próxima cobrança</p>
-              <p className="text-sm text-slate-600">{formatCurrency(monthlyTotal)}</p>
+              <p className="text-sm text-slate-600">
+                {formatCurrency(recurringAmount)} · {currentPeriodConfig.label}
+              </p>
             </div>
             <div>
               <p className="text-sm font-medium text-slate-700">Lojas incluídas</p>
@@ -414,6 +482,14 @@ const Subscription = () => {
   };
 
   const isTrialSubscription = String(subscription?.status || '').toLowerCase().includes('trial');
+  const offeredPlan = periodOffer ? getPlanCatalogItem(periodOffer.planId) : null;
+  const offeredStoreCount = Math.max(1, Number(periodOffer?.storeCount || 1));
+  const offeredExtraStores = offeredPlan
+    ? Math.max(0, offeredStoreCount - offeredPlan.includedStores)
+    : 0;
+  const offeredMonthlyValue = offeredPlan
+    ? offeredPlan.monthlyPrice + offeredExtraStores * Number(offeredPlan.extraStorePrice || 0)
+    : 0;
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] py-8 px-4">
@@ -426,6 +502,27 @@ const Subscription = () => {
           <p className="mx-auto mt-4 max-w-3xl text-base text-slate-600 md:text-lg">
             Assine pelo Asaas e libere o PopSystem conforme o plano escolhido.
           </p>
+          <div className="mx-auto mt-7 inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Período dos preços">
+            <button
+              type="button"
+              onClick={() => setPricingMode('monthly')}
+              aria-pressed={pricingMode === 'monthly'}
+              className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition ${pricingMode === 'monthly' ? 'bg-[#003223] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              Mensal
+            </button>
+            <button
+              type="button"
+              onClick={() => setPricingMode('yearly')}
+              aria-pressed={pricingMode === 'yearly'}
+              className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition ${pricingMode === 'yearly' ? 'bg-[#003223] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              Anual
+              <span className={`rounded-full px-2 py-0.5 text-xs ${pricingMode === 'yearly' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
+                -20%
+              </span>
+            </button>
+          </div>
         </div>
 
         {isTrialSubscription && renderTrialInfo()}
@@ -435,14 +532,24 @@ const Subscription = () => {
         <div className="mb-10 grid grid-cols-1 gap-6 lg:grid-cols-3">
           {PLAN_CATALOG.map((plan) => {
             const currentCatalogPlan = subscription?.plan_id ? getPlanCatalogItem(subscription.plan_id) : null;
-            const isCurrentPlan = currentCatalogPlan?.slug === plan.slug && subscription?.status === 'active';
             const display = getPlanDisplay(plan);
             const isProcessing = loadingPlanId === plan.id;
             const isMulti = plan.slug === 'multi';
-            const selectedStores = Math.max(1, Number(storeCounts[plan.id] || 1));
+            const currentPlanStoreCount = currentCatalogPlan?.slug === plan.slug
+              ? Number(subscription?.store_count || 1)
+              : 1;
+            const selectedStores = Math.max(1, Number(storeCounts[plan.id] || currentPlanStoreCount));
             const extraStores = isMulti ? Math.max(0, selectedStores - plan.includedStores) : 0;
             const extraStorePrice = Number(plan.extraStorePrice || 149);
             const monthlyTotal = Number(plan.monthlyPrice || 0) + extraStores * extraStorePrice;
+            const displayedPeriod: BillingPeriod = pricingMode === 'yearly' ? 'yearly' : 'monthly';
+            const displayedPricing = calculatePeriodPrice(monthlyTotal, displayedPeriod);
+            const selectedCycle = getBillingPeriodConfig(displayedPeriod).asaasCycle;
+            const isCurrentPlan = currentCatalogPlan?.slug === plan.slug
+              && subscription?.status === 'active';
+            const isCurrentOffer = isCurrentPlan
+              && String(subscription?.billing_cycle || 'MONTHLY') === selectedCycle;
+            const disableCurrentOffer = isCurrentOffer && pricingMode === 'yearly';
 
             return (
               <Card
@@ -471,13 +578,21 @@ const Subscription = () => {
                     {display.description}
                   </CardDescription>
                   <div className="mt-5 text-center">
+                    {pricingMode === 'yearly' && (
+                      <p className="mb-1 text-sm text-white/70 line-through">{formatCurrency(monthlyTotal)}/mês</p>
+                    )}
                     <span className="text-4xl font-bold">
-                      {formatCurrency(plan.monthlyPrice)}
+                      {formatCurrency(displayedPricing.monthlyEquivalent)}
                     </span>
                     <span className="text-sm text-white/80">/mês</span>
+                    {pricingMode === 'yearly' && (
+                      <p className="mt-2 text-sm font-semibold text-white/90">
+                        {formatCurrency(displayedPricing.totalValue)} cobrados por ano · economize {formatCurrency(displayedPricing.savings)}
+                      </p>
+                    )}
                     {isMulti && (
                       <p className="mt-2 text-sm font-semibold text-white/90">
-                        + {formatCurrency(extraStorePrice)}/mês por loja adicional
+                        + {formatCurrency(pricingMode === 'yearly' ? extraStorePrice * 0.8 : extraStorePrice)}/mês por loja adicional
                       </p>
                     )}
                   </div>
@@ -527,8 +642,8 @@ const Subscription = () => {
                           +
                         </Button>
                         <div className="ml-auto text-right">
-                          <p className="text-xs text-purple-700">Total mensal</p>
-                          <p className="text-xl font-bold text-purple-950">{formatCurrency(monthlyTotal)}</p>
+                          <p className="text-xs text-purple-700">{pricingMode === 'yearly' ? 'Equivalente mensal' : 'Total mensal'}</p>
+                          <p className="text-xl font-bold text-purple-950">{formatCurrency(displayedPricing.monthlyEquivalent)}</p>
                         </div>
                       </div>
                       <p className="mt-3 text-xs font-medium text-purple-700">
@@ -550,16 +665,20 @@ const Subscription = () => {
                 <CardFooter className="pb-6 pt-4">
                   <Button
                     className={`w-full rounded-2xl text-base font-semibold text-white ${display.palette.button}`}
-                    onClick={() => openCheckout(plan.id, selectedStores)}
-                    disabled={loadingPlanId !== null || isCurrentPlan}
-                    variant={isCurrentPlan ? "outline" : "default"}
+                    onClick={() => handlePlanClick(plan.id, selectedStores)}
+                    disabled={loadingPlanId !== null || disableCurrentOffer}
+                    variant={disableCurrentOffer ? "outline" : "default"}
                     size="lg"
                   >
-                    {isCurrentPlan ? (
-                      "Plano Atual"
+                    {disableCurrentOffer ? (
+                      "Plano anual atual"
                     ) : (
                       <>
-                        {isProcessing ? "Processando..." : `Assinar ${display.name}${isMulti ? ` - ${formatCurrency(monthlyTotal)}` : ''}`}
+                        {isProcessing
+                          ? "Processando..."
+                          : isCurrentPlan
+                            ? 'Alterar período'
+                            : `Assinar ${display.name} ${pricingMode === 'yearly' ? 'anual' : ''}${isMulti ? ` - ${formatCurrency(displayedPricing.monthlyEquivalent)}/mês` : ''}`}
                         <ArrowRight size={16} className="ml-2" />
                       </>
                     )}
@@ -579,7 +698,7 @@ const Subscription = () => {
                   Mantenha todas as funcionalidades ativas escolhendo um plano hoje mesmo.
                 </p>
                 <Button 
-                  onClick={() => openCheckout(2)}
+                  onClick={() => handlePlanClick(2)}
                   variant="secondary" 
                   size="lg"
                   disabled={loadingPlanId !== null}
@@ -591,6 +710,88 @@ const Subscription = () => {
             </CardContent>
           </Card>
         )}
+
+        <Dialog open={Boolean(periodOffer)} onOpenChange={(open) => !open && setPeriodOffer(null)}>
+          <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto p-0">
+            <DialogHeader className="border-b bg-gradient-to-r from-[#F3FAEB] to-white px-6 py-5 text-left">
+              <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[#003223] text-white">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-2xl text-[#003223]">Economize escolhendo um período maior</DialogTitle>
+              <DialogDescription className="text-base">
+                {offeredPlan
+                  ? `${offeredPlan.name}: escolha como prefere pagar. O desconto vale sobre todo o período contratado.`
+                  : 'Escolha o período da sua assinatura.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 px-6 py-6 sm:grid-cols-2">
+              {(Object.keys(BILLING_PERIODS) as BillingPeriod[]).map((period) => {
+                const periodPricing = calculatePeriodPrice(offeredMonthlyValue, period);
+                const isBestOffer = period === 'yearly';
+                const isExactCurrentPeriod = subscription?.status === 'active'
+                  && Number(subscription.plan_id) === Number(periodOffer?.planId)
+                  && Number(subscription.store_count || 1) === offeredStoreCount
+                  && String(subscription.billing_cycle || 'MONTHLY') === periodPricing.asaasCycle;
+                const isShorterSamePlanPeriod = subscription?.status === 'active'
+                  && Number(subscription.plan_id) === Number(periodOffer?.planId)
+                  && Number(subscription.store_count || 1) === offeredStoreCount
+                  && periodPricing.months < Number(subscription.billing_months || 1);
+                const isUnavailablePeriod = isExactCurrentPeriod || isShorterSamePlanPeriod;
+
+                return (
+                  <button
+                    key={period}
+                    type="button"
+                    disabled={isUnavailablePeriod}
+                    onClick={() => {
+                      if (!periodOffer) return;
+                      const selectedOffer = periodOffer;
+                      setPeriodOffer(null);
+                      openCheckout(selectedOffer.planId, selectedOffer.storeCount, period);
+                    }}
+                    className={`relative rounded-2xl border-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55 ${isBestOffer ? 'border-[#8CC850] bg-[#F8FCF3]' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                  >
+                    {isBestOffer && (
+                      <span className="absolute right-3 top-3 rounded-full bg-[#003223] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                        Maior economia
+                      </span>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="h-5 w-5 text-[#4E8A1F]" />
+                      <span className="font-bold text-slate-900">{periodPricing.label}</span>
+                      {periodPricing.discountPercent > 0 && (
+                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                          -{periodPricing.discountPercent}%
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="mt-4 text-2xl font-bold text-[#003223]">
+                      {formatCurrency(periodPricing.monthlyEquivalent)}
+                      <span className="text-sm font-medium text-slate-500">/mês</span>
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {formatCurrency(periodPricing.totalValue)} por {periodPricing.shortLabel}
+                    </p>
+                    {periodPricing.savings > 0 && (
+                      <p className="mt-2 text-sm font-semibold text-emerald-700">
+                        Você economiza {formatCurrency(periodPricing.savings)}
+                      </p>
+                    )}
+                    {isUnavailablePeriod && (
+                      <p className="mt-2 text-xs font-semibold text-slate-500">
+                        {isExactCurrentPeriod ? 'Período atual' : 'Disponível no próximo vencimento'}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="border-t px-6 py-4 text-center text-xs leading-5 text-slate-500">
+              A cobrança é feita antecipadamente pelo período escolhido. A renovação segue o mesmo ciclo.
+            </p>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={Boolean(checkoutPlan)} onOpenChange={(open) => {
           if (!open) {
             setCheckoutPlan(null);
@@ -606,7 +807,7 @@ const Subscription = () => {
               <DialogTitle>Finalizar assinatura</DialogTitle>
               <DialogDescription>
                 {checkoutPlan
-                  ? `${checkoutPlan.planName} - ${formatCurrency(checkoutPlan.monthlyValue)} por mês`
+                  ? `${checkoutPlan.planName} ${checkoutPlan.billingLabel.toLowerCase()} · ${formatCurrency(checkoutPlan.periodValue)} por ${checkoutPlan.billingMonths === 1 ? 'mês' : `${checkoutPlan.billingMonths} meses`}`
                   : 'Finalize o pagamento para ativar o plano.'}
               </DialogDescription>
             </DialogHeader>
@@ -654,23 +855,47 @@ const Subscription = () => {
               </div>
             ) : (
               <div className="space-y-5 px-6 py-6">
-                {checkoutPlan?.isUpgrade && (
+                {checkoutPlan && (
                   <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
                     <div className="flex justify-between text-slate-600">
-                      <span>Novo plano mensal</span>
+                      <span>{checkoutPlan.discountPercent > 0 ? 'Valor mensal sem desconto' : 'Valor mensal'}</span>
                       <span>{formatCurrency(checkoutPlan.monthlyValue)}</span>
                     </div>
-                    <div className="flex justify-between text-emerald-700">
-                      <span>Crédito do plano atual</span>
-                      <span>- {formatCurrency(checkoutPlan.creditAmount)}</span>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Período contratado</span>
+                      <span>{checkoutPlan.billingLabel} · {checkoutPlan.billingMonths} {checkoutPlan.billingMonths === 1 ? 'mês' : 'meses'}</span>
                     </div>
+                    {checkoutPlan.discountPercent > 0 && (
+                      <>
+                        <div className="flex justify-between font-medium text-emerald-700">
+                          <span>Desconto do período</span>
+                          <span>-{checkoutPlan.discountPercent}%</span>
+                        </div>
+                        <div className="flex justify-between font-medium text-emerald-700">
+                          <span>Equivalente mensal com desconto</span>
+                          <span>{formatCurrency(checkoutPlan.monthlyEquivalent)}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between text-slate-600">
+                      <span>Total do período</span>
+                      <span>{formatCurrency(checkoutPlan.periodValue)}</span>
+                    </div>
+                    {checkoutPlan.isUpgrade && (
+                      <div className="flex justify-between text-emerald-700">
+                        <span>Crédito do plano atual</span>
+                        <span>- {formatCurrency(checkoutPlan.creditAmount)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between border-t border-emerald-200 pt-2 font-bold text-[#003223]">
                       <span>Total a pagar agora</span>
                       <span>{formatCurrency(checkoutPlan.value)}</span>
                     </div>
-                    <p className="pt-1 text-xs leading-5 text-slate-500">
-                      O próximo vencimento será em 30 dias pelo valor mensal integral do novo plano.
-                    </p>
+                    {checkoutPlan.isUpgrade && (
+                      <p className="pt-1 text-xs leading-5 text-slate-500">
+                        Seu saldo atual foi abatido. A próxima renovação ocorrerá em {checkoutPlan.billingMonths} {checkoutPlan.billingMonths === 1 ? 'mês' : 'meses'} pelo valor integral deste período.
+                      </p>
+                    )}
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
@@ -697,7 +922,7 @@ const Subscription = () => {
 
                 {paymentMethod === 'PIX' ? (
                   <div className="rounded-xl bg-blue-50 p-4 text-sm leading-6 text-blue-900">
-                    O QR Code será exibido nesta tela. A renovação mensal gera uma nova cobrança PIX e o plano permanece ativo após cada confirmação.
+                    O QR Code será exibido nesta tela. A cada renovação {checkoutPlan?.billingLabel.toLowerCase()}, uma nova cobrança PIX será gerada e o plano permanecerá ativo após a confirmação.
                   </div>
                 ) : (
                   <div className="space-y-4">

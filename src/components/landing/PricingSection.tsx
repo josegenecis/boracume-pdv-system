@@ -30,12 +30,15 @@ const PricingSection = () => {
           <div className="flex items-center justify-center gap-4">
             <span className={`text-sm font-semibold ${!isAnnual ? 'text-slate-900' : 'text-slate-500'}`}>Mensal</span>
             <button
+              type="button"
               onClick={() => setIsAnnual(!isAnnual)}
+              aria-label="Alternar entre preços mensais e anuais"
+              aria-pressed={isAnnual}
               className={`relative w-16 h-8 rounded-full transition-colors duration-300 ${isAnnual ? 'bg-boracume-orange' : 'bg-slate-300'}`}
             >
               <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${isAnnual ? 'translate-x-8' : ''}`}></div>
             </button>
-            <span className={`text-sm font-semibold ${isAnnual ? 'text-slate-900' : 'text-slate-500'}`}>Anual</span>
+            <span className={`text-sm font-semibold ${isAnnual ? 'text-slate-900' : 'text-slate-500'}`}>Anual · 20% OFF</span>
           </div>
         </div>
 
@@ -77,7 +80,7 @@ const PricingSection = () => {
                 )}
                 {plan.extraStorePrice && (
                   <p className="text-xs text-purple-700 font-semibold mt-2">
-                    + {formatPrice(plan.extraStorePrice)} por loja adicional
+                    + {formatPrice(isAnnual ? plan.extraStorePrice * 0.8 : plan.extraStorePrice)} por loja adicional/mês
                   </p>
                 )}
               </div>
@@ -113,7 +116,7 @@ const PricingSection = () => {
                 </Button>
               </Link>
               <p className="text-center text-xs text-slate-400 mt-4">
-                Sem fidelidade. Cancele quando quiser.
+                Cancele a renovação quando quiser.
               </p>
             </motion.div>
           ))}

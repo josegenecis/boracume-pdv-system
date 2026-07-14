@@ -17,6 +17,39 @@ export type PlanCatalogItem = {
   modules: string[];
 };
 
+export type BillingPeriod = 'monthly' | 'quarterly' | 'semiannual' | 'yearly';
+
+export type BillingPeriodConfig = {
+  id: BillingPeriod;
+  label: string;
+  shortLabel: string;
+  months: number;
+  discountPercent: number;
+  asaasCycle: 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY';
+};
+
+export const BILLING_PERIODS: Record<BillingPeriod, BillingPeriodConfig> = {
+  monthly: { id: 'monthly', label: 'Mensal', shortLabel: '1 mês', months: 1, discountPercent: 0, asaasCycle: 'MONTHLY' },
+  quarterly: { id: 'quarterly', label: 'Trimestral', shortLabel: '3 meses', months: 3, discountPercent: 10, asaasCycle: 'QUARTERLY' },
+  semiannual: { id: 'semiannual', label: 'Semestral', shortLabel: '6 meses', months: 6, discountPercent: 15, asaasCycle: 'SEMIANNUALLY' },
+  yearly: { id: 'yearly', label: 'Anual', shortLabel: '12 meses', months: 12, discountPercent: 20, asaasCycle: 'YEARLY' },
+};
+
+export const getBillingPeriodConfig = (period: BillingPeriod) => BILLING_PERIODS[period] || BILLING_PERIODS.monthly;
+
+export const calculatePeriodPrice = (monthlyValue: number, period: BillingPeriod) => {
+  const config = getBillingPeriodConfig(period);
+  const grossValue = Number(monthlyValue || 0) * config.months;
+  const totalValue = grossValue * (1 - config.discountPercent / 100);
+  return {
+    ...config,
+    grossValue: Number(grossValue.toFixed(2)),
+    totalValue: Number(totalValue.toFixed(2)),
+    monthlyEquivalent: Number((totalValue / config.months).toFixed(2)),
+    savings: Number((grossValue - totalValue).toFixed(2)),
+  };
+};
+
 export const PLAN_CATALOG: PlanCatalogItem[] = [
   {
     id: 1,
@@ -25,7 +58,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     shortName: 'Essencial',
     description: 'O básico profissional para vender no balcão, no delivery e organizar a operação do dia a dia.',
     monthlyPrice: 159,
-    annualPrice: 1590,
+    annualPrice: 1526.40,
     includedStores: 1,
     storeLimit: 1,
     badge: 'Comece organizado',
@@ -60,7 +93,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     shortName: 'Pro',
     description: 'Sistema completo para uma loja com automações, WhatsApp, fiscal, cozinha e inteligência operacional.',
     monthlyPrice: 229,
-    annualPrice: 2290,
+    annualPrice: 2198.40,
     includedStores: 1,
     storeLimit: 1,
     featured: true,
@@ -102,7 +135,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     shortName: 'Multi',
     description: 'Tudo do Pro com gestão multilojas, visão consolidada e cobrança por loja adicional.',
     monthlyPrice: 269,
-    annualPrice: 2690,
+    annualPrice: 2582.40,
     includedStores: 1,
     extraStorePrice: 149,
     storeLimit: null,

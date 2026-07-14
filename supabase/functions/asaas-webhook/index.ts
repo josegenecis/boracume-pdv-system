@@ -26,6 +26,16 @@ const canceledEvents = new Set([
   "PAYMENT_CHARGEBACK_DISPUTE_LOST",
 ]);
 
+const addMonths = (date: Date, months: number) => {
+  const result = new Date(date);
+  const originalDay = result.getDate();
+  result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(originalDay, lastDay));
+  return result;
+};
+
 const tokenFromHeaders = (req: Request) => {
   const authorization = req.headers.get("authorization") || "";
   return req.headers.get("asaas-access-token")
@@ -104,9 +114,9 @@ serve(async (req) => {
         .maybeSingle();
       const storeCount = Math.max(1, Number(planChange.to_store_count || 1));
       const includedStores = Math.max(1, Number(targetPlan?.included_stores || 1));
+      const billingMonths = Math.max(1, Number(planChange.to_billing_months || 1));
       const periodStart = new Date();
-      const periodEnd = new Date();
-      periodEnd.setDate(periodEnd.getDate() + 30);
+      const periodEnd = addMonths(periodStart, billingMonths);
 
       const { error: activateError } = await supabase
         .from("subscriptions")
@@ -120,6 +130,10 @@ serve(async (req) => {
           store_count: storeCount,
           additional_store_count: Math.max(0, storeCount - includedStores),
           extra_store_price: Number(targetPlan?.extra_store_price || 0),
+          billing_cycle: String(planChange.to_billing_cycle || "MONTHLY"),
+          billing_months: billingMonths,
+          billing_discount_percent: Number(planChange.billing_discount_percent || 0),
+          billing_amount: Number(planChange.to_billing_amount || planChange.new_monthly_value || 0),
           current_period_start: periodStart.toISOString(),
           current_period_end: periodEnd.toISOString(),
           updated_at: new Date().toISOString(),
@@ -154,18 +168,27 @@ serve(async (req) => {
             : null;
 
       if (status) {
-        const periodEnd = new Date();
-        periodEnd.setDate(periodEnd.getDate() + 30);
+        const updatePayload: Record<string, unknown> = {
+          status,
+          asaas_payment_id: payment.id || null,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (paidEvents.has(event)) {
+          const { data: currentSubscription } = await supabase
+            .from("subscriptions")
+            .select("billing_months")
+            .eq("asaas_subscription_id", subscriptionId)
+            .maybeSingle();
+          const periodStart = new Date();
+          const periodEnd = addMonths(periodStart, Math.max(1, Number(currentSubscription?.billing_months || 1)));
+          updatePayload.current_period_start = periodStart.toISOString();
+          updatePayload.current_period_end = periodEnd.toISOString();
+        }
 
         await supabase
           .from("subscriptions")
-          .update({
-            status,
-            asaas_payment_id: payment.id || null,
-            current_period_start: new Date().toISOString(),
-            current_period_end: periodEnd.toISOString(),
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq("asaas_subscription_id", subscriptionId);
       }
     }
