@@ -51,6 +51,7 @@ interface Subscription {
   billing_months?: number;
   billing_discount_percent?: number;
   billing_amount?: number;
+  installment_count?: number;
   created_at: string;
   updated_at: string;
 }

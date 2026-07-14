@@ -66,6 +66,7 @@ const Subscription = () => {
   const [storeCounts, setStoreCounts] = useState<Record<number, number>>({});
   const [checkoutPlan, setCheckoutPlan] = useState<CheckoutPlan | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
+  const [installmentCount, setInstallmentCount] = useState(1);
   const [pixPayment, setPixPayment] = useState<{ encodedImage: string; payload: string; expirationDate?: string } | null>(null);
   const [creditPaymentComplete, setCreditPaymentComplete] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
@@ -183,6 +184,7 @@ const Subscription = () => {
       discountPercent: periodPricing.discountPercent,
     });
     setPaymentMethod('PIX');
+    setInstallmentCount(1);
     setPixPayment(null);
     setCreditPaymentComplete(false);
     setPaymentConfirmed(false);
@@ -230,6 +232,7 @@ const Subscription = () => {
           storeCount: checkoutPlan.storeCount,
           billingPeriod: checkoutPlan.billingPeriod,
           paymentMethod,
+          installmentCount: paymentMethod === 'CREDIT_CARD' ? installmentCount : 1,
           billingDocument: onlyDigits(billingDocument),
           ...(paymentMethod === 'CREDIT_CARD' ? {
             creditCard: {
@@ -422,6 +425,7 @@ const Subscription = () => {
     const currentPeriodConfig = getBillingPeriodConfig(currentPeriod);
     const recurringAmount = Number(subscription.billing_amount)
       || calculatePeriodPrice(monthlyTotal, currentPeriod).totalValue;
+    const currentInstallments = Math.max(1, Number(subscription.installment_count || 1));
 
     return (
       <Card className={`mb-8 overflow-hidden border-2 ${display.palette.border} ${display.palette.glow}`}>
@@ -468,6 +472,14 @@ const Subscription = () => {
                   : 'Uma loja'}
               </p>
             </div>
+            {currentInstallments > 1 && (
+              <div>
+                <p className="text-sm font-medium text-slate-700">Pagamento do período</p>
+                <p className="text-sm text-slate-600">
+                  {currentInstallments}x de aproximadamente {formatCurrency(recurringAmount / currentInstallments)}
+                </p>
+              </div>
+            )}
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             {display.features.slice(0, 3).map((feature) => (
@@ -490,6 +502,7 @@ const Subscription = () => {
   const offeredMonthlyValue = offeredPlan
     ? offeredPlan.monthlyPrice + offeredExtraStores * Number(offeredPlan.extraStorePrice || 0)
     : 0;
+  const maxCheckoutInstallments = Math.min(12, Math.max(1, Number(checkoutPlan?.billingMonths || 1)));
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] py-8 px-4">
@@ -713,8 +726,8 @@ const Subscription = () => {
 
         <Dialog open={Boolean(periodOffer)} onOpenChange={(open) => !open && setPeriodOffer(null)}>
           <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto p-0">
-            <DialogHeader className="border-b bg-gradient-to-r from-[#F3FAEB] to-white px-6 py-5 text-left">
-              <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[#003223] text-white">
+            <DialogHeader className="border-b bg-gradient-to-br from-emerald-50 via-orange-50 to-purple-100 px-6 py-6 text-left">
+              <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#003223] to-[#FF6400] text-white shadow-lg shadow-orange-200">
                 <Sparkles className="h-5 w-5" />
               </div>
               <DialogTitle className="text-2xl text-[#003223]">Economize escolhendo um período maior</DialogTitle>
@@ -728,6 +741,36 @@ const Subscription = () => {
               {(Object.keys(BILLING_PERIODS) as BillingPeriod[]).map((period) => {
                 const periodPricing = calculatePeriodPrice(offeredMonthlyValue, period);
                 const isBestOffer = period === 'yearly';
+                const periodStyle = {
+                  monthly: {
+                    card: 'border-sky-200 bg-gradient-to-br from-sky-50 via-white to-blue-50 hover:border-sky-400 hover:shadow-sky-100',
+                    icon: 'bg-sky-500 text-white',
+                    price: 'text-sky-800',
+                    badge: 'bg-sky-100 text-sky-700 hover:bg-sky-100',
+                    saving: 'text-sky-700',
+                  },
+                  quarterly: {
+                    card: 'border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 hover:border-orange-400 hover:shadow-orange-100',
+                    icon: 'bg-[#FF6400] text-white',
+                    price: 'text-orange-800',
+                    badge: 'bg-orange-100 text-orange-700 hover:bg-orange-100',
+                    saving: 'text-orange-700',
+                  },
+                  semiannual: {
+                    card: 'border-violet-200 bg-gradient-to-br from-violet-50 via-white to-fuchsia-50 hover:border-violet-400 hover:shadow-violet-100',
+                    icon: 'bg-violet-600 text-white',
+                    price: 'text-violet-800',
+                    badge: 'bg-violet-100 text-violet-700 hover:bg-violet-100',
+                    saving: 'text-violet-700',
+                  },
+                  yearly: {
+                    card: 'border-emerald-400 bg-gradient-to-br from-emerald-100 via-white to-lime-100 hover:border-emerald-600 hover:shadow-emerald-200',
+                    icon: 'bg-[#003223] text-white',
+                    price: 'text-[#003223]',
+                    badge: 'bg-emerald-200 text-emerald-800 hover:bg-emerald-200',
+                    saving: 'text-emerald-800',
+                  },
+                }[period];
                 const isExactCurrentPeriod = subscription?.status === 'active'
                   && Number(subscription.plan_id) === Number(periodOffer?.planId)
                   && Number(subscription.store_count || 1) === offeredStoreCount
@@ -749,7 +792,7 @@ const Subscription = () => {
                       setPeriodOffer(null);
                       openCheckout(selectedOffer.planId, selectedOffer.storeCount, period);
                     }}
-                    className={`relative rounded-2xl border-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55 ${isBestOffer ? 'border-[#8CC850] bg-[#F8FCF3]' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                    className={`relative overflow-hidden rounded-2xl border-2 p-4 text-left transition hover:-translate-y-1 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-55 ${periodStyle.card}`}
                   >
                     {isBestOffer && (
                       <span className="absolute right-3 top-3 rounded-full bg-[#003223] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
@@ -757,23 +800,30 @@ const Subscription = () => {
                       </span>
                     )}
                     <div className="flex items-center gap-2">
-                      <CalendarDays className="h-5 w-5 text-[#4E8A1F]" />
+                      <span className={`flex h-9 w-9 items-center justify-center rounded-xl shadow-sm ${periodStyle.icon}`}>
+                        <CalendarDays className="h-5 w-5" />
+                      </span>
                       <span className="font-bold text-slate-900">{periodPricing.label}</span>
                       {periodPricing.discountPercent > 0 && (
-                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                        <Badge className={periodStyle.badge}>
                           -{periodPricing.discountPercent}%
                         </Badge>
                       )}
                     </div>
-                    <p className="mt-4 text-2xl font-bold text-[#003223]">
+                    <p className={`mt-4 text-2xl font-bold ${periodStyle.price}`}>
                       {formatCurrency(periodPricing.monthlyEquivalent)}
                       <span className="text-sm font-medium text-slate-500">/mês</span>
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
                       {formatCurrency(periodPricing.totalValue)} por {periodPricing.shortLabel}
                     </p>
+                    {periodPricing.months > 1 && (
+                      <p className={`mt-1 text-xs font-semibold ${periodStyle.saving}`}>
+                        No cartão: até {Math.min(12, periodPricing.months)}x
+                      </p>
+                    )}
                     {periodPricing.savings > 0 && (
-                      <p className="mt-2 text-sm font-semibold text-emerald-700">
+                      <p className={`mt-2 text-sm font-semibold ${periodStyle.saving}`}>
                         Você economiza {formatCurrency(periodPricing.savings)}
                       </p>
                     )}
@@ -800,6 +850,7 @@ const Subscription = () => {
             setPaymentConfirmed(false);
             setCheckoutError('');
             setCardForm(emptyCardForm);
+            setInstallmentCount(1);
           }
         }}>
           <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto p-0">
@@ -891,6 +942,12 @@ const Subscription = () => {
                       <span>Total a pagar agora</span>
                       <span>{formatCurrency(checkoutPlan.value)}</span>
                     </div>
+                    {paymentMethod === 'CREDIT_CARD' && installmentCount > 1 && (
+                      <div className="flex justify-between rounded-lg bg-white/70 px-2 py-1.5 font-semibold text-violet-700">
+                        <span>Parcelamento escolhido</span>
+                        <span>{installmentCount}x de aproximadamente {formatCurrency(checkoutPlan.value / installmentCount)}</span>
+                      </div>
+                    )}
                     {checkoutPlan.isUpgrade && (
                       <p className="pt-1 text-xs leading-5 text-slate-500">
                         Seu saldo atual foi abatido. A próxima renovação ocorrerá em {checkoutPlan.billingMonths} {checkoutPlan.billingMonths === 1 ? 'mês' : 'meses'} pelo valor integral deste período.
@@ -901,7 +958,7 @@ const Subscription = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => { setPaymentMethod('PIX'); setCheckoutError(''); }}
+                    onClick={() => { setPaymentMethod('PIX'); setInstallmentCount(1); setCheckoutError(''); }}
                     className={`flex items-center justify-center gap-2 rounded-xl border-2 p-3 font-semibold transition ${paymentMethod === 'PIX' ? 'border-[#003223] bg-emerald-50 text-[#003223]' : 'border-slate-200 text-slate-600'}`}
                   >
                     <QrCode className="h-5 w-5" /> PIX
@@ -926,6 +983,30 @@ const Subscription = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {maxCheckoutInstallments > 1 && (
+                      <div className="rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 to-fuchsia-50 p-4">
+                        <label htmlFor="installment-count" className="mb-2 block text-sm font-bold text-violet-950">
+                          Como deseja pagar no cartão?
+                        </label>
+                        <select
+                          id="installment-count"
+                          value={installmentCount}
+                          onChange={(event) => setInstallmentCount(Number(event.target.value))}
+                          className="h-12 w-full rounded-xl border border-violet-200 bg-white px-3 font-semibold text-violet-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+                        >
+                          {Array.from({ length: maxCheckoutInstallments }, (_, index) => index + 1).map((count) => (
+                            <option key={count} value={count}>
+                              {count === 1
+                                ? `À vista · ${checkoutPlan ? formatCurrency(checkoutPlan.value) : ''}`
+                                : `${count}x de aprox. ${checkoutPlan ? formatCurrency(checkoutPlan.value / count) : ''}`}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-2 text-xs leading-5 text-violet-700">
+                          O valor total compromete o limite do cartão e é parcelado pela operadora. Na próxima renovação, ao final do período, a cobrança recorrente será feita pelo valor integral do novo ciclo.
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-[#003223]">Nome impresso no cartão</label>
                       <Input value={cardForm.holderName} onChange={(event) => setCardForm({ ...cardForm, holderName: event.target.value })} autoComplete="cc-name" />
@@ -975,7 +1056,9 @@ const Subscription = () => {
                     ? 'Processando...'
                     : paymentMethod === 'PIX'
                       ? 'Gerar QR Code PIX'
-                      : `Pagar ${checkoutPlan ? formatCurrency(checkoutPlan.value) : ''}`}
+                      : installmentCount > 1
+                        ? `Pagar em ${installmentCount}x de aprox. ${checkoutPlan ? formatCurrency(checkoutPlan.value / installmentCount) : ''}`
+                        : `Pagar ${checkoutPlan ? formatCurrency(checkoutPlan.value) : ''}`}
                 </Button>
               </div>
             )}

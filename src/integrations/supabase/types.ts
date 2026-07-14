@@ -1472,6 +1472,7 @@ export type Database = {
           current_period_start: string | null
           extra_store_price: number | null
           id: string
+          installment_count: number
           plan_id: number | null
           status: string
           store_count: number | null
@@ -1493,6 +1494,7 @@ export type Database = {
           current_period_start?: string | null
           extra_store_price?: number | null
           id?: string
+          installment_count?: number
           plan_id?: number | null
           status: string
           store_count?: number | null
@@ -1514,6 +1516,7 @@ export type Database = {
           current_period_start?: string | null
           extra_store_price?: number | null
           id?: string
+          installment_count?: number
           plan_id?: number | null
           status?: string
           store_count?: number | null
