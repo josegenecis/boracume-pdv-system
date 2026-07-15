@@ -114,7 +114,7 @@ const AiFeatureSection = () => {
                 Não perca dias digitando. Tire uma foto do seu cardápio, mande no nosso WhatsApp e a nossa <strong className="text-white">IA do GPT-4</strong> cadastra todos os pratos, descrições e preços para você em 60 segundos.
               </p>
 
-              <Link to="/signup">
+              <Link to="/login?tab=register">
                 <Button className="bg-white text-slate-900 hover:bg-gray-100 font-bold px-8 py-6 text-lg rounded-xl shadow-lg hover:shadow-xl transition-all">
                   Quero testar a IA agora
                   <ArrowRight className="ml-2 w-5 h-5" />

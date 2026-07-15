@@ -26,7 +26,7 @@ const Header = () => {
 
         <div className="hidden items-center gap-2 md:flex">
           <Link to="/login"><Button variant="ghost" className="font-bold text-[#315548] hover:bg-[#edf5ee] hover:text-[#064733]">Entrar</Button></Link>
-          <Link to="/signup"><Button className="rounded-xl bg-[#ef6c20] px-5 font-black text-white shadow-lg shadow-orange-200/60 hover:bg-[#dc5c14]">Começar agora <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+          <Link to="/login?tab=register"><Button className="rounded-xl bg-[#ef6c20] px-5 font-black text-white shadow-lg shadow-orange-200/60 hover:bg-[#dc5c14]">Começar agora <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
         </div>
 
         <button type="button" onClick={() => setIsMenuOpen(value => !value)} className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#f1f5f1] text-[#064733] md:hidden" aria-label={isMenuOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={isMenuOpen}>
@@ -38,7 +38,7 @@ const Header = () => {
         {isMenuOpen && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-[#e7ece8] bg-white md:hidden">
           <nav className="container space-y-1 py-4" aria-label="Navegação móvel">
             {menuItems.map(item => <a key={item.href} href={item.href} onClick={() => setIsMenuOpen(false)} className="block rounded-xl px-4 py-3 text-sm font-bold text-[#315548] hover:bg-[#f1f6f1]">{item.label}</a>)}
-            <div className="grid grid-cols-2 gap-2 pt-3"><Link to="/login"><Button variant="outline" className="w-full rounded-xl font-bold">Entrar</Button></Link><Link to="/signup"><Button className="w-full rounded-xl bg-[#ef6c20] font-black text-white">Começar</Button></Link></div>
+            <div className="grid grid-cols-2 gap-2 pt-3"><Link to="/login"><Button variant="outline" className="w-full rounded-xl font-bold">Entrar</Button></Link><Link to="/login?tab=register"><Button className="w-full rounded-xl bg-[#ef6c20] font-black text-white">Começar</Button></Link></div>
           </nav>
         </motion.div>}
       </AnimatePresence>

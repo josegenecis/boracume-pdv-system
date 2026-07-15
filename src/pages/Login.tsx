@@ -10,6 +10,7 @@ const Login = () => {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const authTab = new URLSearchParams(location.search).get('tab') === 'register' ? 'register' : 'login';
   const [redirecting, setRedirecting] = useState(false);
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
@@ -119,13 +120,15 @@ const Login = () => {
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Entre na sua conta
+            {authTab === 'register' ? 'Crie sua conta' : 'Entre na sua conta'}
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Acesse o painel do seu restaurante
+            {authTab === 'register'
+              ? 'Comece agora com o cadastro oficial do PopSystem'
+              : 'Acesse o painel do seu restaurante'}
           </p>
         </div>
-        <AuthForm />
+        <AuthForm key={authTab} defaultTab={authTab} />
       </div>
     </div>
   );

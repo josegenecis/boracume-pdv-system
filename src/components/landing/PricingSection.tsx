@@ -103,7 +103,7 @@ const PricingSection = () => {
                 </div>
               </div>
 
-              <Link to="/signup" className="block">
+              <Link to="/login?tab=register" className="block">
                 <Button 
                   className={`w-full py-6 text-lg font-bold rounded-xl transition-all ${
                     plan.featured 
