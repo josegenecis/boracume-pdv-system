@@ -61,7 +61,7 @@ const HeroSection = () => {
 
             {/* CTA Area */}
             <div className="flex flex-col items-center lg:items-start space-y-4">
-              <Link to="/signup" className="w-full sm:w-auto">
+              <Link to="/login?tab=register" className="w-full sm:w-auto">
                 <Button 
                   size="lg" 
                   className="w-full bg-boracume-orange hover:bg-orange-600 text-white text-lg font-bold px-8 py-8 rounded-2xl shadow-[0_0_40px_-10px_rgba(234,88,12,0.6)] animate-pulse hover:animate-none transition-all transform hover:scale-105 border-t border-white/20"

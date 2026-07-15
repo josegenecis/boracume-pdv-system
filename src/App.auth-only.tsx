@@ -11,7 +11,6 @@ import SoundPermissionHelper from '@/components/notifications/SoundPermissionHel
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
-import Signup from '@/pages/Signup';
 import Dashboard from '@/pages/Dashboard';
 import TestPage from '@/pages/TestPage';
 import NotFound from '@/pages/NotFound';
@@ -26,7 +25,7 @@ function AppContent() {
       {/* Rotas que precisam de autenticação */}
       <Route path="/" element={<Index />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
+      <Route path="/signup" element={<Navigate to="/login?tab=register" replace />} />
       
       <Route element={<RouteGuard><Outlet /></RouteGuard>}>
         <Route element={<DashboardLayout><Outlet /></DashboardLayout>}>

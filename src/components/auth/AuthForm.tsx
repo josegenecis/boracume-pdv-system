@@ -19,7 +19,11 @@ import { debugLogger } from '@/utils/debugLogger';
 import { handleOAuthError } from '../../utils/oauth-errors';
 import { logOAuthLoginAttempt, logOAuthLoginFailure } from '../../utils/oauth-security-logger';
 
-const AuthForm: React.FC = () => {
+type AuthFormProps = {
+  defaultTab?: 'login' | 'register';
+};
+
+const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
   const { signIn, signUp, isLoading } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -265,7 +269,7 @@ const AuthForm: React.FC = () => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="login" className="w-full">
+        <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="login">Entrar</TabsTrigger>
             <TabsTrigger value="register">Cadastrar</TabsTrigger>

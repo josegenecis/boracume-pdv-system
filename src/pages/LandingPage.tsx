@@ -186,7 +186,7 @@ const LandingPage = () => (
               O PopSystem conecta vendas, salão, delivery, cozinha, estoque, financeiro e marketing para você ganhar velocidade, reduzir erros e enxergar o lucro de verdade.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link to="/signup"><Button className="h-14 w-full rounded-xl bg-[#ef6c20] px-7 text-base font-black text-white shadow-xl shadow-black/20 hover:bg-[#ff7b2d] sm:w-auto">Começar agora <ArrowRight className="ml-2 h-5 w-5" /></Button></Link>
+              <Link to="/login?tab=register"><Button className="h-14 w-full rounded-xl bg-[#ef6c20] px-7 text-base font-black text-white shadow-xl shadow-black/20 hover:bg-[#ff7b2d] sm:w-auto">Começar agora <ArrowRight className="ml-2 h-5 w-5" /></Button></Link>
               <a href={WHATSAPP_URL} target="_blank" rel="noreferrer"><Button variant="outline" className="h-14 w-full rounded-xl border-white/20 bg-white/10 px-7 text-base font-bold text-white backdrop-blur hover:bg-white hover:text-[#064733] sm:w-auto"><MessageCircle className="mr-2 h-5 w-5" />Falar com especialista</Button></a>
             </div>
             <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-white/70">
@@ -238,7 +238,7 @@ const LandingPage = () => (
       <section id="inteligencia" className="relative overflow-hidden bg-[#071f18] py-24 text-white">
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(45deg, transparent 45%, #fff 45%, #fff 46%, transparent 46%)', backgroundSize: '32px 32px' }} />
         <div className="container relative grid gap-14 lg:grid-cols-[.9fr_1.1fr] lg:items-center">
-          <div><Eyebrow light>Inteligência que vira ação</Eyebrow><h2 className="text-4xl font-black leading-[1.03] tracking-[-.045em] md:text-5xl">O sistema não mostra só números. Ele ajuda você a decidir.</h2><p className="mt-6 text-lg font-medium leading-8 text-white/65">Descubra o que vende mais, onde sua margem escapa e qual ação pode melhorar o resultado — sem passar horas montando planilhas.</p><Link to="/signup" className="mt-8 inline-flex items-center gap-2 font-black text-[#a8df75] hover:text-white">Quero enxergar meu restaurante <ArrowRight className="h-5 w-5" /></Link></div>
+          <div><Eyebrow light>Inteligência que vira ação</Eyebrow><h2 className="text-4xl font-black leading-[1.03] tracking-[-.045em] md:text-5xl">O sistema não mostra só números. Ele ajuda você a decidir.</h2><p className="mt-6 text-lg font-medium leading-8 text-white/65">Descubra o que vende mais, onde sua margem escapa e qual ação pode melhorar o resultado — sem passar horas montando planilhas.</p><Link to="/login?tab=register" className="mt-8 inline-flex items-center gap-2 font-black text-[#a8df75] hover:text-white">Quero enxergar meu restaurante <ArrowRight className="h-5 w-5" /></Link></div>
           <div className="grid gap-3 sm:grid-cols-2">
             {[
               [TrendingUp, 'Venda melhor', 'Veja produtos campeões, horários fortes e ticket médio.'], [BarChart3, 'Proteja sua margem', 'Acompanhe CMV, despesas e desempenho da operação.'], [Bot, 'Ganhe produtividade', 'Use IA para conteúdo, atendimento e tarefas repetitivas.'], [Megaphone, 'Traga o cliente de volta', 'Crie ofertas, campanhas e ações de fidelização.'],
@@ -267,7 +267,7 @@ const LandingPage = () => (
               <h3 className="text-2xl font-black text-[#073e2e]">{plan.name}</h3><p className="mt-2 min-h-[52px] text-sm font-medium leading-6 text-[#6d7e77]">{plan.description}</p>
               <div className="mt-7 flex items-end gap-1 text-[#073e2e]"><span className="mb-2 text-sm font-black">R$</span><strong className="text-5xl font-black tracking-[-.06em]">{plan.price}</strong><span className="mb-2 text-sm font-bold text-[#7d8d87]">/mês</span></div>
               <div className="my-7 h-px bg-[#e4eae5]" /><div className="flex-1 space-y-3">{plan.items.map(item => <div key={item} className="flex gap-3 text-sm font-bold text-[#315548]"><span className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-[#eaf6e2]"><Check className="h-3 w-3 text-[#57932f]" /></span>{item}</div>)}</div>
-              <Link to="/signup" className="mt-8"><Button className={`h-13 w-full rounded-xl text-sm font-black ${plan.featured ? 'bg-[#ef6c20] text-white hover:bg-[#db5d16]' : 'bg-[#064733] text-white hover:bg-[#08392b]'}`}>Escolher {plan.name}<ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+              <Link to="/login?tab=register" className="mt-8"><Button className={`h-13 w-full rounded-xl text-sm font-black ${plan.featured ? 'bg-[#ef6c20] text-white hover:bg-[#db5d16]' : 'bg-[#064733] text-white hover:bg-[#08392b]'}`}>Escolher {plan.name}<ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
             </article>)}
           </div>
           <p className="mt-6 text-center text-xs font-semibold text-[#84938d]">Fiscal/NFC-e disponível conforme configuração e homologação aplicável à operação.</p>
@@ -285,7 +285,7 @@ const LandingPage = () => (
         <div className="absolute -right-20 -top-32 h-96 w-96 rounded-full border-[80px] border-white/10" />
         <div className="container relative flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-center">
           <div className="max-w-3xl"><div className="text-xs font-black uppercase tracking-[.22em] text-white/70">Seu restaurante pode rodar melhor</div><h2 className="mt-4 text-4xl font-black leading-[1.03] tracking-[-.045em] md:text-5xl">Troque o improviso por uma operação que você consegue comandar.</h2></div>
-          <div className="flex w-full flex-col gap-3 sm:w-auto"><Link to="/signup"><Button className="h-14 w-full rounded-xl bg-white px-7 text-base font-black text-[#d9560b] hover:bg-[#fff7ef]">Quero conhecer o PopSystem <ArrowRight className="ml-2 h-5 w-5" /></Button></Link><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="text-center text-sm font-bold text-white/85 hover:text-white">Prefiro falar pelo WhatsApp</a></div>
+          <div className="flex w-full flex-col gap-3 sm:w-auto"><Link to="/login?tab=register"><Button className="h-14 w-full rounded-xl bg-white px-7 text-base font-black text-[#d9560b] hover:bg-[#fff7ef]">Quero conhecer o PopSystem <ArrowRight className="ml-2 h-5 w-5" /></Button></Link><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="text-center text-sm font-bold text-white/85 hover:text-white">Prefiro falar pelo WhatsApp</a></div>
         </div>
       </section>
 

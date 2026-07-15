@@ -23,7 +23,6 @@ import { toast } from 'sonner';
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
-import Signup from '@/pages/Signup';
 import ResetPassword from '@/pages/ResetPassword';
 import LandingPage from '@/pages/LandingPage';
 import Dashboard from '@/pages/Dashboard';
@@ -137,7 +136,7 @@ function AppContent() {
       {/* Rotas que precisam de autenticação */}
       <Route path="/" element={<Index />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
+      <Route path="/signup" element={<Navigate to="/login?tab=register" replace />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/operator-login" element={<RouteGuard><OperatorLogin /></RouteGuard>} />
       
