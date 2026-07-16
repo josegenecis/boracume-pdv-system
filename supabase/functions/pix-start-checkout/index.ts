@@ -1,6 +1,13 @@
 // deno-lint-ignore-file no-explicit-any
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  calculatePlatformFeeCents,
+  envEnabled,
+  getPopPayAccessToken,
+  getPopPayConnection,
+  refreshPopPayAccessToken,
+} from '../_shared/poppay.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -183,6 +190,7 @@ Deno.serve(async (req: Request) => {
     const total = Number(orderPayload?.total || 0)
     const preferredMethod = String(body?.preferredMethod || orderPayload?.payment_method || '')
     const useCheckoutPro = Boolean(body?.useCheckoutPro)
+    const existingOrderId = String(body?.orderId || orderPayload?.order_id || '').trim() || null
 
     console.log(`Processing request for user: ${restaurantUserId}, total: ${total}, method: ${preferredMethod}, pro: ${useCheckoutPro}`)
 
@@ -256,6 +264,7 @@ Deno.serve(async (req: Request) => {
       status: 'CREATED',
       provider: provider || 'mercadopago',
       order_payload: orderPayload,
+      order_id: existingOrderId,
       updated_at: new Date().toISOString()
     })
 
@@ -319,8 +328,47 @@ Deno.serve(async (req: Request) => {
         return token
       }
 
+      let paymentConnection = 'legacy'
+      let platformFeeBps = 0
+      let platformFeeCents = 0
+      let popPayConnection: any = null
       let accessToken = await getAccessToken()
+      let refreshSelectedAccessToken = refreshAccessToken
+
+      // O PopPay e aditivo e opt-in. Qualquer ausencia de tabela, credencial,
+      // feature flag ou token mantem o checkout legado sem interromper a loja.
+      if (envEnabled('POPPAY_SPLIT_ENABLED')) {
+        const popPayResult = await getPopPayConnection(supabase, restaurantUserId)
+        const candidate = popPayResult.connection
+        if (
+          candidate &&
+          candidate.status === 'connected' &&
+          candidate.enabled === true &&
+          candidate.split_enabled === true
+        ) {
+          const popPayToken = await getPopPayAccessToken(supabase, candidate)
+          if (popPayToken) {
+            popPayConnection = candidate
+            paymentConnection = 'poppay'
+            platformFeeBps = Number(candidate.fee_bps || 100)
+            platformFeeCents = calculatePlatformFeeCents(value, platformFeeBps)
+            accessToken = popPayToken
+            refreshSelectedAccessToken = () => refreshPopPayAccessToken(supabase, popPayConnection)
+          }
+        }
+      }
+
       if (!accessToken) return ok({ ok: false, error: 'missing_provider_credentials' })
+
+      await supabase
+        .from('pix_checkouts')
+        .update({
+          payment_connection: paymentConnection,
+          platform_fee_bps: platformFeeBps,
+          platform_fee_cents: platformFeeCents,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('correlation_id', correlationID)
 
       console.log("Calling Mercado Pago API...")
       
@@ -336,10 +384,16 @@ Deno.serve(async (req: Request) => {
           },
           body: JSON.stringify({
             transaction_amount: Number((value / 100).toFixed(2)),
+            ...(platformFeeCents > 0 ? { application_fee: Number((platformFeeCents / 100).toFixed(2)) } : {}),
             description: `Pedido ${orderPayload?.order_number || correlationID}`,
             payment_method_id: 'pix',
             external_reference: correlationID,
             notification_url: notificationUrl,
+            metadata: {
+              popsystem_correlation_id: correlationID,
+              payment_connection: paymentConnection,
+              platform_fee_cents: platformFeeCents,
+            },
             payer: {
               email: payerEmail,
               first_name: customerName.split(' ')[0] || 'Cliente',
@@ -351,7 +405,7 @@ Deno.serve(async (req: Request) => {
 
         let mpResp = await callPayment(accessToken)
         if (mpResp.status === 401) {
-          const refreshed = await refreshAccessToken()
+          const refreshed = await refreshSelectedAccessToken()
           if (refreshed) {
             accessToken = refreshed
             mpResp = await callPayment(accessToken)
@@ -390,7 +444,10 @@ Deno.serve(async (req: Request) => {
               mp_status: mpJson?.status ?? null,
               mp_status_detail: mpJson?.status_detail ?? null,
               date_approved: mpJson?.date_approved ?? null,
-              ticket_url: mpJson?.point_of_interaction?.transaction_data?.ticket_url ?? null
+              ticket_url: mpJson?.point_of_interaction?.transaction_data?.ticket_url ?? null,
+              payment_connection: paymentConnection,
+              platform_fee_bps: platformFeeBps,
+              platform_fee_cents: platformFeeCents,
             },
             updated_at: new Date().toISOString()
           })
@@ -427,10 +484,13 @@ Deno.serve(async (req: Request) => {
           failure: `${origin.replace(/\/+$/, '')}/mp/return?cid=${encodeURIComponent(correlationID)}`,
         },
         auto_return: 'approved',
+        ...(platformFeeCents > 0 ? { marketplace_fee: Number((platformFeeCents / 100).toFixed(2)) } : {}),
         metadata: {
           correlationID,
           restaurantUserId,
           payment_method: preferredMethod || null,
+          payment_connection: paymentConnection,
+          platform_fee_cents: platformFeeCents,
         },
       }
 
@@ -446,7 +506,7 @@ Deno.serve(async (req: Request) => {
 
       let prefResp = await callPreference(accessToken)
       if (prefResp.status === 401) {
-        const refreshed = await refreshAccessToken()
+        const refreshed = await refreshSelectedAccessToken()
         if (refreshed) {
           accessToken = refreshed
           prefResp = await callPreference(accessToken)
@@ -474,7 +534,10 @@ Deno.serve(async (req: Request) => {
           metadata: {
             provider: 'mercadopago',
             preference_id: prefJson?.id ?? null,
-            init_point: prefJson?.init_point ?? null
+            init_point: prefJson?.init_point ?? null,
+            payment_connection: paymentConnection,
+            platform_fee_bps: platformFeeBps,
+            platform_fee_cents: platformFeeCents,
           },
           updated_at: new Date().toISOString()
         })

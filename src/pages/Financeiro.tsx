@@ -49,6 +49,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PrinterService } from '@/utils/printerService';
 import { getLocalOperatorSession, canCancelOrder } from '@/services/operatorAuth';
 import { updateOrderStatus } from '@/utils/updateOrderStatus';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -316,6 +317,19 @@ const Financeiro = () => {
 
     setCancellingOrderIds((prev) => new Set(prev).add(String(order.id)));
     try {
+      const isPaidPixOnline = String(order.payment_method || '').toLowerCase() === 'pix_online';
+      if (isPaidPixOnline) {
+        const refundPix = window.confirm(
+          `Esta venda foi paga via PIX online. Deseja devolver ${Number(order.total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para o cliente?\n\nOK: cancelar e devolver o PIX\nCancelar: cancelar somente a venda`
+        );
+        if (refundPix) {
+          const { data, status } = await invokeEdgeFunction('poppay-refund', {
+            orderId: String(order.id),
+            reason: 'Venda cancelada pelo financeiro',
+          }, { timeoutMs: 60000 });
+          if (status >= 400 || !data?.ok) throw new Error(String(data?.message || data?.error || 'O Mercado Pago não confirmou a devolução.'));
+        }
+      }
       await updateOrderStatus(String(order.id), 'cancelled');
       setSessionOrders((prev) => prev.map((item) => (
         item.id === order.id ? { ...item, status: 'cancelled' } : item

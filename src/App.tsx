@@ -60,6 +60,7 @@ import AuthCallback from '@/pages/AuthCallback';
 import OrderTracking from '@/pages/OrderTracking';
 import MercadoPagoReturn from '@/pages/MercadoPagoReturn';
 import MpCallback from '@/pages/MpCallback';
+import { PopPayCallback } from '@/pages/PopPayCallback';
 import AgentDashboard from '@/pages/AgentDashboard';
 import WaiterLogin from '@/pages/WaiterLogin';
 import EmployeeLogin from '@/pages/EmployeeLogin';
@@ -106,6 +107,7 @@ function AppContent() {
       <Route path="/track/:orderId" element={<OrderTracking />} />
       <Route path="/mp/return" element={<MercadoPagoReturn />} />
       <Route path="/mp/callback" element={<MpCallback />} />
+      <Route path="/poppay/callback" element={<PopPayCallback />} />
       <Route path="/admin-popsystem" element={<SystemAdminDashboard />} />
       
       {/* Rotas do Garçom */}

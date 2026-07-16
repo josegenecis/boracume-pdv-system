@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, ShieldCheck, WalletCards } from 'lucide-react';
 
 export default function PixSetup() {
   const { user } = useAuth();
@@ -21,6 +21,12 @@ export default function PixSetup() {
   const [loading, setLoading] = useState(false);
   const [mpConnected, setMpConnected] = useState(false);
   const [mpExpiresAt, setMpExpiresAt] = useState<string>('');
+  const [popPayLoading, setPopPayLoading] = useState(false);
+  const [popPayConfigured, setPopPayConfigured] = useState(false);
+  const [popPayRolloutEnabled, setPopPayRolloutEnabled] = useState(false);
+  const [popPayConnected, setPopPayConnected] = useState(false);
+  const [popPaySplitEnabled, setPopPaySplitEnabled] = useState(false);
+  const [popPayExpiresAt, setPopPayExpiresAt] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -60,6 +66,47 @@ export default function PixSetup() {
     };
     load();
   }, [activeUserId]);
+
+  const loadPopPay = useCallback(async () => {
+    if (!activeUserId) return;
+    const { data } = await invokeEdgeFunction('poppay-settings', { action: 'status' }, { timeoutMs: 20000 });
+    setPopPayConfigured(Boolean(data?.configured));
+    setPopPayRolloutEnabled(Boolean(data?.rolloutEnabled));
+    setPopPayConnected(data?.connection?.status === 'connected' && data?.connection?.enabled !== false);
+    setPopPaySplitEnabled(Boolean(data?.connection?.split_enabled));
+    setPopPayExpiresAt(String(data?.connection?.expires_at || ''));
+  }, [activeUserId]);
+
+  useEffect(() => {
+    void loadPopPay();
+  }, [loadPopPay]);
+
+  const connectPopPay = async () => {
+    setPopPayLoading(true);
+    try {
+      const { data, status } = await invokeEdgeFunction('poppay-oauth-start', {}, { timeoutMs: 60000 });
+      if (status >= 400 || !data?.ok || !data?.url) throw new Error(data?.message || data?.error || 'Não foi possível iniciar o PopPay.');
+      window.location.href = String(data.url);
+    } catch (error: unknown) {
+      toast({ title: 'PopPay indisponível', description: error instanceof Error ? error.message : String(error), variant: 'destructive' });
+    } finally {
+      setPopPayLoading(false);
+    }
+  };
+
+  const setPopPaySplit = async (nextEnabled: boolean) => {
+    setPopPayLoading(true);
+    try {
+      const { data, status } = await invokeEdgeFunction('poppay-settings', { action: 'set_split_enabled', enabled: nextEnabled });
+      if (status >= 400 || !data?.ok) throw new Error(data?.message || data?.error || 'Não foi possível alterar o PopPay.');
+      setPopPaySplitEnabled(nextEnabled);
+      toast({ title: nextEnabled ? 'PopPay ativado' : 'Split pausado', description: nextEnabled ? 'As novas cobranças PIX usarão o split de 1%.' : 'As cobranças continuam pela integração Mercado Pago existente.' });
+    } catch (error: unknown) {
+      toast({ title: 'Não foi possível alterar', description: error instanceof Error ? error.message : String(error), variant: 'destructive' });
+    } finally {
+      setPopPayLoading(false);
+    }
+  };
 
   const connectMercadoPago = async () => {
     if (!activeUserId) {
@@ -187,6 +234,43 @@ export default function PixSetup() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
+      <Card className="overflow-hidden border-emerald-200 shadow-sm">
+        <CardHeader className="bg-gradient-to-r from-emerald-950 via-emerald-800 to-orange-500 text-white">
+          <CardTitle className="flex items-center gap-2"><WalletCards className="h-5 w-5" />PopPay</CardTitle>
+          <p className="text-sm text-emerald-50">Recebimento PIX integrado, conciliação e devolução pelo próprio PopSystem.</p>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-5">
+          <div className="flex items-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
+            <div>
+              <p className="font-medium text-emerald-950">Migração segura</p>
+              <p className="text-sm text-emerald-800">A conexão atual do Mercado Pago continua disponível até o PopPay estar conectado e ativado.</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium">{popPayConnected ? 'Conta conectada ao PopPay' : 'Conecte sua conta Mercado Pago'}</p>
+              <p className="text-sm text-muted-foreground">
+                {popPayConnected
+                  ? `${popPaySplitEnabled ? 'Split de 1% ativo.' : 'Conectado, aguardando ativação do split.'}${popPayExpiresAt ? ` Token válido até ${new Date(popPayExpiresAt).toLocaleDateString('pt-BR')}.` : ''}`
+                  : popPayConfigured ? 'A autorização é feita diretamente no Mercado Pago.' : 'A aplicação PopPay ainda aguarda as credenciais de produção.'}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button onClick={connectPopPay} disabled={popPayLoading || !popPayConfigured} className="bg-emerald-700 hover:bg-emerald-800">
+                {popPayConnected ? 'Reconectar PopPay' : 'Conectar PopPay'}
+              </Button>
+              {popPayConnected ? (
+                <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                  <Switch checked={popPaySplitEnabled} onCheckedChange={setPopPaySplit} disabled={popPayLoading || !popPayRolloutEnabled} aria-label="Ativar split PopPay de 1%" />
+                  <span className="text-sm">Cobrar 1%</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          {popPayConnected && !popPayRolloutEnabled ? <p className="text-xs text-amber-700">Conexão preservada. A ativação financeira será liberada depois dos testes controlados.</p> : null}
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -202,10 +286,9 @@ export default function PixSetup() {
               </p>
             </div>
             <div className="md:col-span-3 bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
-              <h3 className="font-semibold text-blue-900 mb-2">Conexão Recomendada (Mercado Pago)</h3>
+              <h3 className="font-semibold text-blue-900 mb-2">Conexão Mercado Pago atual</h3>
               <p className="text-sm text-blue-700 mb-4">
-                Conecte sua conta Mercado Pago automaticamente para receber pagamentos via PIX.
-                Não é necessário copiar chaves manualmente.
+                Esta conexão permanece funcionando durante a migração gradual para o PopPay.
               </p>
               <Button 
                 className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700" 

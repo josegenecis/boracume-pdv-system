@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { markLoyaltyRewardUsedForOrder } from '../_shared/loyalty.ts'
 import { notifyOrderCreated } from '../_shared/restaurant-whatsapp.ts'
+import { getPopPayAccessToken, getPopPayConnection, refreshPopPayAccessToken } from '../_shared/poppay.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -98,14 +99,14 @@ serve(async (req) => {
     const prefetchCheckoutByCorrelation = async (cid: string) =>
       (await supabase
         .from('pix_checkouts')
-        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id')
+        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id, payment_connection, platform_fee_bps, platform_fee_cents')
         .eq('correlation_id', cid)
         .maybeSingle()).data
 
     const prefetchCheckoutByPaymentId = async (pid: string) =>
       (await supabase
         .from('pix_checkouts')
-        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id')
+        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id, payment_connection, platform_fee_bps, platform_fee_cents')
         .or(`transaction_id.eq.${pid},metadata->>payment_id.eq.${pid}`)
         .order('updated_at', { ascending: false })
         .limit(1)
@@ -185,7 +186,7 @@ serve(async (req) => {
         ? checkoutPrefetched
         : (await supabase
             .from('pix_checkouts')
-            .select('id, restaurant_user_id, status, provider, order_payload, order_id')
+            .select('id, restaurant_user_id, status, provider, order_payload, order_id, payment_connection, platform_fee_bps, platform_fee_cents')
             .eq('correlation_id', effectiveCid)
             .maybeSingle()).data
 
@@ -195,11 +196,6 @@ serve(async (req) => {
       }
 
       console.log(`[PixWebhook] Checkout found. Status: ${checkout.status}, Provider: ${checkout.provider}`);
-
-      if (checkout.status === 'PAID') {
-        console.log(`[PixWebhook] Checkout already PAID. Order ID: ${checkout.order_id || 'n/a'}`);
-        return new Response(JSON.stringify({ ok: true, idempotent: true, orderId: checkout.order_id || null }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-      }
 
       if (String(checkout.provider).toLowerCase() === 'mercadopago') {
         console.log(`[PixWebhook] MP Payment ID: ${paymentId}`);
@@ -214,79 +210,66 @@ serve(async (req) => {
            return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
-        // ... busca credenciais ...
-        const { data: mp, error: mpErr } = await supabase
-          .from('pix_settings')
-          .select('enabled, bank, client_id, mp_access_token, mp_refresh_token, mp_expires_at')
-          .eq('user_id', checkout.restaurant_user_id)
-          .maybeSingle()
-        
-        if (!mp || !(mp.mp_access_token || mp.client_id || (mp as any).mp_refresh_token)) {
-            console.error(`[PixWebhook] MP settings not found for user ${checkout.restaurant_user_id}`);
-            return new Response(JSON.stringify({ error: 'config_missing' }), { status: 200 });
-        }
+        const usePopPay = String(checkout.payment_connection || '') === 'poppay'
+        let accessToken = ''
+        let refreshAccessToken: () => Promise<string>
 
-        const getEnv = (...keys: string[]) => {
-          for (const key of keys) {
-            const value = Deno.env.get(key)
-            if (value) return value
+        if (usePopPay) {
+          const { connection } = await getPopPayConnection(supabase, checkout.restaurant_user_id)
+          if (!connection) {
+            console.error(`[PixWebhook] PopPay connection not found for user ${checkout.restaurant_user_id}`)
+            return new Response(JSON.stringify({ error: 'config_missing' }), { status: 200 })
           }
-          return ''
-        }
-
-        const mpClientId = getEnv('MP_PLATFORM_CLIENT_ID')
-        const mpClientSecret = getEnv('MP_PLATFORM_CLIENT_SECRET')
-
-        const refreshAccessToken = async () => {
-          const refreshToken = String((mp as any)?.mp_refresh_token || '')
-          if (!refreshToken || !mpClientId || !mpClientSecret) return ''
-          const resp = await fetch('https://api.mercadopago.com/oauth/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              client_id: mpClientId,
-              client_secret: mpClientSecret,
-              grant_type: 'refresh_token',
-              refresh_token: refreshToken,
-            })
-          })
-          const json: any = await resp.json().catch(() => ({}))
-          if (!resp.ok) return ''
-          const nextToken = String(json?.access_token || '')
-          const nextRefresh = String(json?.refresh_token || '') || refreshToken
-          const expiresIn = json?.expires_in ? Number(json.expires_in) : 0
-          const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
-          await supabase
+          accessToken = await getPopPayAccessToken(supabase, connection)
+          refreshAccessToken = () => refreshPopPayAccessToken(supabase, connection)
+        } else {
+          const { data: mp } = await supabase
             .from('pix_settings')
-            .update({
+            .select('enabled, bank, client_id, mp_access_token, mp_refresh_token, mp_expires_at')
+            .eq('user_id', checkout.restaurant_user_id)
+            .maybeSingle()
+          if (!mp || !(mp.mp_access_token || mp.client_id || (mp as any).mp_refresh_token)) {
+            console.error(`[PixWebhook] MP settings not found for user ${checkout.restaurant_user_id}`)
+            return new Response(JSON.stringify({ error: 'config_missing' }), { status: 200 })
+          }
+          const mpClientId = Deno.env.get('MP_PLATFORM_CLIENT_ID') || ''
+          const mpClientSecret = Deno.env.get('MP_PLATFORM_CLIENT_SECRET') || ''
+          refreshAccessToken = async () => {
+            const refreshToken = String((mp as any)?.mp_refresh_token || '')
+            if (!refreshToken || !mpClientId || !mpClientSecret) return ''
+            const resp = await fetch('https://api.mercadopago.com/oauth/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ client_id: mpClientId, client_secret: mpClientSecret, grant_type: 'refresh_token', refresh_token: refreshToken }),
+            })
+            const json: any = await resp.json().catch(() => ({}))
+            if (!resp.ok) return ''
+            const nextToken = String(json?.access_token || '')
+            const nextRefresh = String(json?.refresh_token || '') || refreshToken
+            const expiresIn = Number(json?.expires_in || 0)
+            const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
+            await supabase.from('pix_settings').update({
               mp_access_token: nextToken || null,
               mp_refresh_token: nextRefresh || null,
               mp_expires_at: expiresAt,
               client_id: nextToken || null,
-              updated_at: new Date().toISOString()
-            })
-            .eq('user_id', checkout.restaurant_user_id)
-          ;(mp as any).mp_access_token = nextToken
-          ;(mp as any).client_id = nextToken
-          ;(mp as any).mp_refresh_token = nextRefresh
-          ;(mp as any).mp_expires_at = expiresAt
-          return nextToken
-        }
-
-        const getAccessToken = async () => {
-          const token = String((mp as any)?.mp_access_token || (mp as any)?.client_id || '')
-          const expiresAtRaw = String((mp as any)?.mp_expires_at || '')
-          if (expiresAtRaw) {
-            const t = new Date(expiresAtRaw).getTime()
-            if (Number.isFinite(t) && Date.now() > t - 60_000) {
-              const refreshed = await refreshAccessToken()
-              if (refreshed) return refreshed
-            }
+              updated_at: new Date().toISOString(),
+            }).eq('user_id', checkout.restaurant_user_id)
+            ;(mp as any).mp_access_token = nextToken
+            ;(mp as any).mp_refresh_token = nextRefresh
+            ;(mp as any).mp_expires_at = expiresAt
+            return nextToken
           }
-          return token
+          accessToken = String((mp as any)?.mp_access_token || (mp as any)?.client_id || '')
+          const expiresAt = mp?.mp_expires_at ? new Date(String(mp.mp_expires_at)).getTime() : 0
+          if (!accessToken || (Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() > expiresAt - 60_000)) {
+            accessToken = await refreshAccessToken()
+          }
         }
 
-        let accessToken = await getAccessToken()
+        if (!accessToken) {
+          return new Response(JSON.stringify({ error: 'config_missing' }), { status: 200 })
+        }
         
         console.log(`[PixWebhook] Fetching payment status from MP API...`);
         const callPayment = async (token: string) =>
@@ -318,6 +301,20 @@ serve(async (req) => {
         const mpStatus = String(paymentJson?.status || '').toLowerCase()
         const mpDetail = String(paymentJson?.status_detail || '').toLowerCase()
         console.log(`[PixWebhook] Payment Status: ${mpStatus}`);
+
+        if (mpStatus === 'refunded' || mpStatus === 'charged_back') {
+          const refundedCents = Math.max(0, Math.round(Number(paymentJson?.transaction_amount_refunded || paymentJson?.transaction_amount || 0) * 100))
+          await supabase
+            .from('pix_checkouts')
+            .update({ status: 'REFUNDED', refund_status: 'approved', refunded_cents: refundedCents, updated_at: new Date().toISOString() })
+            .eq('id', checkout.id)
+          await supabase
+            .from('poppay_refunds')
+            .update({ status: 'approved', completed_at: new Date().toISOString(), updated_at: new Date().toISOString(), provider_response: paymentJson })
+            .eq('checkout_id', checkout.id)
+            .in('status', ['requested', 'in_process'])
+          return new Response(JSON.stringify({ ok: true, refunded: true, orderId: checkout.order_id || null }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
         
         const isApproved = mpStatus === 'approved' && (Boolean(paymentJson?.date_approved) || mpDetail === 'accredited')
         if (!isApproved) {

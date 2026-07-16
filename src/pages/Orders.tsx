@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink, QrCode, MessageCircle, Printer, GripVertical } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -92,6 +92,8 @@ const Orders = () => {
   const [ifoodCancelReasons, setIfoodCancelReasons] = useState<Array<{ cancelCodeId: string; description: string }>>([]);
   const [selectedIfoodCancelCode, setSelectedIfoodCancelCode] = useState('');
   const [loadingIfoodCancelReasons, setLoadingIfoodCancelReasons] = useState(false);
+  const [pixCancelOrder, setPixCancelOrder] = useState<Order | null>(null);
+  const [pixCancelLoading, setPixCancelLoading] = useState(false);
   const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set());
   const [ordersView, setOrdersView] = useState<'list' | 'kanban'>('list');
   const [mobileStatusTab, setMobileStatusTab] = useState<'novos' | 'preparo' | 'entrega' | 'finalizados'>('novos');
@@ -674,6 +676,10 @@ const Orders = () => {
 
   const continueCancelOrder = async (order: Order) => {
     if (order.source !== 'ifood' || !order.external_order_id) {
+      if (String(order.payment_method || '').toLowerCase() === 'pix_online') {
+        setPixCancelOrder(order);
+        return;
+      }
       await updateOrderStatus(order.id, 'cancelled');
       return;
     }
@@ -711,6 +717,36 @@ const Orders = () => {
       });
     } finally {
       setLoadingIfoodCancelReasons(false);
+    }
+  };
+
+  const confirmPixCancellation = async (refundPix: boolean) => {
+    if (!pixCancelOrder) return;
+    const order = pixCancelOrder;
+    setPixCancelLoading(true);
+    try {
+      let refundMessage = '';
+      if (refundPix) {
+        const { data, status } = await invokeEdgeFunction('poppay-refund', {
+          orderId: order.id,
+          reason: 'Pedido cancelado pelo restaurante',
+        }, { timeoutMs: 60000 });
+        if (status >= 400 || !data?.ok) {
+          throw new Error(String(data?.message || data?.error || 'O Mercado Pago não confirmou a devolução.'));
+        }
+        refundMessage = data?.status === 'in_process'
+          ? ' O reembolso PIX está em processamento no Mercado Pago.'
+          : ' O PIX foi devolvido para a conta pagadora.';
+      }
+      await updateOrderStatus(order.id, 'cancelled');
+      setPixCancelOrder(null);
+      if (refundPix) {
+        toast({ title: 'Pedido cancelado com devolução', description: `Venda ${order.order_number} cancelada.${refundMessage}` });
+      }
+    } catch (error: any) {
+      toast({ title: 'Cancelamento não concluído', description: String(error?.message || error), variant: 'destructive' });
+    } finally {
+      setPixCancelLoading(false);
     }
   };
 
@@ -1135,6 +1171,25 @@ const Orders = () => {
             setPendingCancelId(null);
           }}
         />
+        <Dialog open={Boolean(pixCancelOrder)} onOpenChange={(open) => { if (!open && !pixCancelLoading) setPixCancelOrder(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Cancelar pedido pago via PIX</DialogTitle>
+              <DialogDescription>
+                O pedido {pixCancelOrder?.order_number ? `#${pixCancelOrder.order_number}` : ''} já foi pago. Escolha se deseja apenas cancelar a operação ou também devolver {Number(pixCancelOrder?.total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para a conta pagadora.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              A devolução será solicitada ao Mercado Pago e poderá ficar em processamento bancário.
+            </div>
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button variant="outline" onClick={() => void confirmPixCancellation(false)} disabled={pixCancelLoading}>Cancelar sem devolver</Button>
+              <Button variant="destructive" onClick={() => void confirmPixCancellation(true)} disabled={pixCancelLoading}>
+                {pixCancelLoading ? 'Processando...' : 'Cancelar e devolver PIX'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <Dialog open={ifoodCancelDialogOpen} onOpenChange={(open) => {
           if (!loadingIfoodCancelReasons) {
             setIfoodCancelDialogOpen(open);

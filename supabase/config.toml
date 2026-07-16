@@ -125,6 +125,26 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/pix-webhook/index.ts"
 
+[functions.poppay-oauth-start]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/poppay-oauth-start/index.ts"
+
+[functions.poppay-oauth]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/poppay-oauth/index.ts"
+
+[functions.poppay-settings]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/poppay-settings/index.ts"
+
+[functions.poppay-refund]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/poppay-refund/index.ts"
+
 [functions.admin-dashboard]
 enabled = true
 verify_jwt = false
