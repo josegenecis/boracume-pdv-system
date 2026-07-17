@@ -48,7 +48,7 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
 
             const { data: pixDb, error: pixDbErr } = await supabase
                 .from('pix_settings')
-                .select('enabled, bank, client_id, mp_access_token, mp_refresh_token, mp_pdv_enabled')
+                .select('enabled, bank, mp_pdv_enabled')
                 .eq('user_id', order.user_id)
                 .maybeSingle();
 
@@ -65,8 +65,7 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
             const canUseMercadoPago =
                 Boolean((pixDb as any)?.enabled) &&
                 isMercadoPagoProvider &&
-                Boolean((pixDb as any)?.mp_pdv_enabled) &&
-                Boolean((pixDb as any)?.client_id || (pixDb as any)?.mp_access_token || (pixDb as any)?.mp_refresh_token);
+                Boolean((pixDb as any)?.mp_pdv_enabled);
             if (canUseMercadoPago) {
                 const payload: any = {
                     order_id: order.id,

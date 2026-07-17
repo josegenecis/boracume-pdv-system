@@ -773,7 +773,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         data?.details?.cause?.[0]?.message ||
         '';
       const cid = data?.correlationID ? ` (cid: ${String(data.correlationID)})` : '';
-      const msg = providerMessage ? `Mercado Pago: ${String(providerMessage)}${cid}` : `${String(data.error || data.message || 'Não foi possível iniciar pagamento')}${cid}`;
+      const msg = providerMessage ? `PopPay: ${String(providerMessage)}${cid}` : `${String(data.error || data.message || 'Não foi possível iniciar pagamento')}${cid}`;
       throw new Error(msg);
     }
 
@@ -1535,7 +1535,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                     <>
                       <div className="text-sm font-medium text-gray-900">PIX online</div>
                       <div className="text-sm text-gray-700">
-                        Você será direcionado para pagar com PIX no ambiente seguro do Mercado Pago.
+                        O QR Code será gerado pelo PopPay para pagamento imediato e confirmação automática.
                       </div>
                     </>
                   ) : (

@@ -95,6 +95,16 @@ Deno.serve(async (req) => {
       }, { onConflict: 'user_id' })
     if (upsertError) throw upsertError
 
+    const { error: pixSettingsError } = await supabase
+      .from('pix_settings')
+      .upsert({
+        user_id: userId,
+        enabled: true,
+        bank: 'mercadopago',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' })
+    if (pixSettingsError) throw pixSettingsError
+
     await supabase.from('poppay_oauth_states').update({ used_at: new Date().toISOString() }).eq('id', oauthState.id)
     return new Response(JSON.stringify({ ok: true, connected: true }), { headers: corsHeaders })
   } catch (error: any) {

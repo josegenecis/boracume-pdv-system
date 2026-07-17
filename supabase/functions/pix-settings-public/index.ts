@@ -29,7 +29,7 @@ export default async function handler(req: Request): Promise<Response> {
   try {
     const { data, error } = await supabase
       .from('pix_settings')
-      .select('enabled, bank, pix_key, merchant_name, merchant_city, client_id, mp_access_token, mp_refresh_token')
+      .select('enabled, bank, pix_key, merchant_name, merchant_city')
       .eq('user_id', userId)
       .maybeSingle()
 
@@ -42,7 +42,12 @@ export default async function handler(req: Request): Promise<Response> {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '')
     const isMercadoPago = !providerKey || providerKey === 'mp' || providerKey.includes('mercadopago')
-    const hasOnlineCredentials = Boolean(data.mp_access_token || data.client_id || data.mp_refresh_token)
+    const { data: popPayConnection } = await supabase
+      .from('poppay_connections')
+      .select('status,enabled')
+      .eq('user_id', userId)
+      .maybeSingle()
+    const hasOnlineCredentials = popPayConnection?.status === 'connected' && popPayConnection?.enabled === true
     const publicSettings = {
       enabled: Boolean(data.enabled),
       bank: data.bank || 'mercadopago',

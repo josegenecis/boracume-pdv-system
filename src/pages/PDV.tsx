@@ -2110,7 +2110,7 @@ const PDV = () => {
       if (paymentMethod === 'pix' && !hasSplitPayment) {
         const { data: pixCfg, error: pixCfgErr } = await supabase
           .from('pix_settings')
-          .select('enabled, bank, client_id, mp_access_token, mp_refresh_token, mp_pdv_enabled')
+          .select('enabled, bank, mp_pdv_enabled')
           .eq('user_id', user?.id)
           .maybeSingle()
 
@@ -2124,19 +2124,14 @@ const PDV = () => {
           .toLowerCase()
           .replace(/[^a-z0-9]/g, '');
         const isMercadoPagoProvider = !providerKey || providerKey === 'mp' || providerKey.includes('mercadopago');
-        const hasMercadoPagoCredentials = Boolean((pixCfg as any)?.client_id || (pixCfg as any)?.mp_access_token || (pixCfg as any)?.mp_refresh_token);
-
         const useMpPixPdv =
           Boolean((pixCfg as any)?.enabled) &&
           isMercadoPagoProvider &&
-          Boolean((pixCfg as any)?.mp_pdv_enabled) &&
-          hasMercadoPagoCredentials
+          Boolean((pixCfg as any)?.mp_pdv_enabled)
 
         if (!useMpPixPdv && (pixCfg as any)?.enabled && isMercadoPagoProvider) {
           if (!(pixCfg as any)?.mp_pdv_enabled) {
-            toast({ title: 'PIX', description: 'Mercado Pago no PDV está desativado em Configurações → PIX.', variant: 'destructive' });
-          } else if (!hasMercadoPagoCredentials) {
-            toast({ title: 'PIX', description: 'Mercado Pago não está conectado. Conecte em Configurações → PIX.', variant: 'destructive' });
+            toast({ title: 'PIX', description: 'PopPay no PDV está desativado em Configurações → PIX.', variant: 'destructive' });
           }
         }
 
@@ -2155,7 +2150,7 @@ const PDV = () => {
           }, { timeoutMs: 60000 })
 
           if (!checkout?.ok || !checkout?.brCode || !checkout?.correlationID) {
-            throw new Error(checkout?.error || checkout?.message || 'Falha ao gerar QR do Mercado Pago')
+            throw new Error(checkout?.error || checkout?.message || 'Falha ao gerar QR do PopPay')
           }
 
           setMpPixCheckout({
