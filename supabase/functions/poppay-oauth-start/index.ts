@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     if (error) throw error
 
     const url =
-      `https://auth.mercadopago.com.br/authorization?client_id=${encodeURIComponent(clientId)}` +
+      `https://auth.mercadopago.com/authorization?client_id=${encodeURIComponent(clientId)}` +
       `&response_type=code&platform_id=mp&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&state=${encodeURIComponent(state)}`
 

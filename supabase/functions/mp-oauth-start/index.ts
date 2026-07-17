@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
 
     const scope = 'offline_access read write'
     const url =
-      `https://auth.mercadopago.com.br/authorization?client_id=${encodeURIComponent(clientId)}` +
+      `https://auth.mercadopago.com/authorization?client_id=${encodeURIComponent(clientId)}` +
       `&response_type=code&platform_id=mp&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&state=${encodeURIComponent(state)}&scope=${encodeURIComponent(scope)}`
 
@@ -82,4 +82,3 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: e?.message || 'internal_error' }), { status: 500, headers: corsHeaders })
   }
 })
-
