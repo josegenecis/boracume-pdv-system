@@ -373,17 +373,17 @@ Deno.serve(async (req: Request) => {
       
       if (preferredMethod === 'pix' && !useCheckoutPro) {
         const payerEmail = `${correlationID}@example.com`
-        const callPayment = async (token: string) =>
+        const callPayment = async (token: string, feeCents: number, idempotencyKey = correlationID) =>
           fetch('https://api.mercadopago.com/v1/payments', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
-            'X-Idempotency-Key': correlationID,
+            'X-Idempotency-Key': idempotencyKey,
           },
           body: JSON.stringify({
             transaction_amount: Number((value / 100).toFixed(2)),
-            ...(platformFeeCents > 0 ? { application_fee: Number((platformFeeCents / 100).toFixed(2)) } : {}),
+            ...(feeCents > 0 ? { application_fee: Number((feeCents / 100).toFixed(2)) } : {}),
             description: `Pedido ${orderPayload?.order_number || correlationID}`,
             payment_method_id: 'pix',
             external_reference: correlationID,
@@ -391,7 +391,7 @@ Deno.serve(async (req: Request) => {
             metadata: {
               popsystem_correlation_id: correlationID,
               payment_connection: paymentConnection,
-              platform_fee_cents: platformFeeCents,
+              platform_fee_cents: feeCents,
             },
             payer: {
               email: payerEmail,
@@ -402,16 +402,41 @@ Deno.serve(async (req: Request) => {
           })
         })
 
-        let mpResp = await callPayment(accessToken)
+        let mpResp = await callPayment(accessToken, platformFeeCents)
         if (mpResp.status === 401) {
           const refreshed = await refreshSelectedAccessToken()
           if (refreshed) {
             accessToken = refreshed
-            mpResp = await callPayment(accessToken)
+            mpResp = await callPayment(accessToken, platformFeeCents)
           }
         }
 
-        const mpJson: any = await mpResp.json().catch(() => ({}))
+        let mpJson: any = await mpResp.json().catch(() => ({}))
+        let splitFallbackReason = ''
+        const providerErrorText = JSON.stringify(mpJson || {}).toLowerCase()
+        const splitNotAllowed = platformFeeCents > 0 && (
+          providerErrorText.includes('application_fee') ||
+          providerErrorText.includes('2059')
+        )
+
+        if (!mpResp.ok && splitNotAllowed) {
+          splitFallbackReason = String(mpJson?.message || 'application_fee_not_allowed')
+          console.warn('[PopPay] Split recusado; repetindo PIX sem comissao:', splitFallbackReason)
+          if (popPayConnection?.id) {
+            await supabase
+              .from('poppay_connections')
+              .update({ last_error: `split_unavailable: ${splitFallbackReason}`.slice(0, 500), updated_at: new Date().toISOString() })
+              .eq('id', popPayConnection.id)
+          }
+          platformFeeBps = 0
+          platformFeeCents = 0
+          await supabase
+            .from('pix_checkouts')
+            .update({ platform_fee_bps: 0, platform_fee_cents: 0, updated_at: new Date().toISOString() })
+            .eq('correlation_id', correlationID)
+          mpResp = await callPayment(accessToken, 0, `${correlationID}-no-fee`)
+          mpJson = await mpResp.json().catch(() => ({}))
+        }
         console.log("MP Response status:", mpResp.status)
 
         if (!mpResp.ok) {
@@ -447,6 +472,7 @@ Deno.serve(async (req: Request) => {
               payment_connection: paymentConnection,
               platform_fee_bps: platformFeeBps,
               platform_fee_cents: platformFeeCents,
+              split_fallback_reason: splitFallbackReason || null,
             },
             updated_at: new Date().toISOString()
           })
