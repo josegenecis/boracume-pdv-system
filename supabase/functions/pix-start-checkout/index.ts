@@ -441,6 +441,8 @@ Deno.serve(async (req: Request) => {
 
         if (!mpResp.ok) {
           console.error("MP Error:", mpJson)
+          const finalProviderErrorText = JSON.stringify(mpJson || {}).toLowerCase()
+          const collectorPixKeyMissing = finalProviderErrorText.includes('collector user without key enabled for qr')
           await supabase
             .from('pix_checkouts')
             .update({
@@ -449,6 +451,14 @@ Deno.serve(async (req: Request) => {
               updated_at: new Date().toISOString()
             })
             .eq('correlation_id', correlationID)
+          if (collectorPixKeyMissing) {
+            return ok({
+              ok: false,
+              error: 'collector_pix_key_missing',
+              message: 'A conta Mercado Pago do restaurante ainda nao possui uma chave PIX ativa. Cadastre e valide uma chave PIX no aplicativo Mercado Pago e tente novamente.',
+              correlationID,
+            })
+          }
           return ok({ ok: false, error: 'provider_error', details: mpJson, correlationID })
         }
 

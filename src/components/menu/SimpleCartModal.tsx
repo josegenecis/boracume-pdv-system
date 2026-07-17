@@ -766,6 +766,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       ) {
         throw new Error('O checkout via PIX nao esta configurado para este restaurante.');
       }
+      if (String(data?.error || '') === 'collector_pix_key_missing') {
+        throw new Error(String(data?.message || 'A conta Mercado Pago do restaurante ainda nao possui uma chave PIX ativa.'));
+      }
       const providerMessage =
         data?.details?.message ||
         data?.details?.error ||
@@ -773,7 +776,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         data?.details?.cause?.[0]?.message ||
         '';
       const cid = data?.correlationID ? ` (cid: ${String(data.correlationID)})` : '';
-      const msg = providerMessage ? `PopPay: ${String(providerMessage)}${cid}` : `${String(data.error || data.message || 'Não foi possível iniciar pagamento')}${cid}`;
+      const msg = providerMessage ? `PopPay: ${String(providerMessage)}${cid}` : `${String(data.message || data.error || 'Não foi possível iniciar pagamento')}${cid}`;
       throw new Error(msg);
     }
 
