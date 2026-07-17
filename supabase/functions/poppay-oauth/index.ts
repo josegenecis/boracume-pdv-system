@@ -73,20 +73,14 @@ Deno.serve(async (req) => {
 
     const expiresIn = Number(token?.expires_in || 0)
     const expiresAt = expiresIn > 0 ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
-    const { data: existing } = await supabase
-      .from('poppay_connections')
-      .select('split_enabled,fee_bps')
-      .eq('user_id', userId)
-      .maybeSingle()
-
     const { error: upsertError } = await supabase
       .from('poppay_connections')
       .upsert({
         user_id: userId,
         status: 'connected',
         enabled: true,
-        split_enabled: Boolean(existing?.split_enabled),
-        fee_bps: Number(existing?.fee_bps || 100),
+        split_enabled: true,
+        fee_bps: 100,
         mp_user_id: token?.user_id ? String(token.user_id) : null,
         access_token: String(token.access_token),
         refresh_token: token?.refresh_token ? String(token.refresh_token) : null,
@@ -102,7 +96,7 @@ Deno.serve(async (req) => {
     if (upsertError) throw upsertError
 
     await supabase.from('poppay_oauth_states').update({ used_at: new Date().toISOString() }).eq('id', oauthState.id)
-    return new Response(JSON.stringify({ ok: true, connected: true, splitEnabled: Boolean(existing?.split_enabled) }), { headers: corsHeaders })
+    return new Response(JSON.stringify({ ok: true, connected: true }), { headers: corsHeaders })
   } catch (error: any) {
     return new Response(JSON.stringify({ ok: false, error: 'internal_error', message: String(error?.message || error) }), { status: 500, headers: corsHeaders })
   }

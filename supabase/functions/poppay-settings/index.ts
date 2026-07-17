@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any no-import-prefix
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { envEnabled, getEnv } from '../_shared/poppay.ts'
+import { getEnv } from '../_shared/poppay.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,18 +30,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(url, serviceKey)
 
     if (action === 'set_split_enabled') {
-      const requested = Boolean(body?.enabled)
-      if (requested && !envEnabled('POPPAY_SPLIT_ENABLED')) {
-        return new Response(JSON.stringify({ ok: false, error: 'rollout_disabled', message: 'O split PopPay ainda esta desligado no servidor.' }), { status: 409, headers: corsHeaders })
-      }
-      const { data, error } = await supabase
-        .from('poppay_connections')
-        .update({ split_enabled: requested, enabled: true, status: 'connected', updated_at: new Date().toISOString() })
-        .eq('user_id', userId)
-        .eq('status', 'connected')
-        .select('id')
-        .maybeSingle()
-      if (error || !data) return new Response(JSON.stringify({ ok: false, error: 'connection_not_found' }), { status: 404, headers: corsHeaders })
+      return new Response(JSON.stringify({ ok: false, error: 'operation_not_allowed' }), { status: 403, headers: corsHeaders })
     } else if (action === 'disconnect') {
       await supabase
         .from('poppay_connections')
@@ -51,13 +40,12 @@ Deno.serve(async (req) => {
 
     const { data } = await supabase
       .from('poppay_connections')
-      .select('status,enabled,split_enabled,fee_bps,mp_user_id,expires_at,connected_at,last_error')
+      .select('status,enabled,mp_user_id,expires_at,connected_at,last_error')
       .eq('user_id', userId)
       .maybeSingle()
     return new Response(JSON.stringify({
       ok: true,
       configured: Boolean(getEnv('POPPAY_CLIENT_ID') && getEnv('POPPAY_CLIENT_SECRET') && getEnv('POPPAY_REDIRECT_URI')),
-      rolloutEnabled: envEnabled('POPPAY_SPLIT_ENABLED'),
       connection: data || null,
     }), { headers: corsHeaders })
   } catch (error: any) {

@@ -335,16 +335,15 @@ Deno.serve(async (req: Request) => {
       let accessToken = await getAccessToken()
       let refreshSelectedAccessToken = refreshAccessToken
 
-      // O PopPay e aditivo e opt-in. Qualquer ausencia de tabela, credencial,
-      // feature flag ou token mantem o checkout legado sem interromper a loja.
+      // O PopPay e selecionado automaticamente no servidor quando a conta esta
+      // conectada. Qualquer falha preserva o checkout legado da loja.
       if (envEnabled('POPPAY_SPLIT_ENABLED')) {
         const popPayResult = await getPopPayConnection(supabase, restaurantUserId)
         const candidate = popPayResult.connection
         if (
           candidate &&
           candidate.status === 'connected' &&
-          candidate.enabled === true &&
-          candidate.split_enabled === true
+          candidate.enabled === true
         ) {
           const popPayToken = await getPopPayAccessToken(supabase, candidate)
           if (popPayToken) {

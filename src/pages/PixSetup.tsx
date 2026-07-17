@@ -23,9 +23,7 @@ export default function PixSetup() {
   const [mpExpiresAt, setMpExpiresAt] = useState<string>('');
   const [popPayLoading, setPopPayLoading] = useState(false);
   const [popPayConfigured, setPopPayConfigured] = useState(false);
-  const [popPayRolloutEnabled, setPopPayRolloutEnabled] = useState(false);
   const [popPayConnected, setPopPayConnected] = useState(false);
-  const [popPaySplitEnabled, setPopPaySplitEnabled] = useState(false);
   const [popPayExpiresAt, setPopPayExpiresAt] = useState('');
 
   useEffect(() => {
@@ -71,9 +69,7 @@ export default function PixSetup() {
     if (!activeUserId) return;
     const { data } = await invokeEdgeFunction('poppay-settings', { action: 'status' }, { timeoutMs: 20000 });
     setPopPayConfigured(Boolean(data?.configured));
-    setPopPayRolloutEnabled(Boolean(data?.rolloutEnabled));
     setPopPayConnected(data?.connection?.status === 'connected' && data?.connection?.enabled !== false);
-    setPopPaySplitEnabled(Boolean(data?.connection?.split_enabled));
     setPopPayExpiresAt(String(data?.connection?.expires_at || ''));
   }, [activeUserId]);
 
@@ -89,20 +85,6 @@ export default function PixSetup() {
       window.location.href = String(data.url);
     } catch (error: unknown) {
       toast({ title: 'PopPay indisponível', description: error instanceof Error ? error.message : String(error), variant: 'destructive' });
-    } finally {
-      setPopPayLoading(false);
-    }
-  };
-
-  const setPopPaySplit = async (nextEnabled: boolean) => {
-    setPopPayLoading(true);
-    try {
-      const { data, status } = await invokeEdgeFunction('poppay-settings', { action: 'set_split_enabled', enabled: nextEnabled });
-      if (status >= 400 || !data?.ok) throw new Error(data?.message || data?.error || 'Não foi possível alterar o PopPay.');
-      setPopPaySplitEnabled(nextEnabled);
-      toast({ title: nextEnabled ? 'PopPay ativado' : 'Split pausado', description: nextEnabled ? 'As novas cobranças PIX usarão o split de 1%.' : 'As cobranças continuam pela integração Mercado Pago existente.' });
-    } catch (error: unknown) {
-      toast({ title: 'Não foi possível alterar', description: error instanceof Error ? error.message : String(error), variant: 'destructive' });
     } finally {
       setPopPayLoading(false);
     }
@@ -252,7 +234,7 @@ export default function PixSetup() {
               <p className="font-medium">{popPayConnected ? 'Conta conectada ao PopPay' : 'Conecte sua conta Mercado Pago'}</p>
               <p className="text-sm text-muted-foreground">
                 {popPayConnected
-                  ? `${popPaySplitEnabled ? 'Split de 1% ativo.' : 'Conectado, aguardando ativação do split.'}${popPayExpiresAt ? ` Token válido até ${new Date(popPayExpiresAt).toLocaleDateString('pt-BR')}.` : ''}`
+                  ? `Conta pronta para receber pagamentos.${popPayExpiresAt ? ` Autorização válida até ${new Date(popPayExpiresAt).toLocaleDateString('pt-BR')}.` : ''}`
                   : popPayConfigured ? 'A autorização é feita diretamente no Mercado Pago.' : 'A aplicação PopPay ainda aguarda as credenciais de produção.'}
               </p>
             </div>
@@ -260,15 +242,8 @@ export default function PixSetup() {
               <Button onClick={connectPopPay} disabled={popPayLoading || !popPayConfigured} className="bg-emerald-700 hover:bg-emerald-800">
                 {popPayConnected ? 'Reconectar PopPay' : 'Conectar PopPay'}
               </Button>
-              {popPayConnected ? (
-                <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
-                  <Switch checked={popPaySplitEnabled} onCheckedChange={setPopPaySplit} disabled={popPayLoading || !popPayRolloutEnabled} aria-label="Ativar split PopPay de 1%" />
-                  <span className="text-sm">Cobrar 1%</span>
-                </div>
-              ) : null}
             </div>
           </div>
-          {popPayConnected && !popPayRolloutEnabled ? <p className="text-xs text-amber-700">Conexão preservada. A ativação financeira será liberada depois dos testes controlados.</p> : null}
         </CardContent>
       </Card>
       <Card>
