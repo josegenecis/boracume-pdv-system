@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey)
     const { data: oauthState, error: stateError } = await supabase
       .from('poppay_oauth_states')
-      .select('id,user_id,created_at,used_at')
+      .select('id,user_id,created_at,used_at,code_verifier')
       .eq('state', String(state))
       .maybeSingle()
     if (stateError || !oauthState || String(oauthState.user_id) !== userId || oauthState.used_at) {
@@ -52,16 +52,19 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: 'state_expired' }), { status: 400, headers: corsHeaders })
     }
 
+    const tokenPayload: Record<string, string> = {
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'authorization_code',
+      code: String(code),
+      redirect_uri: redirectUri,
+    }
+    if (oauthState.code_verifier) tokenPayload.code_verifier = String(oauthState.code_verifier)
+
     const tokenResponse = await fetch('https://api.mercadopago.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'authorization_code',
-        code: String(code),
-        redirect_uri: redirectUri,
-      }),
+      body: JSON.stringify(tokenPayload),
     })
     const token: any = await tokenResponse.json().catch(() => ({}))
     if (!tokenResponse.ok || !token?.access_token) {

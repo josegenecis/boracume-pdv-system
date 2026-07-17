@@ -21,6 +21,19 @@ const getAuthUserId = async (req: Request) => {
   return error ? '' : String(data?.user?.id || '')
 }
 
+const base64Url = (bytes: Uint8Array) => {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+const createPkce = async () => {
+  const verifierBytes = crypto.getRandomValues(new Uint8Array(32))
+  const verifier = base64Url(verifierBytes)
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+  return { verifier, challenge: base64Url(new Uint8Array(digest)) }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   try {
@@ -37,13 +50,19 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceKey)
     const state = crypto.randomUUID()
-    const { error } = await supabase.from('poppay_oauth_states').insert({ user_id: userId, state })
+    const { verifier, challenge } = await createPkce()
+    const { error } = await supabase.from('poppay_oauth_states').insert({
+      user_id: userId,
+      state,
+      code_verifier: verifier,
+    })
     if (error) throw error
 
     const url =
       `https://auth.mercadopago.com/authorization?client_id=${encodeURIComponent(clientId)}` +
       `&response_type=code&platform_id=mp&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&state=${encodeURIComponent(state)}`
+      `&state=${encodeURIComponent(state)}&code_challenge=${encodeURIComponent(challenge)}` +
+      `&code_challenge_method=S256`
 
     return new Response(JSON.stringify({ ok: true, url }), { headers: corsHeaders })
   } catch (error: any) {
