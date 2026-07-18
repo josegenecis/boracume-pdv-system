@@ -2,6 +2,19 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getEnv } from '../_shared/poppay.ts'
 
+const POPPAY_TERMS_VERSION = '2026-07-v1'
+const POPPAY_TERMS_SNAPSHOT = {
+  document: '/termos#poppay',
+  privacy: '/privacidade',
+  marketplace_fee_bps: 100,
+  statements: [
+    'Autoriza o PopSystem/PopPay a conectar a conta Mercado Pago e operar pagamentos, consultas e devolucoes solicitadas no sistema.',
+    'A comissao PopPay de 1% e descontada do valor recebido pelo restaurante e nao e adicionada ao valor pago pelo consumidor.',
+    'As tarifas do Mercado Pago continuam aplicaveis conforme o contrato do titular da conta.',
+    'A autorizacao pode ser revogada, observadas as operacoes ja iniciadas e as obrigacoes legais de guarda.',
+  ],
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -48,7 +61,26 @@ Deno.serve(async (req) => {
     const userId = await getAuthUserId(req)
     if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), { status: 401, headers: corsHeaders })
 
+    const body = await req.json().catch(() => ({}))
+    if (body?.acceptedTerms !== true || body?.termsVersion !== POPPAY_TERMS_VERSION) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'terms_acceptance_required',
+        message: 'Leia e aceite os termos atuais do PopPay para continuar.',
+        termsVersion: POPPAY_TERMS_VERSION,
+      }), { status: 412, headers: corsHeaders })
+    }
+
     const supabase = createClient(supabaseUrl, serviceKey)
+    const { error: acceptanceError } = await supabase.from('poppay_terms_acceptances').insert({
+      user_id: userId,
+      terms_version: POPPAY_TERMS_VERSION,
+      source: 'poppay_oauth',
+      user_agent: req.headers.get('user-agent')?.slice(0, 500) || null,
+      terms_snapshot: POPPAY_TERMS_SNAPSHOT,
+    })
+    if (acceptanceError) throw acceptanceError
+
     const state = crypto.randomUUID()
     const { verifier, challenge } = await createPkce()
     const { error } = await supabase.from('poppay_oauth_states').insert({

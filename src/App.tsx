@@ -25,6 +25,7 @@ import Index from '@/pages/Index';
 import Login from '@/pages/Login';
 import ResetPassword from '@/pages/ResetPassword';
 import LandingPage from '@/pages/LandingPage';
+import LegalPage from '@/pages/LegalPage';
 import Dashboard from '@/pages/Dashboard';
 import DashboardSimple from '@/pages/DashboardSimple';
 import Products from '@/pages/Products';
@@ -122,6 +123,9 @@ function AppContent() {
       
       {/* Rotas Públicas/Standalone */}
       <Route path="/landing" element={<LandingPage />} />
+      <Route path="/termos" element={<LegalPage />} />
+      <Route path="/privacidade" element={<LegalPage />} />
+      <Route path="/lgpd" element={<LegalPage />} />
       
       {/* KDS e TV Standalone (Sem Menu Lateral) */}
       <Route path="/kds-view" element={

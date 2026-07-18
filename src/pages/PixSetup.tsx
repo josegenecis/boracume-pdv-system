@@ -3,11 +3,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
-import { ShieldCheck, WalletCards } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ExternalLink, LockKeyhole, QrCode, ShieldCheck, Smartphone, Store, WalletCards } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+const POPPAY_TERMS_VERSION = '2026-07-v1';
+const POPPAY_FEATURES: ReadonlyArray<{ icon: LucideIcon; title: string; description: string }> = [
+  { icon: QrCode, title: 'QR Code imediato', description: 'Cobrança criada no checkout' },
+  { icon: CheckCircle2, title: 'Baixa automática', description: 'Pedido atualizado ao pagar' },
+  { icon: LockKeyhole, title: 'Conexão segura', description: 'Autorização oficial Mercado Pago' },
+];
 
 export default function PixSetup() {
   const { user } = useAuth();
@@ -23,6 +33,8 @@ export default function PixSetup() {
   const [popPayConfigured, setPopPayConfigured] = useState(false);
   const [popPayConnected, setPopPayConnected] = useState(false);
   const [popPayExpiresAt, setPopPayExpiresAt] = useState('');
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -73,10 +85,19 @@ export default function PixSetup() {
     void loadPopPay();
   }, [loadPopPay]);
 
-  const connectPopPay = async () => {
+  const connectPopPay = () => {
+    setTermsAccepted(false);
+    setTermsOpen(true);
+  };
+
+  const confirmConnectPopPay = async () => {
+    if (!termsAccepted) return;
     setPopPayLoading(true);
     try {
-      const { data, status } = await invokeEdgeFunction('poppay-oauth-start', {}, { timeoutMs: 60000 });
+      const { data, status } = await invokeEdgeFunction('poppay-oauth-start', {
+        acceptedTerms: true,
+        termsVersion: POPPAY_TERMS_VERSION,
+      }, { timeoutMs: 60000 });
       if (status >= 400 || !data?.ok || !data?.url) throw new Error(data?.message || data?.error || 'Não foi possível iniciar o PopPay.');
       window.location.href = String(data.url);
     } catch (error: unknown) {
@@ -161,56 +182,66 @@ export default function PixSetup() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      <Card className="overflow-hidden border-emerald-200 shadow-sm">
-        <CardHeader className="bg-gradient-to-r from-emerald-950 via-emerald-800 to-orange-500 text-white">
-          <CardTitle className="flex items-center gap-2"><WalletCards className="h-5 w-5" />PopPay</CardTitle>
-          <p className="text-sm text-emerald-50">Recebimento PIX integrado, conciliação e devolução pelo próprio PopSystem.</p>
+      <Card className="overflow-hidden border-emerald-200 bg-white shadow-xl shadow-emerald-950/5">
+        <CardHeader className="relative overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-orange-500 px-6 py-8 text-white sm:px-8">
+          <div className="absolute -right-12 -top-16 h-52 w-52 rounded-full border-[28px] border-white/10" aria-hidden="true" />
+          <div className="relative">
+            <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wider"><ShieldCheck className="h-4 w-4" />Pagamentos protegidos</span>
+            <CardTitle className="flex items-center gap-3 text-3xl font-black"><WalletCards className="h-8 w-8" />PopPay</CardTitle>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-emerald-50">PIX integrado ao seu restaurante: gere, confirme, concilie e devolva pagamentos sem sair do PopSystem.</p>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4 pt-5">
-          <div className="flex items-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
-            <div>
-              <p className="font-medium text-emerald-950">Pagamento integrado</p>
-              <p className="text-sm text-emerald-800">O PopPay gera o QR Code, confirma o pagamento e atualiza o pedido automaticamente.</p>
-            </div>
+        <CardContent className="space-y-6 p-5 sm:p-8">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {POPPAY_FEATURES.map(({ icon: FeatureIcon, title, description }) => (
+              <div key={title} className="rounded-2xl border border-emerald-100 bg-gradient-to-b from-emerald-50 to-white p-4">
+                <FeatureIcon className="h-5 w-5 text-orange-500" aria-hidden="true" />
+                <p className="mt-3 font-bold text-emerald-950">{title}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+              </div>
+            ))}
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-medium">{popPayConnected ? 'Conta conectada ao PopPay' : 'Conecte sua conta Mercado Pago'}</p>
-              <p className="text-sm text-muted-foreground">
-                {popPayConnected
-                  ? `Conta pronta para receber pagamentos.${popPayExpiresAt ? ` Autorização válida até ${new Date(popPayExpiresAt).toLocaleDateString('pt-BR')}.` : ''}`
-                  : popPayConfigured ? 'A autorização é feita diretamente no Mercado Pago.' : 'A aplicação PopPay ainda aguarda as credenciais de produção.'}
-              </p>
+          <div className="flex flex-col gap-4 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${popPayConnected ? 'bg-emerald-500 shadow-[0_0_0_5px_rgba(16,185,129,0.12)]' : 'bg-slate-300'}`} aria-hidden="true" />
+              <div>
+                <p className="font-bold text-emerald-950">{popPayConnected ? 'PopPay conectado e pronto' : 'Conecte sua conta Mercado Pago'}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {popPayConnected
+                    ? `Recebimentos disponíveis.${popPayExpiresAt ? ` Autorização válida até ${new Date(popPayExpiresAt).toLocaleDateString('pt-BR')}.` : ''}`
+                    : popPayConfigured ? 'A conexão segura leva poucos segundos.' : 'A aplicação PopPay ainda aguarda as credenciais de produção.'}
+                </p>
+              </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button onClick={connectPopPay} disabled={popPayLoading || !popPayConfigured} className="bg-emerald-700 hover:bg-emerald-800">
-                {popPayConnected ? 'Reconectar PopPay' : 'Conectar PopPay'}
-              </Button>
-            </div>
+            <Button onClick={connectPopPay} disabled={popPayLoading || !popPayConfigured} className="bg-emerald-700 shadow-md hover:bg-emerald-800">
+              {popPayConnected ? 'Reconectar' : 'Conectar PopPay'}<ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
           </div>
-          <div className="border-t border-emerald-100 pt-5">
-            <p className="mb-4 text-sm text-muted-foreground">Escolha onde o pagamento PIX online do PopPay estará disponível.</p>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 sm:p-6">
+            <div className="mb-5"><h2 className="text-lg font-bold text-emerald-950">Onde deseja receber com PopPay?</h2><p className="mt-1 text-sm text-muted-foreground">Ative os canais usados pelo restaurante.</p></div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div className="flex-1">
-                  <Label>Ativar PIX online (PopPay)</Label>
+                <div className="rounded-xl border bg-white p-4">
+                  <Store className="mb-3 h-5 w-5 text-orange-500" />
+                  <Label htmlFor="poppay-online">Ativar PIX online (PopPay)</Label>
                   <div className="mt-2 flex items-center gap-2">
-                    <Switch checked={enabled} onCheckedChange={setEnabled} disabled={!popPayConnected} />
+                    <Switch id="poppay-online" checked={enabled} onCheckedChange={setEnabled} disabled={!popPayConnected} />
                     <span className="text-sm text-muted-foreground">{enabled ? 'Ativo' : 'Inativo'}</span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">Exibe o pagamento imediato no Cardápio Digital.</p>
                 </div>
-                <div className="flex-1">
-                  <Label>Ativar PopPay no PDV</Label>
+                <div className="rounded-xl border bg-white p-4">
+                  <WalletCards className="mb-3 h-5 w-5 text-orange-500" />
+                  <Label htmlFor="poppay-pdv">Ativar PopPay no PDV</Label>
                   <div className="mt-2 flex items-center gap-2">
-                    <Switch checked={mpPdvEnabled} onCheckedChange={setMpPdvEnabled} disabled={!popPayConnected || !enabled} />
+                    <Switch id="poppay-pdv" checked={mpPdvEnabled} onCheckedChange={setMpPdvEnabled} disabled={!popPayConnected || !enabled} />
                     <span className="text-sm text-muted-foreground">{mpPdvEnabled ? 'Ativo' : 'Inativo'}</span>
                   </div>
                 </div>
-                <div className="flex-1">
-                  <Label>Gerar QR Code PopPay no App Garçom</Label>
+                <div className="rounded-xl border bg-white p-4">
+                  <Smartphone className="mb-3 h-5 w-5 text-orange-500" />
+                  <Label htmlFor="poppay-waiter">Gerar QR Code PopPay no App Garçom</Label>
                   <div className="mt-2 flex items-center gap-2">
-                    <Switch checked={mpWaiterEnabled} onCheckedChange={setMpWaiterEnabled} disabled={!popPayConnected || !enabled} />
+                    <Switch id="poppay-waiter" checked={mpWaiterEnabled} onCheckedChange={setMpWaiterEnabled} disabled={!popPayConnected || !enabled} />
                     <span className="text-sm text-muted-foreground">{mpWaiterEnabled ? 'Ativo' : 'Inativo'}</span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -225,12 +256,48 @@ export default function PixSetup() {
               ) : null}
           </div>
           <div className="flex gap-4 border-t border-emerald-100 pt-4">
-            <Button onClick={save} disabled={loading}>
+            <Button onClick={save} disabled={loading} className="bg-orange-500 text-white hover:bg-orange-600">
               {loading ? 'Processando...' : 'Salvar Configurações'}
             </Button>
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={termsOpen} onOpenChange={(open) => { setTermsOpen(open); if (!open) setTermsAccepted(false); }}>
+        <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto border-0 p-0">
+          <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-orange-500 p-6 text-white sm:p-8">
+            <DialogHeader>
+              <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15"><ShieldCheck className="h-6 w-6" /></span>
+              <DialogTitle className="text-2xl font-black">Antes de conectar o PopPay</DialogTitle>
+              <DialogDescription className="text-emerald-50">Confira as condições e autorize a integração de forma consciente.</DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="space-y-5 p-6 sm:px-8">
+            <div className="space-y-3 text-sm leading-6 text-slate-600">
+              <p>Ao continuar, você autoriza o PopSystem/PopPay a conectar sua conta Mercado Pago para criar, consultar, conciliar e solicitar devoluções de pagamentos iniciados no sistema.</p>
+              <ul className="space-y-2 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-emerald-950">
+                <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />O restaurante continua sendo o recebedor das vendas.</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />A comissão PopPay de 1% é descontada do recebível do restaurante, não cobrada a mais do consumidor.</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />As tarifas do Mercado Pago continuam valendo conforme o contrato da conta.</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />A autorização pode ser revogada, respeitando operações e registros obrigatórios.</li>
+              </ul>
+            </div>
+            <div className="flex gap-4 rounded-2xl border border-slate-200 p-4">
+              <Checkbox id="poppay-terms" checked={termsAccepted} onCheckedChange={(checked) => setTermsAccepted(checked === true)} className="mt-0.5" />
+              <Label htmlFor="poppay-terms" className="cursor-pointer text-sm font-normal leading-6 text-slate-700">
+                Li e concordo com os <a href="/termos#poppay" target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 underline">Termos de Uso do PopPay <ExternalLink className="inline h-3 w-3" /></a> e com a <a href="/privacidade" target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 underline">Política de Privacidade</a>.
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">O aceite da versão {POPPAY_TERMS_VERSION} será registrado com seu usuário, data e hora.</p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTermsOpen(false)}>Cancelar</Button>
+              <Button onClick={confirmConnectPopPay} disabled={!termsAccepted || popPayLoading} className="bg-emerald-700 hover:bg-emerald-800">
+                {popPayLoading ? 'Preparando conexão...' : 'Aceitar e conectar'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
