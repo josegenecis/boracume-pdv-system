@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, FileCheck2, LockKeyhole, Scale, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const updatedAt = '17 de julho de 2026';
+const updatedAt = '18 de julho de 2026';
 
 const pages = {
   '/privacidade': {
@@ -34,7 +34,7 @@ const pages = {
       ['Uso da plataforma', 'O cliente deve manter seus dados corretos, proteger seus acessos e utilizar o sistema de acordo com a legislação. O restaurante é responsável por sua operação comercial, fiscal, produtos, preços e atendimento ao consumidor.'],
       ['Serviços de terceiros', 'Recursos como pagamentos dependem de serviços de terceiros e dos respectivos contratos, tarifas, análises e disponibilidade. O PopSystem não substitui o Mercado Pago nem instituições financeiras.'],
       ['Disponibilidade e suporte', 'O PopSystem busca manter os serviços disponíveis e seguros, mas manutenções, falhas de internet e indisponibilidades de terceiros podem afetar temporariamente algumas funções.'],
-      ['PopPay — versão 2026-07-v1', 'Ao conectar o PopPay, o titular autoriza o PopSystem a iniciar a conexão OAuth com sua conta Mercado Pago e a criar, consultar, conciliar e solicitar devoluções de pagamentos comandados pelo sistema. A comissão PopPay é de 1% do valor da transação, descontada do recebível do restaurante — ela não é acrescentada ao valor pago pelo consumidor. As tarifas do Mercado Pago continuam aplicáveis conforme o contrato do titular. A autorização pode ser revogada, sem apagar registros que precisem ser mantidos por obrigação legal ou para comprovar operações já realizadas.'],
+      ['PopPay — versão 2026-07-v2', 'Ao conectar o PopPay, o titular autoriza o PopSystem a iniciar a conexão OAuth com sua conta Mercado Pago e a criar, consultar, conciliar e solicitar devoluções de pagamentos comandados pelo sistema. Na condição comercial vigente, os recebimentos via PIX possuem tarifa integrada de referência de 1,99% por transação para processamento, conciliação e repasse imediato. Essa tarifa é composta pela tarifa operacional PopPay de 1% e pela tarifa de processamento do Mercado Pago atualmente aplicável à conta conectada. A parcela cobrada pelo Mercado Pago pode variar conforme o contrato, promoções e condições da conta; eventual variação altera a tarifa total efetiva. Os descontos incidem sobre o recebível do restaurante e não são acrescentados ao valor pago pelo consumidor. A autorização pode ser revogada, sem apagar registros que precisem ser mantidos por obrigação legal ou para comprovar operações já realizadas.'],
       ['Aceite eletrônico', 'O aceite é vinculado ao usuário autenticado, à versão apresentada e à data e hora do consentimento. Uma nova versão relevante poderá exigir novo aceite.'],
     ],
   },

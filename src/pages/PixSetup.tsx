@@ -12,7 +12,7 @@ import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { ArrowRight, CheckCircle2, ExternalLink, LockKeyhole, QrCode, ShieldCheck, Smartphone, Store, WalletCards } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-const POPPAY_TERMS_VERSION = '2026-07-v1';
+const POPPAY_TERMS_VERSION = '2026-07-v2';
 const POPPAY_FEATURES: ReadonlyArray<{ icon: LucideIcon; title: string; description: string }> = [
   { icon: QrCode, title: 'QR Code imediato', description: 'Cobrança criada no checkout' },
   { icon: CheckCircle2, title: 'Baixa automática', description: 'Pedido atualizado ao pagar' },
@@ -277,8 +277,8 @@ export default function PixSetup() {
               <p>Ao continuar, você autoriza o PopSystem/PopPay a conectar sua conta Mercado Pago para criar, consultar, conciliar e solicitar devoluções de pagamentos iniciados no sistema.</p>
               <ul className="space-y-2 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-emerald-950">
                 <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />O restaurante continua sendo o recebedor das vendas.</li>
-                <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />A comissão PopPay de 1% é descontada do recebível do restaurante, não cobrada a mais do consumidor.</li>
-                <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />As tarifas do Mercado Pago continuam valendo conforme o contrato da conta.</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />Os recebimentos via PIX têm tarifa integrada atual de 1,99% por transação para processamento, conciliação e repasse imediato.</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />A tarifa é descontada do recebível do restaurante e não aumenta o valor pago pelo consumidor.</li>
                 <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />A autorização pode ser revogada, respeitando operações e registros obrigatórios.</li>
               </ul>
             </div>

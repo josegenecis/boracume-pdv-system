@@ -2,15 +2,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getEnv } from '../_shared/poppay.ts'
 
-const POPPAY_TERMS_VERSION = '2026-07-v1'
+const POPPAY_TERMS_VERSION = '2026-07-v2'
 const POPPAY_TERMS_SNAPSHOT = {
   document: '/termos#poppay',
   privacy: '/privacidade',
+  integrated_fee_reference_bps: 199,
   marketplace_fee_bps: 100,
   statements: [
     'Autoriza o PopSystem/PopPay a conectar a conta Mercado Pago e operar pagamentos, consultas e devolucoes solicitadas no sistema.',
-    'A comissao PopPay de 1% e descontada do valor recebido pelo restaurante e nao e adicionada ao valor pago pelo consumidor.',
-    'As tarifas do Mercado Pago continuam aplicaveis conforme o contrato do titular da conta.',
+    'Na condicao comercial vigente, a tarifa integrada de referencia e de 1,99% por transacao PIX para processamento, conciliacao e repasse imediato.',
+    'A tarifa integrada e composta pela tarifa operacional PopPay de 1% e pela tarifa de processamento do Mercado Pago aplicavel a conta conectada, que pode variar conforme o contrato do titular.',
+    'Os descontos incidem sobre o recebivel do restaurante e nao sao adicionados ao valor pago pelo consumidor.',
     'A autorizacao pode ser revogada, observadas as operacoes ja iniciadas e as obrigacoes legais de guarda.',
   ],
 }
