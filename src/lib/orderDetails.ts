@@ -388,10 +388,14 @@ export const buildDetailedOrderWhatsappMessage = (
         }
 
         group.items.forEach((detail) => {
+          const detailPrice = toOrderNumber(detail.price);
+          const detailPriceLabel = detailPrice > 0
+            ? quantity > 1
+              ? ` (+${formatCurrencyBRL(detailPrice)} cada; total +${formatCurrencyBRL(detailPrice * quantity)})`
+              : ` (+${formatCurrencyBRL(detailPrice)})`
+            : '';
           lines.push(
-            detail.price && detail.price > 0
-              ? `   - ${detail.text} (+${formatCurrencyBRL(detail.price)})`
-              : `   - ${detail.text}`
+            `   - ${detail.text}${detailPriceLabel}`
           );
         });
       });

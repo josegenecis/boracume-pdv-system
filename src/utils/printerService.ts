@@ -897,7 +897,11 @@ function buildOrderHtml(order: any, config: any, store?: any) {
                   ${group.items.map((detail) => `
                     <div class="notes">
                       ${group.label ? '&nbsp;&nbsp;&bull; ' : ''}${escapeHtml(detail.text)}
-                      ${detail.price && detail.price > 0 ? ` (${escapeHtml(formatCurrencyValue(detail.price))})` : ''}
+                      ${detail.price && detail.price > 0
+                        ? Number(item.quantity || 1) > 1
+                          ? ` (${escapeHtml(formatCurrencyValue(detail.price))} cada; total ${escapeHtml(formatCurrencyValue(detail.price * Number(item.quantity || 1)))})`
+                          : ` (${escapeHtml(formatCurrencyValue(detail.price))})`
+                        : ''}
                     </div>
                   `).join('')}
                 `).join('')}`;
@@ -1725,7 +1729,11 @@ export const PrinterService = {
         }
         for (const detail of group.items) {
           wrapTextLine(
-            `   ${group.label ? '- ' : ''}${detail.text}${detail.price && detail.price > 0 ? ` (${formatCurrencyValue(detail.price)})` : ''}`,
+            `   ${group.label ? '- ' : ''}${detail.text}${detail.price && detail.price > 0
+              ? quantity > 1
+                ? ` (${formatCurrencyValue(detail.price)} cada; total ${formatCurrencyValue(detail.price * quantity)})`
+                : ` (${formatCurrencyValue(detail.price)})`
+              : ''}`,
             lineWidth
           ).forEach((lineValue) => {
             commands += text(lineValue);

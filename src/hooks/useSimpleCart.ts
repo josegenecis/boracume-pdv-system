@@ -23,19 +23,43 @@ interface CartItem {
   uniqueId: string; // Para distinguir mesmo produto com variações diferentes
 }
 
+type ConfigurableCartItem = Pick<CartItem, 'variations' | 'options' | 'notes'>;
+
+export const isConfiguredCartItem = (item: Partial<ConfigurableCartItem>) =>
+  (Array.isArray(item.variations) && item.variations.length > 0) ||
+  (Array.isArray(item.options) && item.options.length > 0) ||
+  String(item.notes || '').trim().length > 0;
+
 const MENU_CART_STORAGE_PREFIX = 'boracume_menu_cart';
 const LEGACY_MENU_CART_STORAGE_KEY = 'boracume_menu_cart';
 
 const readCartFromStorage = (storageKey: string) => {
   try {
     const scoped = localStorage.getItem(storageKey);
-    if (scoped) return JSON.parse(scoped);
+    if (scoped) return normalizeStoredCart(JSON.parse(scoped));
     if (storageKey !== LEGACY_MENU_CART_STORAGE_KEY) {
       const legacy = localStorage.getItem(LEGACY_MENU_CART_STORAGE_KEY);
-      if (legacy) return JSON.parse(legacy);
+      if (legacy) return normalizeStoredCart(JSON.parse(legacy));
     }
   } catch {}
   return [];
+};
+
+const normalizeStoredCart = (raw: unknown): CartItem[] => {
+  if (!Array.isArray(raw)) return [];
+
+  return raw.flatMap((item: CartItem) => {
+    const quantity = Math.max(1, Math.floor(Number(item?.quantity) || 1));
+    if (!isConfiguredCartItem(item) || quantity === 1) return [{ ...item, quantity }];
+
+    const unitTotal = (Number(item.totalPrice) || 0) / quantity;
+    return Array.from({ length: quantity }, (_, index) => ({
+      ...item,
+      quantity: 1,
+      totalPrice: unitTotal,
+      uniqueId: `${item.uniqueId}|unit-${index + 1}`,
+    }));
+  });
 };
 
 export const getMenuCartStorageKey = (scope?: string) => {
@@ -133,8 +157,6 @@ export const useSimpleCart = (scope?: string) => {
     variationPrice: number = 0,
     options: CartItem['options'] = []
   ) => {
-    pendingPerfRef.current = { start: perfStart('menu.cart.add', { productId: product.id, qty: quantity }) };
-
     // Garantir tipos numéricos para evitar NaN
     const basePrice = Number(product.price) || 0;
     const extraPrice = Number(variationPrice) || 0;
@@ -144,22 +166,31 @@ export const useSimpleCart = (scope?: string) => {
     const uniqueVariations = Array.from(new Set(
       (variations || []).filter(v => typeof v === 'string' && v.trim() !== '')
     ));
+    const normalizedOptions = Array.isArray(options) ? options : [];
+    const configured = isConfiguredCartItem({ variations: uniqueVariations, options: normalizedOptions, notes });
+    // Uma configuracao de adicionais pertence a uma unidade. Novas unidades
+    // precisam passar novamente pelo modal para evitar multiplicacao silenciosa.
+    const safeQuantity = configured ? 1 : Math.max(1, Number(quantity) || 1);
+    pendingPerfRef.current = { start: perfStart('menu.cart.add', { productId: product.id, qty: safeQuantity }) };
 
     // Criar ID único baseado no produto + variações + notas
     // Usamos pipe | como separador para evitar conflito com vírgulas nos nomes
-    const uniqueId = `${product.id}|${uniqueVariations.sort().join('|')}|${notes.trim()}`;
+    const configurationKey = `${product.id}|${uniqueVariations.sort().join('|')}|${notes.trim()}`;
+    const uniqueId = configured
+      ? `${configurationKey}|unit-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`}`
+      : configurationKey;
     
     // Calcular preço total
-    const totalPrice = (basePrice + extraPrice) * quantity;
+    const totalPrice = (basePrice + extraPrice) * safeQuantity;
     
     setCart(prev => {
       // Verificar se item já existe
-      const existingIndex = prev.findIndex(item => item.uniqueId === uniqueId);
+      const existingIndex = configured ? -1 : prev.findIndex(item => item.uniqueId === uniqueId);
 
       if (existingIndex >= 0) {
         // Atualizar quantidade do item existente
         const updated = [...prev];
-        updated[existingIndex].quantity += quantity;
+        updated[existingIndex].quantity += safeQuantity;
         updated[existingIndex].totalPrice = 
           (basePrice + extraPrice) * updated[existingIndex].quantity;
         
@@ -168,9 +199,9 @@ export const useSimpleCart = (scope?: string) => {
         // Adicionar novo item
         const newItem: CartItem = {
           product,
-          quantity,
+          quantity: safeQuantity,
           variations: uniqueVariations,
-          options: Array.isArray(options) ? options : [],
+          options: normalizedOptions,
           notes: notes.trim(),
           totalPrice,
           uniqueId
@@ -189,6 +220,9 @@ export const useSimpleCart = (scope?: string) => {
 
     setCart(prev => prev.map(item => {
       if (item.uniqueId === uniqueId) {
+        if (newQuantity > item.quantity && isConfiguredCartItem(item)) {
+          return item;
+        }
         // Recalcular com base no preço unitário original implícito
         const unitPrice = item.totalPrice / item.quantity;
         return {

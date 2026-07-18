@@ -203,7 +203,8 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
   const handleAddToCart = () => {
     if (!product) return;
-    if (typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) && quantity > Math.max(1, Math.floor(maxQuantity))) {
+    const configuredQuantity = variations.length > 0 ? 1 : quantity;
+    if (typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) && configuredQuantity > Math.max(1, Math.floor(maxQuantity))) {
       toast({
         title: 'Estoque insuficiente',
         description: `Quantidade maxima disponivel: ${Math.max(1, Math.floor(maxQuantity))}.`,
@@ -217,7 +218,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
     const variationDetails = getSelectedVariationDetails(selectedVariations, variations, { category: categoryConfig });
 
     setSubmitting(true);
-    onAddToCart(product, quantity, variationTexts, notes, variationPrice, variationDetails);
+    onAddToCart(product, configuredQuantity, variationTexts, notes, variationPrice, variationDetails);
 
     setQuantity(1);
     setNotes('');
@@ -230,7 +231,8 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   const getTotalPrice = () => {
     if (!product) return 0;
     const variationPrice = calculateVariationPrice(selectedVariations, variations, { category: categoryConfig });
-    return (product.price + variationPrice) * quantity;
+    const configuredQuantity = variations.length > 0 ? 1 : quantity;
+    return (product.price + variationPrice) * configuredQuantity;
   };
 
   if (!product) return null;
@@ -365,6 +367,11 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
           <div className="border-t border-gray-100 bg-white p-3 sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              {variations.length > 0 ? (
+                <div className="max-w-[9rem] shrink-0 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-center text-xs font-semibold leading-4 text-orange-900">
+                  Configure 1 unidade por vez
+                </div>
+              ) : (
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <Button
                   type="button"
@@ -387,6 +394,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
                   +
                 </Button>
               </div>
+              )}
 
               <Button
                 onClick={handleAddToCart}

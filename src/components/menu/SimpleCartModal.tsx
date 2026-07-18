@@ -16,6 +16,7 @@ import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import { getOrderItemDetailGroups } from '@/lib/orderDetails';
 import { useToast } from '@/hooks/use-toast';
+import { isConfiguredCartItem } from '@/hooks/useSimpleCart';
 
 interface CartItem {
   product: {
@@ -1156,6 +1157,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 <div className="space-y-4">
                   {cart.map((item) => {
                     const detailGroups = getOrderItemDetailGroups(item);
+                    const configuredItem = isConfiguredCartItem(item);
 
                     return (
                     <Card key={item.uniqueId} className="overflow-hidden p-4 border border-gray-100 shadow-sm rounded-xl">
@@ -1172,7 +1174,11 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                                   {group.items.map((detail) => (
                                     <p key={detail.key} className="text-sm text-gray-600">
                                       {detail.text}
-                                      {detail.price && detail.price > 0 ? ` (+${formatBRL(detail.price)})` : ''}
+                                      {detail.price && detail.price > 0
+                                        ? item.quantity > 1
+                                          ? ` (+${formatBRL(detail.price)} cada · total +${formatBRL(detail.price * item.quantity)})`
+                                          : ` (+${formatBRL(detail.price)})`
+                                        : ''}
                                     </p>
                                   ))}
                                 </div>
@@ -1182,6 +1188,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                           {item.notes && (
                             <p className="text-sm text-gray-600 italic bg-gray-50 p-2 rounded-lg mt-2">Obs: {item.notes}</p>
                           )}
+                          {configuredItem ? (
+                            <p className="mt-2 text-xs text-orange-700">Esta configuração pertence somente a esta unidade.</p>
+                          ) : null}
                           <p className="text-sm font-bold mt-2" style={{ color: menuPriceColor }}>{formatBRL(item.totalPrice)}</p>
                         </div>
 
@@ -1190,6 +1199,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                             variant="outline"
                             size="sm"
                             onClick={() => onUpdateQuantity(item.uniqueId, item.quantity - 1)}
+                            aria-label={`Diminuir quantidade de ${item.product.name}`}
                             className="rounded-lg border-gray-200"
                           >
                             <Minus className="h-3 w-3" />
@@ -1199,6 +1209,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                             variant="outline"
                             size="sm"
                             onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)}
+                            disabled={configuredItem}
+                            title={configuredItem ? 'Adicione outra unidade pelo cardápio para personalizá-la.' : 'Aumentar quantidade'}
+                            aria-label={configuredItem ? `Adicione outra unidade de ${item.product.name} pelo cardápio e personalize novamente` : `Aumentar quantidade de ${item.product.name}`}
                             className="rounded-lg border-gray-200"
                           >
                             <Plus className="h-3 w-3" />
@@ -1207,6 +1220,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                             variant="outline"
                             size="sm"
                             onClick={() => onRemoveItem(item.uniqueId)}
+                            aria-label={`Remover ${item.product.name} do carrinho`}
                             className="rounded-lg border-red-200 hover:bg-red-50"
                           >
                             <Trash2 className="h-3 w-3 text-red-600" />

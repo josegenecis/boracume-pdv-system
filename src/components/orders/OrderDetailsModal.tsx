@@ -506,7 +506,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                                     <div key={detail.key} className="text-gray-600 flex justify-between gap-3">
                                       <span>{detail.text}</span>
                                       {detail.price && detail.price > 0 ? (
-                                        <span className="whitespace-nowrap">+{formatCurrency(detail.price)}</span>
+                                        <span className="whitespace-nowrap">
+                                          {itemQuantity(item) > 1
+                                            ? `+${formatCurrency(detail.price)} cada · total +${formatCurrency(detail.price * itemQuantity(item))}`
+                                            : `+${formatCurrency(detail.price)}`}
+                                        </span>
                                       ) : null}
                                     </div>
                                   ))}

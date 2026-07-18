@@ -11,6 +11,7 @@ import TotemPixCheckoutModal from '@/components/totem/TotemPixCheckoutModal';
 import { PrinterService } from '@/utils/printerService';
 import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 import { useToast } from '@/hooks/use-toast';
+import { isConfiguredCartItem } from '@/hooks/useSimpleCart';
 
 export interface TotemCartItem {
   product: { id: string; name: string; price: number; image_url?: string };
@@ -288,7 +289,9 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
           <div className="space-y-3">
             <div className="text-base font-black">Itens do pedido</div>
             <div className="space-y-2">
-              {cart.map((item) => (
+              {cart.map((item) => {
+                const configuredItem = isConfiguredCartItem(item);
+                return (
                 <Card key={item.uniqueId} className="rounded-lg p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -298,6 +301,9 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                       ) : null}
                       {item.notes ? (
                         <div className="text-xs text-muted-foreground mt-1 line-clamp-2">Obs: {item.notes}</div>
+                      ) : null}
+                      {configuredItem ? (
+                        <div className="mt-2 text-xs font-semibold text-orange-700">Cada unidade deve ser personalizada separadamente.</div>
                       ) : null}
                       <div className="text-sm font-bold text-boracume-orange mt-2">R$ {Number(item.totalPrice || 0).toFixed(2)}</div>
                     </div>
@@ -311,14 +317,15 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                           <Minus className="h-4 w-4" />
                         </Button>
                         <div className="w-8 text-center text-lg font-black">{item.quantity}</div>
-                        <Button variant="outline" size="icon" className="h-11 w-11 rounded-lg" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)} disabled={isSubmitting} aria-label={`Aumentar quantidade de ${item.product.name}`}>
+                        <Button variant="outline" size="icon" className="h-11 w-11 rounded-lg" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)} disabled={isSubmitting || configuredItem} aria-label={configuredItem ? `Adicione outra unidade de ${item.product.name} e personalize novamente` : `Aumentar quantidade de ${item.product.name}`} title={configuredItem ? 'Adicione outra unidade e personalize os complementos novamente.' : 'Aumentar quantidade'}>
                           <Plus className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
                   </div>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           </div>
 
