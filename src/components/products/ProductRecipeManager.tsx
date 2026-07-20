@@ -12,6 +12,7 @@ interface RecipeItem {
   id: string;
   ingredient_id: string;
   quantity: number;
+  waste_percentage?: number;
   ingredient?: {
     name: string;
     unit: string;
@@ -34,6 +35,7 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
   // Novo item form
   const [selectedIngredient, setSelectedIngredient] = useState('');
   const [quantity, setQuantity] = useState('');
+  const [wastePercentage, setWastePercentage] = useState('0');
 
   useEffect(() => {
     if (user && productId && isOpen) {
@@ -52,12 +54,13 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
   };
 
   const loadRecipe = async () => {
-    const { data } = await supabase
-      .from('product_recipes')
+    const { data } = await (supabase
+      .from('product_recipes') as any)
       .select(`
         id, 
         ingredient_id, 
         quantity,
+        waste_percentage,
         ingredient:ingredients(name, unit, cost_price)
       `)
       .eq('product_id', productId);
@@ -66,24 +69,36 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
   };
 
   const handleAddItem = async () => {
-    if (!selectedIngredient || !quantity || isNaN(Number(quantity))) {
-      toast({ title: 'Erro', description: 'Selecione um insumo e informe a quantidade válida.', variant: 'destructive' });
+    const parsedQuantity = Number(quantity);
+    const parsedWaste = Number(wastePercentage);
+    if (!selectedIngredient || !Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
+      toast({ title: 'Quantidade inválida', description: 'Selecione um insumo e informe uma quantidade maior que zero.', variant: 'destructive' });
+      return;
+    }
+    if (!Number.isFinite(parsedWaste) || parsedWaste < 0 || parsedWaste > 100) {
+      toast({ title: 'Perda inválida', description: 'A perda deve ficar entre 0% e 100%.', variant: 'destructive' });
+      return;
+    }
+    if (recipeItems.some(item => item.ingredient_id === selectedIngredient)) {
+      toast({ title: 'Insumo já cadastrado', description: 'Remova ou ajuste o item existente para evitar custo duplicado.', variant: 'destructive' });
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('product_recipes')
+      const { error } = await (supabase
+        .from('product_recipes') as any)
         .insert({
           product_id: productId,
           ingredient_id: selectedIngredient,
-          quantity: Number(quantity)
+          quantity: parsedQuantity,
+          waste_percentage: parsedWaste,
         });
 
       if (error) throw error;
       
       setSelectedIngredient('');
       setQuantity('');
+      setWastePercentage('0');
       loadRecipe();
       toast({ title: 'Adicionado', description: 'Insumo adicionado à ficha técnica.' });
     } catch (error) {
@@ -93,7 +108,7 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
 
   const handleRemoveItem = async (id: string) => {
     try {
-      const { error } = await supabase.from('product_recipes').delete().eq('id', id);
+      const { error } = await (supabase.from('product_recipes') as any).delete().eq('id', id);
       if (error) throw error;
       loadRecipe();
     } catch (error) {
@@ -103,7 +118,8 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
 
   const totalCost = recipeItems.reduce((acc, item) => {
     const cost = item.ingredient?.cost_price || 0;
-    return acc + (cost * item.quantity);
+    const wasteMultiplier = 1 + Number(item.waste_percentage || 0) / 100;
+    return acc + (cost * item.quantity * wasteMultiplier);
   }, 0);
 
   return (
@@ -122,7 +138,7 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
 
       {isOpen && (
         <div className="pt-4 mt-2 border-t border-gray-100 space-y-4">
-          <div className="flex gap-2 items-end">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto] sm:items-end">
             <div className="flex-1 space-y-1">
               <Label className="text-xs">Insumo</Label>
               <Select value={selectedIngredient} onValueChange={setSelectedIngredient}>
@@ -138,16 +154,29 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
                 </SelectContent>
               </Select>
             </div>
-            <div className="w-24 space-y-1">
+            <div className="space-y-1">
               <Label className="text-xs">Qtd.</Label>
               <Input 
                 type="number" 
                 step="0.001" 
-                min="0"
+                min="0.001"
                 value={quantity} 
                 onChange={e => setQuantity(e.target.value)} 
                 className="bg-white"
                 placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Perda %</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={wastePercentage}
+                onChange={event => setWastePercentage(event.target.value)}
+                className="bg-white"
+                aria-label="Percentual de perda do insumo"
               />
             </div>
             <Button type="button" onClick={handleAddItem} className="bg-boracume-green hover:bg-boracume-green/90">
@@ -168,12 +197,13 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
                   <div className="flex-1">
                     <div className="text-sm font-medium">{item.ingredient?.name}</div>
                     <div className="text-xs text-gray-500">
-                      {item.quantity} {item.ingredient?.unit} x R$ {item.ingredient?.cost_price}
+                      {item.quantity} {item.ingredient?.unit} × R$ {Number(item.ingredient?.cost_price || 0).toFixed(4)}
+                      {Number(item.waste_percentage || 0) > 0 ? ` + ${item.waste_percentage}% de perda` : ''}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="font-semibold text-sm">
-                      R$ {((item.ingredient?.cost_price || 0) * item.quantity).toFixed(2)}
+                      R$ {((item.ingredient?.cost_price || 0) * item.quantity * (1 + Number(item.waste_percentage || 0) / 100)).toFixed(2)}
                     </div>
                     <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleRemoveItem(item.id)}>
                       <Trash2 className="h-4 w-4" />

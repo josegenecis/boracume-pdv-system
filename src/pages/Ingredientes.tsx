@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,6 +21,10 @@ interface Ingredient {
   unit: string;
   price: number;
   cost_price?: number;
+  purchase_unit: string;
+  purchase_conversion: number;
+  yield_percentage: number;
+  last_purchase_cost?: number | null;
   current_stock: number;
   min_stock: number;
   user_id: string;
@@ -71,6 +75,9 @@ export default function Ingredientes() {
   const [formData, setFormData] = useState({
     name: '',
     unit: 'un',
+    purchase_unit: 'un',
+    purchase_conversion: 1,
+    yield_percentage: 100,
     cost_price: 0,
     current_stock: 0,
     min_stock: 0
@@ -117,8 +124,12 @@ export default function Ingredientes() {
 
   const normalizeIngredient = (ingredient: any): Ingredient => ({
     ...ingredient,
-    price: Number(ingredient?.price ?? ingredient?.cost_price ?? 0),
+    price: Number(ingredient?.cost_price ?? ingredient?.price ?? 0),
     cost_price: Number(ingredient?.cost_price ?? ingredient?.price ?? 0),
+    purchase_unit: String(ingredient?.purchase_unit || ingredient?.unit || 'un'),
+    purchase_conversion: Number(ingredient?.purchase_conversion ?? 1),
+    yield_percentage: Number(ingredient?.yield_percentage ?? 100),
+    last_purchase_cost: ingredient?.last_purchase_cost == null ? null : Number(ingredient.last_purchase_cost),
     current_stock: Number(ingredient?.current_stock ?? 0),
     min_stock: Number(ingredient?.min_stock ?? 0),
   });
@@ -135,6 +146,9 @@ export default function Ingredientes() {
     const base = {
       name: formData.name,
       unit: formData.unit,
+      purchase_unit: formData.purchase_unit,
+      purchase_conversion: Number(formData.purchase_conversion || 1),
+      yield_percentage: Number(formData.yield_percentage || 100),
       user_id: user?.id,
     };
 
@@ -239,6 +253,12 @@ export default function Ingredientes() {
     e.preventDefault();
     try {
       if (!user) return;
+      if (formData.purchase_conversion <= 0) {
+        throw new Error('A conversão da compra deve ser maior que zero.');
+      }
+      if (formData.yield_percentage <= 0 || formData.yield_percentage > 100) {
+        throw new Error('O rendimento deve ficar entre 0,01% e 100%.');
+      }
 
       await persistIngredient();
 
@@ -265,6 +285,9 @@ export default function Ingredientes() {
     setFormData({
       name: ingredient.name,
       unit: ingredient.unit,
+      purchase_unit: ingredient.purchase_unit || ingredient.unit,
+      purchase_conversion: ingredient.purchase_conversion || 1,
+      yield_percentage: ingredient.yield_percentage || 100,
       cost_price: ingredient.price,
       current_stock: ingredient.current_stock || 0,
       min_stock: ingredient.min_stock || 0
@@ -326,29 +349,17 @@ export default function Ingredientes() {
           quantity: Math.trunc(quantity),
         });
       } else {
-        const current = ingredients.find((ingredient) => ingredient.id === stockEntryTarget.id);
-        const nextQuantity = Number(current?.current_stock || 0) + quantity;
-
-        const { error: ingredientError } = await (supabase as any)
-          .from('ingredients')
-          .update({
-            current_stock: nextQuantity,
-            cost_price: stockEntryCost > 0 ? Number(stockEntryCost) : current?.cost_price ?? current?.price ?? 0,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', stockEntryTarget.id)
-          .eq('user_id', user.id);
-
-        if (ingredientError) throw ingredientError;
-
-        await (supabase as any).from('stock_movements').insert({
-          user_id: user.id,
-          ingredient_id: stockEntryTarget.id,
-          movement_type: 'in',
-          quantity,
-          unit_cost: stockEntryCost > 0 ? Number(stockEntryCost) : current?.cost_price ?? current?.price ?? 0,
-          reason: 'Entrada manual pelo estoque',
+        if (stockEntryCost <= 0) {
+          throw new Error('Informe o custo por unidade de compra para calcular o custo médio.');
+        }
+        const { error: ingredientError } = await (supabase as any).rpc('record_ingredient_purchase', {
+          p_ingredient_id: stockEntryTarget.id,
+          p_purchase_quantity: quantity,
+          p_purchase_unit_cost: Number(stockEntryCost),
+          p_reason: 'Entrada manual pelo estoque',
+          p_owner_id: user.id,
         });
+        if (ingredientError) throw ingredientError;
       }
 
       toast({
@@ -371,6 +382,9 @@ export default function Ingredientes() {
     setFormData({
       name: '',
       unit: 'un',
+      purchase_unit: 'un',
+      purchase_conversion: 1,
+      yield_percentage: 100,
       cost_price: 0,
       current_stock: 0,
       min_stock: 0
@@ -570,7 +584,7 @@ export default function Ingredientes() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nome</TableHead>
-                        <TableHead>Unidade</TableHead>
+                        <TableHead>Compra → Consumo</TableHead>
                         <TableHead>Estoque Atual</TableHead>
                         <TableHead>Estoque Mínimo</TableHead>
                         <TableHead>Preço de Custo</TableHead>
@@ -584,7 +598,14 @@ export default function Ingredientes() {
                         return (
                           <TableRow key={ingredient.id}>
                             <TableCell className="font-medium">{ingredient.name}</TableCell>
-                            <TableCell>{UNITS.find(u => u.value === ingredient.unit)?.label || ingredient.unit}</TableCell>
+                            <TableCell>
+                              <div className="text-sm font-medium">
+                                1 {ingredient.purchase_unit} = {ingredient.purchase_conversion} {ingredient.unit}
+                              </div>
+                              {ingredient.yield_percentage < 100 ? (
+                                <div className="text-xs text-amber-600">Rendimento: {ingredient.yield_percentage}%</div>
+                              ) : null}
+                            </TableCell>
                             <TableCell>
                               <Badge variant={isLowStock ? "destructive" : "secondary"} className={isLowStock ? "bg-red-500" : "bg-boracume-green text-white"}>
                                 {ingredient.current_stock || 0}
@@ -661,7 +682,7 @@ export default function Ingredientes() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="unit">Unidade de Medida *</Label>
+                <Label htmlFor="unit">Unidade usada na ficha técnica *</Label>
                 <Select 
                   value={formData.unit} 
                   onValueChange={(value) => setFormData(prev => ({ ...prev, unit: value }))}
@@ -678,7 +699,56 @@ export default function Ingredientes() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500">Ex: Compre em KG, mas coloque em Gramas (g) se a receita usar gramas.</p>
+                <p className="text-xs text-gray-500">É a unidade consumida na receita, como g, ml ou un.</p>
+              </div>
+
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+                <p className="mb-3 text-sm font-semibold text-emerald-950">Conversão da compra</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="purchase_unit">Unidade em que compra</Label>
+                    <Select
+                      value={formData.purchase_unit}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, purchase_unit: value }))}
+                    >
+                      <SelectTrigger id="purchase_unit"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {UNITS.map(unit => <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>)}
+                        <SelectItem value="cx">Caixa (cx)</SelectItem>
+                        <SelectItem value="pct">Pacote (pct)</SelectItem>
+                        <SelectItem value="fd">Fardo (fd)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="purchase_conversion">Quanto rende em {formData.unit}</Label>
+                    <Input
+                      id="purchase_conversion"
+                      type="number"
+                      min="0.000001"
+                      step="0.001"
+                      value={formData.purchase_conversion}
+                      onChange={(event) => setFormData(prev => ({ ...prev, purchase_conversion: Number(event.target.value) }))}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2">
+                  <Label htmlFor="yield_percentage">Rendimento aproveitável (%)</Label>
+                  <Input
+                    id="yield_percentage"
+                    type="number"
+                    min="0.01"
+                    max="100"
+                    step="0.01"
+                    value={formData.yield_percentage}
+                    onChange={(event) => setFormData(prev => ({ ...prev, yield_percentage: Number(event.target.value) }))}
+                    required
+                  />
+                  <p className="text-xs text-emerald-800">
+                    Exemplo: 1 kg comprado rende 1.000 g. Se 10% é descartado, informe rendimento de 90%.
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -708,7 +778,7 @@ export default function Ingredientes() {
                 </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="cost_price">Preço de Custo (Por unidade escolhida acima) *</Label>
+                <Label htmlFor="cost_price">Custo médio atual por {formData.unit} *</Label>
                 <CurrencyInput
                   id="cost_price"
                   value={formData.cost_price || 0}
@@ -747,7 +817,9 @@ export default function Ingredientes() {
 
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="stock_entry_quantity">Quantidade que entrou *</Label>
+                <Label htmlFor="stock_entry_quantity">
+                  {stockEntryTarget?.type === 'ingredient' ? 'Quantidade comprada *' : 'Quantidade que entrou *'}
+                </Label>
                 <Input
                   id="stock_entry_quantity"
                   type="number"
@@ -759,19 +831,26 @@ export default function Ingredientes() {
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Produto acabado usa unidade inteira. Insumo usa a unidade cadastrada nele.
+                  {stockEntryTarget?.type === 'ingredient'
+                    ? `Informe em ${ingredients.find(item => item.id === stockEntryTarget.id)?.purchase_unit || 'unidade de compra'}. A conversão para estoque será automática.`
+                    : 'Produto acabado usa unidade inteira.'}
                 </p>
               </div>
 
               {stockEntryTarget?.type === 'ingredient' ? (
                 <div className="grid gap-2">
-                  <Label htmlFor="stock_entry_cost">Custo por unidade</Label>
+                  <Label htmlFor="stock_entry_cost">
+                    Custo por {ingredients.find(item => item.id === stockEntryTarget.id)?.purchase_unit || 'unidade de compra'}
+                  </Label>
                   <CurrencyInput
                     id="stock_entry_cost"
                     value={stockEntryCost}
                     onValueChange={setStockEntryCost}
                     placeholder="0,00"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    O sistema recalculará o custo médio ponderado sem apagar o custo do estoque anterior.
+                  </p>
                 </div>
               ) : null}
             </div>

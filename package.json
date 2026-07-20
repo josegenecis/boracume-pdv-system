@@ -25,6 +25,7 @@
     "build:desktop-installer": "npm run sync:electron-version && npm run build:desktop && node scripts/build-desktop-installer.cjs",
     "test:menu-perf": "playwright test tests/menu-cart-perf.spec.ts",
     "test:checkout": "playwright test tests/checkout-pix.spec.ts tests/menu-addons-perf.spec.ts",
+    "test:cmv": "esbuild src/utils/cmvCalculations.test.ts --bundle --platform=node --format=esm --outfile=/tmp/popsystem-cmv-test.mjs && node --test /tmp/popsystem-cmv-test.mjs",
     "dist:bridge": "node scripts/build-bridge.cjs",
     "pack:bridge": "node scripts/build-bridge.cjs --dir",
     "nfce:validate": "node scripts/validate-nfce-schema.cjs"

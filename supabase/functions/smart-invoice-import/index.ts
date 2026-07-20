@@ -502,8 +502,11 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
             category: item.category || "Insumos",
             subcategory: item.subcategory || null,
             unit: item.stock_unit || item.unit || "un",
-            cost_price: item.unit_price || 0,
-            price: item.unit_price || 0,
+            purchase_unit: item.unit || item.stock_unit || "un",
+            purchase_conversion: 1,
+            yield_percentage: 100,
+            cost_price: 0,
+            price: 0,
             current_stock: 0,
             min_stock: 0,
             stock_controlled: true,
@@ -519,9 +522,6 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
           .update({
             category: item.category || ingredient.category || "Insumos",
             subcategory: item.subcategory || ingredient.subcategory || null,
-            unit: item.stock_unit || ingredient.unit || "un",
-            cost_price: item.unit_price || ingredient.cost_price || ingredient.price || 0,
-            price: item.unit_price || ingredient.price || ingredient.cost_price || 0,
             stock_controlled: true,
             updated_at: new Date().toISOString(),
           })
@@ -529,22 +529,14 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
           .eq("user_id", userId);
       }
 
-      const nextStock = numberValue(ingredient.current_stock) + numberValue(item.quantity);
-      const { error: updateStockError } = await supabase
-        .from("ingredients")
-        .update({ current_stock: nextStock, updated_at: new Date().toISOString() })
-        .eq("id", ingredient.id)
-        .eq("user_id", userId);
-      if (updateStockError) throw updateStockError;
-
-      await supabase.from("stock_movements").insert([{
-        user_id: userId,
-        ingredient_id: ingredient.id,
-        movement_type: "in",
-        quantity: item.quantity,
-        unit_cost: item.unit_price || 0,
-        reason: `Entrada por nota ${importRow.invoice_number || importRow.id}`,
-      }]);
+      const { error: purchaseError } = await supabase.rpc("record_ingredient_purchase", {
+        p_ingredient_id: ingredient.id,
+        p_purchase_quantity: item.quantity,
+        p_purchase_unit_cost: item.unit_price || 0,
+        p_reason: `Entrada por nota ${importRow.invoice_number || importRow.id}`,
+        p_owner_id: userId,
+      });
+      if (purchaseError) throw purchaseError;
 
       if (item.id) {
         await supabase
