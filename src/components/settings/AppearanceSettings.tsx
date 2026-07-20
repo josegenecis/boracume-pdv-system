@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Palette, Save } from 'lucide-react';
-import { useAppearanceSettings } from '@/hooks/useAppearanceSettings';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,7 +17,6 @@ const PRESET_COLORS = [
 ];
 
 const AppearanceSettings = () => {
-  const { settings, loading, updateSettings } = useAppearanceSettings();
   const { user } = useAuth();
   const { toast } = useToast();
   

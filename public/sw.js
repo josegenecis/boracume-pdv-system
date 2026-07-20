@@ -1,5 +1,5 @@
-const CACHE_VERSION = 'popsystem-shell-v3';
-const APP_SHELL = ['/', '/offline.html', '/manifest.json', '/manifest-totem.json', '/icon-192x192.png', '/icon-512x512.png'];
+const CACHE_VERSION = 'popsystem-shell-v4';
+const APP_SHELL = ['/', '/offline.html', '/manifest.json', '/manifest-totem.json', '/manifest-motoboy.json', '/icon-192x192.png', '/icon-512x512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));

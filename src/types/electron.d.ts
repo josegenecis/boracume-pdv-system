@@ -80,6 +80,9 @@ export interface ElectronAPI {
   
   // System notifications
   showNotification: (title: string, body: string) => Promise<DeviceResponse>;
+  openExternal: (url: string) => Promise<DeviceResponse>;
+  getPendingOAuthCallback: () => Promise<string>;
+  onOAuthCallback: (callback: (url: string) => void) => () => void;
   
   // Platform detection
 

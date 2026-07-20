@@ -31,7 +31,7 @@ export default function AdminPinDialog(props: {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onCancel() }}>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{title || 'PIN do Administrador'}</DialogTitle>
         </DialogHeader>
@@ -57,4 +57,3 @@ export default function AdminPinDialog(props: {
     </Dialog>
   )
 }
-

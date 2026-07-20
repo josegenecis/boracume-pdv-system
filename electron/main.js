@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const isDev = !app.isPackaged;
@@ -22,6 +22,24 @@ let printerService;
 let scaleService;
 let printAgentServer;
 let updateWindow;
+let pendingOAuthCallback = '';
+
+function focusMainWindow() {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function handleProtocolUrl(url) {
+  if (!String(url || '').toLowerCase().startsWith('popsystem://')) return false;
+  pendingOAuthCallback = String(url);
+  focusMainWindow();
+  if (mainWindow && !mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.send('oauth-callback', pendingOAuthCallback);
+  }
+  return true;
+}
 
 // Verificar se deve rodar em modo "Agente" (sem janela principal, apenas Tray)
 // Pode ser passado via linha de comando: --agent-mode
@@ -32,13 +50,21 @@ if (!hasSingleInstanceLock) {
   app.quit();
 }
 
-app.on('second-instance', () => {
-  if (!mainWindow) return;
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore();
-  }
-  mainWindow.show();
-  mainWindow.focus();
+app.on('second-instance', (_event, commandLine) => {
+  const protocolUrl = commandLine.find((argument) => String(argument).toLowerCase().startsWith('popsystem://'));
+  if (protocolUrl) handleProtocolUrl(protocolUrl);
+  else focusMainWindow();
+});
+
+if (process.defaultApp && process.argv.length >= 2) {
+  app.setAsDefaultProtocolClient('popsystem', process.execPath, [path.resolve(process.argv[1])]);
+} else {
+  app.setAsDefaultProtocolClient('popsystem');
+}
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleProtocolUrl(url);
 });
 
 function createWindow() {
@@ -79,9 +105,32 @@ function createWindow() {
     }
   });
 
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (pendingOAuthCallback) mainWindow.webContents.send('oauth-callback', pendingOAuthCallback);
+  });
+
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
     console.error('Falha ao carregar UI:', { errorCode, errorDescription, validatedURL });
     dialog.showErrorBox('Erro ao carregar interface', `${errorDescription}\n\nURL:\n${validatedURL}`);
+  });
+
+  // Autenticações e páginas de terceiros devem usar o navegador padrão.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    let currentOrigin = '';
+    let targetOrigin = '';
+    try {
+      currentOrigin = new URL(mainWindow.webContents.getURL()).origin;
+      targetOrigin = new URL(url).origin;
+    } catch {}
+    if (/^https?:\/\//i.test(url) && currentOrigin && targetOrigin !== currentOrigin) {
+      event.preventDefault();
+      void shell.openExternal(url);
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -556,6 +605,25 @@ ipcMain.handle('get-available-printers', async () => {
     console.error('Erro ao listar impressoras:', error);
     return { success: false, error: error.message, printers: [] };
   }
+});
+
+ipcMain.handle('open-external', async (_event, url) => {
+  try {
+    const parsed = new URL(String(url || ''));
+    if (!['https:', 'http:'].includes(parsed.protocol)) {
+      return { success: false, error: 'Endereço externo inválido' };
+    }
+    await shell.openExternal(parsed.toString());
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-pending-oauth-callback', async () => {
+  const value = pendingOAuthCallback;
+  pendingOAuthCallback = '';
+  return value;
 });
 
 ipcMain.handle('print-system', async (event, { deviceName, html, silent = true } = {}) => {

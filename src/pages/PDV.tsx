@@ -1910,15 +1910,6 @@ const PDV = () => {
       return;
     }
 
-    if (orderType !== 'dine_in' && orderType !== 'counter' && !customerName.trim()) {
-      toast({
-        title: "Nome obrigatório",
-        description: "Por favor, informe o nome do cliente.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (orderType === 'delivery') {
       if (!customerAddress.trim()) {
         toast({
@@ -2061,8 +2052,20 @@ const PDV = () => {
         return;
       }
 
+      const resolvedCustomerName = (() => {
+        const informedName = customerName.trim();
+        if (informedName) return informedName;
+        if (orderType === 'dine_in') {
+          const tableNumber = tables.find((table) => table.id === selectedTable)?.table_number;
+          return tableNumber ? `Mesa ${tableNumber}` : 'Mesa';
+        }
+        if (orderType === 'delivery') return 'Cliente Delivery';
+        if (orderType === 'pickup') return 'Retirada';
+        return 'Venda Balcão';
+      })();
+
       const orderData: any = {
-        customer_name: orderType === 'dine_in' ? (customerName.trim() || `Mesa ${selectedTable}`) : (orderType === 'counter' ? (customerName.trim() || 'Venda Balcão') : customerName.trim()),
+        customer_name: resolvedCustomerName,
         customer_phone: customerPhone.trim() || null,
         customer_address: orderType === 'delivery' ? customerAddress.trim() : null,
         order_type: orderType,
@@ -2629,7 +2632,7 @@ const PDV = () => {
                 <div className="hidden">
                    <div className="flex gap-2">
                       <Input
-                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : (orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome *")}
+                        placeholder={orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome (Opcional)"}
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         className="h-8 text-xs"
@@ -2880,7 +2883,7 @@ const PDV = () => {
                   <div className="hidden">
                     <div className="hidden gap-2">
                       <Input
-                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome *"}
+                        placeholder="Nome (Opcional)"
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         className="h-9 text-sm"
@@ -3107,7 +3110,7 @@ const PDV = () => {
           <div className="space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">
               <Input
-                placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : (orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome *")}
+                placeholder={orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome (Opcional)"}
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="h-10"
@@ -3324,7 +3327,7 @@ const PDV = () => {
       </Dialog>
 
       <Dialog open={cashMoveOpen} onOpenChange={setCashMoveOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{cashMoveType === 'in' ? 'Suprimento' : 'Sangria'}</DialogTitle>
           </DialogHeader>

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Banknote, Copy, ExternalLink, History, KeyRound, Pencil, Plus, Smartphone, Trash2, Truck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -55,7 +55,35 @@ interface DeliveryPerson {
   vehicle_type: string;
   vehicle_plate: string | null;
   status: 'available' | 'busy' | 'offline';
+  app_enabled?: boolean;
+  app_login?: string | null;
 }
+
+interface DeliveryHistoryRow {
+  id: string;
+  orderNumber: string;
+  driverId: string;
+  driverName: string;
+  customerName: string;
+  status: string;
+  assignedAt: string;
+  payout: number;
+  settled: boolean;
+  settledAt: string | null;
+}
+
+const toLocalDateInput = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const historyInitialStart = () => {
+  const date = new Date();
+  date.setDate(1);
+  return toLocalDateInput(date);
+};
 
 // Define form schema
 const deliveryPersonSchema = z.object({
@@ -64,6 +92,9 @@ const deliveryPersonSchema = z.object({
   vehicle_type: z.string().min(1, { message: 'Tipo de veículo é obrigatório' }),
   vehicle_plate: z.string().optional(),
   status: z.enum(['available', 'busy', 'offline']),
+  app_enabled: z.boolean().default(false),
+  app_login: z.string().optional(),
+  app_password: z.string().optional(),
 });
 
 type DeliveryPersonFormValues = z.infer<typeof deliveryPersonSchema>;
@@ -80,6 +111,12 @@ const Entregadores: React.FC = () => {
   const [reportDate, setReportDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [settlementLoading, setSettlementLoading] = useState(false);
   const [settlementRows, setSettlementRows] = useState<Array<{ driverId: string; driverName: string; orderCount: number; total: number; orderIds: string[] }>>([]);
+  const [historyStart, setHistoryStart] = useState(historyInitialStart);
+  const [historyEnd, setHistoryEnd] = useState(() => toLocalDateInput(new Date()));
+  const [historyDriverId, setHistoryDriverId] = useState('all');
+  const [historyPaymentStatus, setHistoryPaymentStatus] = useState<'all' | 'pending' | 'paid'>('all');
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyRows, setHistoryRows] = useState<DeliveryHistoryRow[]>([]);
   const { user } = useAuth();
   const { toast } = useToast();
   const confirm = useConfirmDialog();
@@ -93,6 +130,9 @@ const Entregadores: React.FC = () => {
       vehicle_type: '',
       vehicle_plate: '',
       status: 'available',
+      app_enabled: false,
+      app_login: '',
+      app_password: '',
     },
   });
   
@@ -288,6 +328,16 @@ const Entregadores: React.FC = () => {
         .in('id', row.orderIds)
         .eq('user_id', user.id);
       if (error) throw error;
+      await (supabase.from('delivery_driver_ledger' as any) as any)
+        .update({ settled_at: new Date().toISOString() })
+        .eq('restaurant_id', user.id)
+        .eq('delivery_personnel_id', driverId)
+        .in('order_id', row.orderIds)
+        .is('settled_at', null);
+      const settledAt = new Date().toISOString();
+      setHistoryRows((current) => current.map((historyRow) =>
+        row.orderIds.includes(historyRow.id) ? { ...historyRow, settled: true, settledAt } : historyRow
+      ));
       await loadSettlementReport();
       toast({ title: 'Pago', description: 'Acerto marcado como pago.' });
     } catch (e: any) {
@@ -296,29 +346,108 @@ const Entregadores: React.FC = () => {
       setSettlementLoading(false);
     }
   };
+
+  const loadDeliveryHistory = async () => {
+    if (!user?.id) return;
+    setHistoryLoading(true);
+    try {
+      const start = new Date(`${historyStart}T00:00:00`);
+      const end = new Date(`${historyEnd}T00:00:00`);
+      end.setDate(end.getDate() + 1);
+      if (end <= start) throw new Error('A data final deve ser igual ou posterior à data inicial.');
+
+      let query = (supabase.from('orders' as any) as any)
+        .select('id,order_number,customer_name,status,delivery_personnel_id,delivery_assigned_at,created_at,delivery_payout_amount,delivery_fee,delivery_settled,delivery_settled_at')
+        .eq('user_id', user.id)
+        .not('delivery_personnel_id', 'is', null)
+        .gte('delivery_assigned_at', start.toISOString())
+        .lt('delivery_assigned_at', end.toISOString())
+        .order('delivery_assigned_at', { ascending: false })
+        .limit(500);
+
+      if (historyDriverId !== 'all') query = query.eq('delivery_personnel_id', historyDriverId);
+      if (historyPaymentStatus === 'paid') query = query.eq('delivery_settled', true);
+      if (historyPaymentStatus === 'pending') query = query.eq('delivery_settled', false);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const nameById = new Map(deliveryPersonnel.map((person) => [person.id, person.name]));
+      const rows = ((data as any[]) || []).map((order) => ({
+        id: String(order.id),
+        orderNumber: String(order.order_number || order.id).replace(/^PED/i, 'PED'),
+        driverId: String(order.delivery_personnel_id || ''),
+        driverName: nameById.get(String(order.delivery_personnel_id || '')) || 'Motoboy removido',
+        customerName: String(order.customer_name || 'Cliente'),
+        status: String(order.status || ''),
+        assignedAt: String(order.delivery_assigned_at || order.created_at || ''),
+        payout: order.delivery_payout_amount !== null && order.delivery_payout_amount !== undefined
+          ? Math.max(0, Number(order.delivery_payout_amount) || 0)
+          : payoutMode === 'fixed'
+            ? Math.max(0, Number(String(fixedPayoutRaw).replace(',', '.')) || 0)
+            : Math.max(0, Number(order.delivery_fee) || 0),
+        settled: Boolean(order.delivery_settled),
+        settledAt: order.delivery_settled_at ? String(order.delivery_settled_at) : null,
+      }));
+      setHistoryRows(rows);
+    } catch (error: any) {
+      setHistoryRows([]);
+      toast({
+        title: 'Não foi possível carregar o histórico',
+        description: error?.message || 'Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadDeliveryHistory();
+  }, [user?.id, historyStart, historyEnd, historyDriverId, historyPaymentStatus, deliveryPersonnel.length, payoutMode, fixedPayoutRaw]);
   
   // Handle form submission
   const onSubmit = async (data: DeliveryPersonFormValues) => {
     if (!user) return;
+    const appLogin = String(data.app_login || '').trim().toLowerCase();
+    const appPassword = String(data.app_password || '').trim();
+    if (data.app_enabled && appLogin.length < 4) {
+      form.setError('app_login', { message: 'Informe um usuário com pelo menos 4 caracteres' });
+      return;
+    }
+    if (data.app_enabled && (!currentDeliveryPerson || !currentDeliveryPerson.app_enabled) && appPassword.length < 6) {
+      form.setError('app_password', { message: 'A senha deve ter pelo menos 6 caracteres' });
+      return;
+    }
     
     try {
       setIsLoading(true);
       
       if (currentDeliveryPerson) {
         // Update existing delivery person
-        const { error } = await supabase
-          .from('delivery_personnel')
+        const { error } = await (supabase
+          .from('delivery_personnel') as any)
           .update({
             name: data.name,
             phone: data.phone,
             vehicle_type: data.vehicle_type,
             vehicle_plate: data.vehicle_plate || null,
             status: data.status,
+            app_enabled: data.app_enabled,
+            app_login: data.app_enabled ? appLogin : null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', currentDeliveryPerson.id);
         
         if (error) throw error;
+
+        if (appPassword) {
+          const { error: passwordError } = await (supabase.rpc as any)('set_delivery_personnel_app_password', {
+            p_driver_id: currentDeliveryPerson.id,
+            p_password: appPassword,
+          });
+          if (passwordError) throw passwordError;
+        }
         
         toast({
           title: 'Entregador atualizado',
@@ -326,8 +455,8 @@ const Entregadores: React.FC = () => {
         });
       } else {
         // Create new delivery person
-        const { error } = await supabase
-          .from('delivery_personnel')
+        const { error, data: inserted } = await (supabase
+          .from('delivery_personnel') as any)
           .insert({
             user_id: user.id,
             name: data.name,
@@ -335,9 +464,20 @@ const Entregadores: React.FC = () => {
             vehicle_type: data.vehicle_type,
             vehicle_plate: data.vehicle_plate || null,
             status: data.status,
-          });
+            app_enabled: data.app_enabled,
+            app_login: data.app_enabled ? appLogin : null,
+          })
+          .select('id')
+          .single();
         
         if (error) throw error;
+        if (data.app_enabled && appPassword) {
+          const { error: passwordError } = await (supabase.rpc as any)('set_delivery_personnel_app_password', {
+            p_driver_id: inserted.id,
+            p_password: appPassword,
+          });
+          if (passwordError) throw passwordError;
+        }
         
         toast({
           title: 'Entregador adicionado',
@@ -407,6 +547,9 @@ const Entregadores: React.FC = () => {
     form.setValue('vehicle_type', deliveryPerson.vehicle_type);
     form.setValue('vehicle_plate', deliveryPerson.vehicle_plate || '');
     form.setValue('status', deliveryPerson.status);
+    form.setValue('app_enabled', Boolean(deliveryPerson.app_enabled));
+    form.setValue('app_login', deliveryPerson.app_login || '');
+    form.setValue('app_password', '');
     
     setIsDialogOpen(true);
   };
@@ -426,6 +569,9 @@ const Entregadores: React.FC = () => {
       vehicle_type: '',
       vehicle_plate: '',
       status: 'available',
+      app_enabled: false,
+      app_login: '',
+      app_password: '',
     });
   };
   
@@ -461,6 +607,26 @@ const Entregadores: React.FC = () => {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
   const settlementByDriverId = new Map(settlementRows.map(r => [r.driverId, r]));
+  const historySummary = useMemo(() => historyRows.reduce((summary, row) => {
+    summary.total += row.payout;
+    if (row.settled) summary.paid += row.payout;
+    else if (row.status === 'delivered' || row.status === 'completed') summary.pending += row.payout;
+    if (row.status === 'delivered' || row.status === 'completed') summary.delivered += 1;
+    return summary;
+  }, { total: 0, paid: 0, pending: 0, delivered: 0 }), [historyRows]);
+
+  const historyStatusLabel = (status: string) => {
+    if (status === 'delivered' || status === 'completed') return 'Entregue';
+    if (status === 'in_delivery') return 'Em rota';
+    if (status === 'cancelled') return 'Cancelado';
+    if (status === 'ready') return 'Pronto';
+    return 'Em andamento';
+  };
+
+  const openDriverHistory = (driverId: string) => {
+    setHistoryDriverId(driverId);
+    window.setTimeout(() => document.getElementById('delivery-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  };
 
   return (
     <div className="space-y-6">
@@ -470,6 +636,19 @@ const Entregadores: React.FC = () => {
           <Plus className="mr-2 h-4 w-4" /> Novo Entregador
         </Button>
       </div>
+
+      <Card className="overflow-hidden border-0 bg-[linear-gradient(135deg,#063e2d,#08704d_60%,#ff6418)] text-white shadow-lg">
+        <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15"><Smartphone /></div>
+            <div><h2 className="text-xl font-black">App Motoboy PopSystem</h2><p className="mt-1 max-w-xl text-sm text-white/75">Cadastre usuário e senha abaixo. O motoboy recebe ofertas, organiza a rota e compartilha o rastreamento com o cliente.</p></div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/motoboy-login`); toast({ title: 'Link copiado' }); }}><Copy className="mr-2 h-4 w-4" /> Copiar acesso</Button>
+            <Button variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white" onClick={() => window.open('/motoboy-login', '_blank')}><ExternalLink className="mr-2 h-4 w-4" /> Abrir</Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -620,6 +799,7 @@ const Entregadores: React.FC = () => {
                   <TableHead>Veículo</TableHead>
                   <TableHead>Placa</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>App</TableHead>
                   <TableHead>Entregas (dia)</TableHead>
                   <TableHead>Saldo (dia)</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -637,6 +817,7 @@ const Entregadores: React.FC = () => {
                         {getStatusLabel(deliveryPerson.status)}
                       </Badge>
                     </TableCell>
+                    <TableCell>{deliveryPerson.app_enabled ? <Badge className="bg-emerald-600">Liberado</Badge> : <Badge variant="secondary">Desativado</Badge>}</TableCell>
                     <TableCell>{settlementByDriverId.get(deliveryPerson.id)?.orderCount || 0}</TableCell>
                     <TableCell className="font-semibold">{formatBRL(settlementByDriverId.get(deliveryPerson.id)?.total || 0)}</TableCell>
                     <TableCell className="text-right">
@@ -644,7 +825,17 @@ const Entregadores: React.FC = () => {
                         <Button
                           variant="outline"
                           size="icon"
+                          onClick={() => openDriverHistory(deliveryPerson.id)}
+                          aria-label={`Ver histórico de ${deliveryPerson.name}`}
+                          title="Ver histórico"
+                        >
+                          <History className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
                           onClick={() => handleEdit(deliveryPerson)}
+                          aria-label={`Editar ${deliveryPerson.name}`}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -653,6 +844,7 @@ const Entregadores: React.FC = () => {
                           size="icon"
                           className="text-red-500 hover:text-red-500"
                           onClick={() => handleDelete(deliveryPerson.id)}
+                          aria-label={`Excluir ${deliveryPerson.name}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -663,6 +855,123 @@ const Entregadores: React.FC = () => {
               </TableBody>
             </Table>
           )}
+        </CardContent>
+      </Card>
+
+      <Card id="delivery-history" className="scroll-mt-24 overflow-hidden">
+        <CardHeader className="border-b bg-gradient-to-r from-emerald-50 to-orange-50">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2"><History className="h-5 w-5 text-emerald-700" /> Histórico de entregas e pagamentos</CardTitle>
+              <CardDescription className="mt-1">Consulte corridas, valores devidos e repasses já realizados.</CardDescription>
+            </div>
+            <Button variant="outline" onClick={loadDeliveryHistory} disabled={historyLoading}>
+              {historyLoading ? 'Atualizando...' : 'Atualizar histórico'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5 p-5">
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-2xl border bg-slate-50 p-4">
+              <Truck className="h-5 w-5 text-emerald-700" />
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Entregas concluídas</p>
+              <p className="mt-1 text-2xl font-black">{historySummary.delivered}</p>
+            </div>
+            <div className="rounded-2xl border bg-slate-50 p-4">
+              <Banknote className="h-5 w-5 text-slate-700" />
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valor das corridas</p>
+              <p className="mt-1 text-xl font-black">{formatBRL(historySummary.total)}</p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <Banknote className="h-5 w-5 text-amber-700" />
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-amber-800/70">Pendente</p>
+              <p className="mt-1 text-xl font-black text-amber-900">{formatBRL(historySummary.pending)}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <Banknote className="h-5 w-5 text-emerald-700" />
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-emerald-800/70">Já pago</p>
+              <p className="mt-1 text-xl font-black text-emerald-900">{formatBRL(historySummary.paid)}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 rounded-2xl border bg-white p-4 md:grid-cols-4">
+            <div className="space-y-2">
+              <Label htmlFor="history-start">Data inicial</Label>
+              <Input id="history-start" type="date" value={historyStart} onChange={(event) => setHistoryStart(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="history-end">Data final</Label>
+              <Input id="history-end" type="date" value={historyEnd} onChange={(event) => setHistoryEnd(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Motoboy</Label>
+              <Select value={historyDriverId} onValueChange={setHistoryDriverId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os motoboys</SelectItem>
+                  {deliveryPersonnel.map((person) => <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Situação do repasse</Label>
+              <Select value={historyPaymentStatus} onValueChange={(value) => setHistoryPaymentStatus(value as 'all' | 'pending' | 'paid')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="pending">Pendentes</SelectItem>
+                  <SelectItem value="paid">Pagos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {historyLoading ? (
+            <div className="py-10 text-center text-muted-foreground">Carregando histórico...</div>
+          ) : historyRows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed py-10 text-center text-muted-foreground">Nenhuma entrega encontrada para os filtros selecionados.</div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Pedido</TableHead>
+                    <TableHead>Motoboy</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Entrega</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Repasse</TableHead>
+                    <TableHead>Pago em</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historyRows.map((row) => {
+                    const completed = row.status === 'delivered' || row.status === 'completed';
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell className="whitespace-nowrap">{row.assignedAt ? new Date(row.assignedAt).toLocaleString('pt-BR') : '-'}</TableCell>
+                        <TableCell className="font-semibold">#{row.orderNumber}</TableCell>
+                        <TableCell>{row.driverName}</TableCell>
+                        <TableCell>{row.customerName}</TableCell>
+                        <TableCell><Badge variant="outline">{historyStatusLabel(row.status)}</Badge></TableCell>
+                        <TableCell className="font-semibold">{formatBRL(row.payout)}</TableCell>
+                        <TableCell>
+                          {row.settled
+                            ? <Badge className="bg-emerald-600">Pago</Badge>
+                            : completed
+                              ? <Badge className="bg-amber-500">A pagar</Badge>
+                              : <Badge variant="secondary">Não liberado</Badge>}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{row.settledAt ? new Date(row.settledAt).toLocaleString('pt-BR') : '-'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          {historyRows.length >= 500 && <p className="text-xs text-muted-foreground">Exibindo as 500 entregas mais recentes do período. Reduza o intervalo para consultar mais detalhes.</p>}
         </CardContent>
       </Card>
       
@@ -694,6 +1003,23 @@ const Entregadores: React.FC = () => {
                   </FormItem>
                 )}
               />
+
+              <div className="rounded-2xl border bg-slate-50 p-4">
+                <FormField
+                  control={form.control}
+                  name="app_enabled"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4">
+                      <div><FormLabel className="flex items-center gap-2"><Smartphone className="h-4 w-4" /> Acesso ao App Motoboy</FormLabel><p className="mt-1 text-xs text-muted-foreground">Permite receber e concluir entregas pelo celular.</p></div>
+                      <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                  )}
+                />
+                {form.watch('app_enabled') && <div className="mt-4 grid gap-4">
+                  <FormField control={form.control} name="app_login" render={({ field }) => <FormItem><FormLabel>Usuário do aplicativo</FormLabel><FormControl><Input autoCapitalize="none" placeholder="Ex.: joao.motoboy" {...field} /></FormControl><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="app_password" render={({ field }) => <FormItem><FormLabel className="flex items-center gap-2"><KeyRound className="h-4 w-4" /> {currentDeliveryPerson ? 'Nova senha (opcional)' : 'Senha inicial'}</FormLabel><FormControl><Input type="password" autoComplete="new-password" placeholder={currentDeliveryPerson ? 'Deixe em branco para manter' : 'Mínimo de 6 caracteres'} {...field} /></FormControl><FormMessage /></FormItem>} />
+                </div>}
+              </div>
               
               <FormField
                 control={form.control}

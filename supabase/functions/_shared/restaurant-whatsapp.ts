@@ -483,13 +483,54 @@ export function buildTrackShareUrl(orderId: string, restaurantId?: string, order
   return url.toString();
 }
 
-export async function sendRestaurantWhatsApp(restaurantId: string, phone: string, text: string) {
+async function loadEvolutionUrl(supabase: any, restaurantId: string) {
+  if (!supabase || !restaurantId) return EVOLUTION_URL;
+  const { data } = await supabase
+    .from("whatsapp_settings")
+    .select("evolution_url")
+    .eq("user_id", restaurantId)
+    .maybeSingle();
+
+  return String(data?.evolution_url || EVOLUTION_URL).replace(/\/+$/, "");
+}
+
+async function recordNotificationAttempt(
+  supabase: any,
+  params: {
+    restaurantId: string;
+    orderId?: string;
+    eventType: string;
+    phone: string;
+    result: any;
+  }
+) {
+  if (!supabase || !params.restaurantId) return;
+  const result = params.result || {};
+  const providerError = String(
+    result?.error || result?.data?.error || result?.data?.message || ""
+  ).slice(0, 500);
+
+  await supabase.from("whatsapp_notification_logs").insert({
+    restaurant_id: params.restaurantId,
+    order_id: params.orderId || null,
+    event_type: params.eventType,
+    recipient_phone: normalizePhone(params.phone),
+    success: Boolean(result?.ok),
+    skipped: Boolean(result?.skipped),
+    provider_status: Number(result?.status) || null,
+    provider_error: providerError || null,
+    provider_transport: String(result?.transport || "legacy_send_text"),
+  }).then(() => undefined).catch(() => undefined);
+}
+
+export async function sendRestaurantWhatsApp(restaurantId: string, phone: string, text: string, supabase?: any) {
   const to = normalizePhone(phone);
   const message = String(text || "").trim();
   if (!restaurantId || !to || !message) return { ok: false, skipped: true };
 
   const instanceToken = `token_${restaurantId.replace(/-/g, "")}`;
-  const response = await fetch(`${EVOLUTION_URL}/send/text`, {
+  const evolutionUrl = await loadEvolutionUrl(supabase, restaurantId);
+  const response = await fetch(`${evolutionUrl}/send/text`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -502,7 +543,13 @@ export async function sendRestaurantWhatsApp(restaurantId: string, phone: string
   });
 
   const data = await response.json().catch(() => ({}));
-  return { ok: response.ok, data, status: response.status };
+  return {
+    ok: response.ok,
+    data,
+    status: response.status,
+    transport: "legacy_send_text",
+    error: response.ok ? null : String(data?.error || data?.message || `http_${response.status}`),
+  };
 }
 
 export async function notifyOrderCreated(supabase: any, order: any) {
@@ -527,7 +574,15 @@ export async function notifyOrderCreated(supabase: any, order: any) {
   const detailTrackingUrl = intro.includes(variables.track_link) ? "" : variables.track_link;
   const details = buildDetailedOrderMessage(order, detailTrackingUrl);
   const text = [intro, details].filter(Boolean).join("\n\n");
-  return await sendRestaurantWhatsApp(restaurantId, customerPhone, text);
+  const result = await sendRestaurantWhatsApp(restaurantId, customerPhone, text, supabase);
+  await recordNotificationAttempt(supabase, {
+    restaurantId,
+    orderId,
+    eventType: "order_created",
+    phone: customerPhone,
+    result,
+  });
+  return result;
 }
 
 export async function notifyOrderStatus(supabase: any, order: any, status: string) {
@@ -560,7 +615,15 @@ export async function notifyOrderStatus(supabase: any, order: any, status: strin
   };
 
   const text = fillTemplate(context.autoResponses[templateKey], variables);
-  return await sendRestaurantWhatsApp(restaurantId, customerPhone, text);
+  const result = await sendRestaurantWhatsApp(restaurantId, customerPhone, text, supabase);
+  await recordNotificationAttempt(supabase, {
+    restaurantId,
+    orderId,
+    eventType: `order_${status}`,
+    phone: customerPhone,
+    result,
+  });
+  return result;
 }
 
 export async function autoReplyWithMenu(supabase: any, restaurantId: string, phone: string, customerName?: string) {
@@ -579,5 +642,5 @@ export async function autoReplyWithMenu(supabase: any, restaurantId: string, pho
   };
 
   const text = fillTemplate(context.autoResponses.welcome, variables);
-  return await sendRestaurantWhatsApp(restaurantId, normalizedPhone, text);
+  return await sendRestaurantWhatsApp(restaurantId, normalizedPhone, text, supabase);
 }

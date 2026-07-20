@@ -47,7 +47,7 @@ async function main() {
   await copyDir(distSrc, electronDist)
 
   if (!fs.existsSync(electronExpress)) {
-    run('npm.cmd ci', electronDir)
+    run(process.platform === 'win32' ? 'npm.cmd ci' : 'npm ci', electronDir)
   }
 
   await rm(electronOut)
@@ -60,4 +60,3 @@ main().catch((e) => {
   console.error(e)
   process.exit(1)
 })
-

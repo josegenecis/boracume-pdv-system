@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2, Undo2 } from 'lucide-react'
+import { loadGoogleMaps } from '@/lib/googleMapsLoader'
 
 export type PolygonPoint = { lat: number; lng: number }
 
@@ -64,28 +65,7 @@ function LeafletAutoResize() {
   return null
 }
 
-declare global {
-  interface Window {
-    __boracumeGoogleMapsPromise?: Promise<void>
-  }
-}
-
-export function loadGoogleMaps(key: string): Promise<void> {
-  if (window.google?.maps) return Promise.resolve()
-  if (window.__boracumeGoogleMapsPromise) return window.__boracumeGoogleMapsPromise
-
-  window.__boracumeGoogleMapsPromise = new Promise<void>((resolve, reject) => {
-    const s = document.createElement('script')
-    s.async = true
-    s.defer = true
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=geometry,places`
-    s.onload = () => resolve()
-    s.onerror = () => reject(new Error('Falha ao carregar Google Maps'))
-    document.head.appendChild(s)
-  })
-
-  return window.__boracumeGoogleMapsPromise
-}
+export { loadGoogleMaps }
 
 export function GooglePolygonMap(props: {
   center: { lat: number; lng: number }
@@ -558,4 +538,3 @@ export default function PolygonAreasEditor(props: {
     </div>
   )
 }
-

@@ -161,10 +161,13 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
         referrer: document.referrer
       });
 
+      const desktopApi = window.electronAPI;
+      const isDesktop = Boolean(desktopApi?.isElectron && desktopApi.openExternal);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: isDesktop ? 'https://popsystem.com.br/auth/callback?desktop=1' : `${window.location.origin}/auth/callback`,
+          skipBrowserRedirect: isDesktop,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent'
@@ -183,6 +186,15 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
         
         handleOAuthError(error);
         return;
+      }
+
+      if (isDesktop && data?.url) {
+        const openResult = await desktopApi.openExternal(data.url);
+        if (!openResult?.success) throw new Error(openResult?.error || 'Não foi possível abrir o navegador.');
+        toast({
+          title: 'Continue no navegador',
+          description: 'Após entrar com o Google, você voltará automaticamente ao PopSystem.',
+        });
       }
 
       console.log('✅ [AUTH FORM] Redirecionamento para Google OAuth iniciado');

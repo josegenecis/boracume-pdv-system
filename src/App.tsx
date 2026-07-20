@@ -1,6 +1,6 @@
 
 import React, { useEffect } from 'react';
-import { BrowserRouter, HashRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HelmetProvider } from 'react-helmet-async';
 import { Toaster as SonnerToaster } from '@/components/ui/sonner';
@@ -76,6 +76,8 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import Marketing from '@/pages/Marketing';
 import SystemAdminDashboard from '@/pages/SystemAdminDashboard';
 import ChecklistPublic from '@/pages/ChecklistPublic';
+import MotoboyLogin from '@/pages/MotoboyLogin';
+import MotoboyApp from '@/pages/MotoboyApp';
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import TableOrderFlowSettings from '@/components/settings/TableOrderFlowSettings';
 import { useGlobalOrderAutoAccept } from '@/hooks/useGlobalOrderAutoAccept';
@@ -83,6 +85,7 @@ import LicenseExpiredLock from '@/components/license/LicenseExpiredLock';
 import './App.css';
 import './styles/responsive.css';
 import 'leaflet/dist/leaflet.css';
+import { supabase } from '@/integrations/supabase/client';
 
 const queryClient = new QueryClient();
 
@@ -118,6 +121,8 @@ function AppContent() {
       <Route path="/waiter-session/:sessionId" element={<WaiterSession />} />
       <Route path="/funcionario-login" element={<EmployeeLogin />} />
       <Route path="/funcionario-ponto" element={<EmployeeTimeClock />} />
+      <Route path="/motoboy-login" element={<MotoboyLogin />} />
+      <Route path="/motoboy-app" element={<MotoboyApp />} />
 
       {/* Rota de callback OAuth */}
       <Route path="/auth/callback" element={<AuthCallback />} />
@@ -292,6 +297,56 @@ function GlobalOrderAutoAccept() {
   return null;
 }
 
+function DesktopOAuthCallbackBridge() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.isElectron || !api.onOAuthCallback) return;
+
+    let active = true;
+    const completeOAuth = async (callbackUrl: string) => {
+      if (!active || !callbackUrl) return;
+      try {
+        const url = new URL(callbackUrl);
+        const query = url.searchParams;
+        const hash = new URLSearchParams(url.hash.replace(/^#/, ''));
+        const errorMessage = query.get('error_description') || query.get('error') || hash.get('error_description') || hash.get('error');
+        if (errorMessage) throw new Error(errorMessage);
+
+        const accessToken = hash.get('access_token') || query.get('access_token');
+        const refreshToken = hash.get('refresh_token') || query.get('refresh_token');
+        const code = query.get('code');
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          if (error) throw error;
+        } else if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+        } else {
+          throw new Error('O provedor não devolveu uma sessão válida.');
+        }
+
+        toast.success('Login concluído. Bem-vindo ao PopSystem!');
+        navigate('/dashboard', { replace: true });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Não foi possível concluir a autenticação.');
+      }
+    };
+
+    const unsubscribe = api.onOAuthCallback((url) => void completeOAuth(url));
+    void api.getPendingOAuthCallback?.().then((url) => {
+      if (url) void completeOAuth(url);
+    });
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [navigate]);
+
+  return null;
+}
+
 function App() {
   return (
     <HelmetProvider>
@@ -304,6 +359,7 @@ function App() {
                   <ErrorBoundary>
                     <FeatureGateProvider>
                       <HardwareAutoConnect />
+                      <DesktopOAuthCallbackBridge />
                       <CashDrawerShortcut />
                       <GlobalOrderAutoAccept />
                       <LicenseExpiredLock />

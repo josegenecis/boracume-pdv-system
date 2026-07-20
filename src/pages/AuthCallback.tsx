@@ -14,6 +14,14 @@ const AuthCallback = () => {
 
   useEffect(() => {
     const handleAuthCallback = async () => {
+      const isDesktopReturn = new URLSearchParams(window.location.search).get('desktop') === '1';
+      const returnSessionToDesktop = (session: { access_token: string; refresh_token: string }) => {
+        const hash = new URLSearchParams({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+        window.location.assign(`popsystem://auth/callback#${hash.toString()}`);
+      };
       try {
         console.log('🔄 Processando callback OAuth...');
         
@@ -72,6 +80,11 @@ const AuthCallback = () => {
             
             // Log de segurança tradicional
             await logSecurityEvent('oauth_success', `User ${session.user.email} authenticated via OAuth`, 'low');
+
+            if (isDesktopReturn) {
+              returnSessionToDesktop(session);
+              return;
+            }
             
             toast.success('Login realizado com sucesso!');
             navigate(getOperatorPathForRequestedPath(getLocalOperatorSession(), '/dashboard'));
@@ -86,6 +99,11 @@ const AuthCallback = () => {
             });
             
             await handleOAuthError(syncError, 'user_sync');
+
+            if (isDesktopReturn) {
+              returnSessionToDesktop(session);
+              return;
+            }
             
             // Mesmo com erro de sincronização, permitir login
             toast.warning('Login realizado, mas alguns dados podem não estar atualizados.');

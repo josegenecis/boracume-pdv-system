@@ -1,6 +1,6 @@
 {
   "name": "bora-cume-hub-desktop",
-  "version": "1.0.205",
+  "version": "1.0.252",
   "author": "PopSystem Team",
   "description": "Desktop application for PopSystem",
   "main": "main.js",
@@ -35,6 +35,14 @@
     "compression": "maximum",
     "appId": "com.boracume.desktop",
     "productName": "POPSYSTEM",
+    "protocols": [
+      {
+        "name": "PopSystem",
+        "schemes": [
+          "popsystem"
+        ]
+      }
+    ],
     "directories": {
       "output": "dist-electron"
     },

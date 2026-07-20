@@ -33,8 +33,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: 'poppay_not_configured' }), { status: 503, headers: corsHeaders })
     }
 
-    const userId = await getAuthUserId(req)
-    if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), { status: 401, headers: corsHeaders })
+    const authenticatedUserId = await getAuthUserId(req)
     const { code, state } = await req.json().catch(() => ({}))
     if (!code || !state) return new Response(JSON.stringify({ ok: false, error: 'missing_params' }), { status: 400, headers: corsHeaders })
 
@@ -44,8 +43,12 @@ Deno.serve(async (req) => {
       .select('id,user_id,created_at,used_at,code_verifier')
       .eq('state', String(state))
       .maybeSingle()
-    if (stateError || !oauthState || String(oauthState.user_id) !== userId || oauthState.used_at) {
+    if (stateError || !oauthState || oauthState.used_at) {
       return new Response(JSON.stringify({ ok: false, error: 'invalid_state' }), { status: 400, headers: corsHeaders })
+    }
+    const userId = String(oauthState.user_id || '')
+    if (!userId || (authenticatedUserId && authenticatedUserId !== userId)) {
+      return new Response(JSON.stringify({ ok: false, error: 'invalid_state_owner' }), { status: 400, headers: corsHeaders })
     }
     const createdAt = new Date(String(oauthState.created_at || '')).getTime()
     if (!Number.isFinite(createdAt) || Date.now() - createdAt > 30 * 60 * 1000) {

@@ -25,5 +25,11 @@ export const updateOrderStatus = async (
     throw new Error(`${data?.error || 'edge_function_error'}${detailsMsg}`)
   }
 
-  return data.order
+  return {
+    ...data.order,
+    __operation: {
+      whatsapp: data.whatsapp || null,
+      deliveryOffer: data.deliveryOffer || null,
+    },
+  }
 }

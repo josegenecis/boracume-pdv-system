@@ -205,6 +205,71 @@ const restoreStockForCancelledOrder = async (supabase: any, order: any) => {
   return { restored, skipped: false }
 }
 
+const createAutomaticDeliveryOffer = async (supabase: any, order: any, newStatus: string) => {
+  if (newStatus !== 'preparing' || String(order?.order_type || '') !== 'delivery') {
+    return { ok: true, skipped: true, reason: 'not_accepted_delivery' }
+  }
+
+  const { data: assigned } = await supabase
+    .from('delivery_assignments')
+    .select('id')
+    .eq('order_id', order.id)
+    .maybeSingle()
+  if (assigned?.id) return { ok: true, skipped: true, reason: 'already_assigned' }
+
+  const { count: enabledDrivers } = await supabase
+    .from('delivery_personnel')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', order.user_id)
+    .eq('app_enabled', true)
+  if (!enabledDrivers) return { ok: true, skipped: true, reason: 'no_app_drivers' }
+
+  const now = new Date().toISOString()
+  await supabase
+    .from('delivery_offers')
+    .update({ status: 'expired', updated_at: now })
+    .eq('order_id', order.id)
+    .eq('status', 'open')
+    .lte('expires_at', now)
+
+  const { data: existingOffer } = await supabase
+    .from('delivery_offers')
+    .select('id')
+    .eq('order_id', order.id)
+    .eq('status', 'open')
+    .maybeSingle()
+  if (existingOffer?.id) return { ok: true, skipped: true, reason: 'already_offered', offerId: existingOffer.id }
+
+  const { data: settings } = await supabase
+    .from('delivery_settlement_settings')
+    .select('payout_mode,fixed_payout')
+    .eq('user_id', order.user_id)
+    .maybeSingle()
+  const payoutAmount = String(settings?.payout_mode || 'delivery_fee') === 'fixed'
+    ? Math.max(0, Number(settings?.fixed_payout) || 0)
+    : Math.max(0, Number(order?.delivery_fee) || 0)
+
+  const { data: offer, error } = await supabase
+    .from('delivery_offers')
+    .insert({
+      restaurant_id: order.user_id,
+      order_id: order.id,
+      target_driver_id: null,
+      payout_amount: payoutAmount,
+      status: 'open',
+      expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    if (String(error?.code || '') === '23505') return { ok: true, skipped: true, reason: 'already_offered' }
+    return { ok: false, error: String(error?.message || error) }
+  }
+
+  return { ok: true, created: true, offerId: offer?.id || null, payoutAmount }
+}
+
 const callIfoodForStatus = async (supabase: any, order: any, newStatus: string, payload: any) => {
   const variations = order?.variations && typeof order.variations === 'object'
     ? order.variations
@@ -380,6 +445,13 @@ Deno.serve(async (req: Request) => {
       whatsappResult = { ok: false, error: String(e?.message || e) }
     }
 
+    let deliveryOfferResult: any = null
+    try {
+      deliveryOfferResult = await createAutomaticDeliveryOffer(supabase, updated, newStatus)
+    } catch (e: any) {
+      deliveryOfferResult = { ok: false, error: String(e?.message || e) }
+    }
+
     let loyaltyResult: any = null
     try {
       if (newStatus === 'delivered' || newStatus === 'completed') {
@@ -389,7 +461,14 @@ Deno.serve(async (req: Request) => {
       loyaltyResult = { ok: false, error: String(e?.message || e) }
     }
 
-    return ok({ ok: true, order: updated, stock: stockResult, whatsapp: whatsappResult, loyalty: loyaltyResult })
+    return ok({
+      ok: true,
+      order: updated,
+      stock: stockResult,
+      whatsapp: whatsappResult,
+      deliveryOffer: deliveryOfferResult,
+      loyalty: loyaltyResult,
+    })
   } catch (e: any) {
     return ok({ ok: false, error: 'internal_error', message: String(e?.message || e) })
   }

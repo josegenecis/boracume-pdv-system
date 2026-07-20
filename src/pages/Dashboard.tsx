@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
 import OperationalChecklistDialog from '@/components/dashboard/OperationalChecklistDialog';
-import { Users, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight, Search, Activity, ArrowUpRight, CreditCard, Wallet, ChefHat, AlertTriangle, CalendarClock, UserCheck, UserX, ClipboardCheck } from 'lucide-react';
+import { Users, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight, Search, Activity, ArrowUpRight, CreditCard, Wallet, ChefHat, AlertTriangle, CalendarClock, UserCheck, UserX, ClipboardCheck, MessageSquareText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -79,6 +79,8 @@ interface ChecklistSummary {
   completed: boolean;
   completedCount: number;
   totalTasks: number;
+  hasNotes: boolean;
+  notesPreview: string;
 }
 
 const normalizeItems = (value: any) => {
@@ -121,6 +123,8 @@ const Dashboard = () => {
     completed: false,
     completedCount: 0,
     totalTasks: 0,
+    hasNotes: false,
+    notesPreview: '',
   });
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -144,7 +148,7 @@ const Dashboard = () => {
         .eq('active', true),
       (supabase as any)
         .from('restaurant_checklist_runs')
-        .select('status, checked_task_ids')
+        .select('status, checked_task_ids, notes')
         .eq('user_id', user.id)
         .eq('business_date', businessDate)
         .maybeSingle(),
@@ -154,14 +158,28 @@ const Dashboard = () => {
     const tasks = tasksResult.status === 'fulfilled' && !tasksResult.value.error ? (tasksResult.value.data || []) : [];
     const run = runResult.status === 'fulfilled' && !runResult.value.error ? runResult.value.data : null;
     const checkedIds = Array.isArray(run?.checked_task_ids) ? run.checked_task_ids : [];
+    const notesPreview = String(run?.notes || '').trim();
 
     setChecklistSummary({
       enabled: Boolean(settings?.enabled),
       completed: run?.status === 'completed',
       completedCount: checkedIds.length,
       totalTasks: tasks.length || 6,
+      hasNotes: notesPreview.length > 0,
+      notesPreview,
     });
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const refresh = () => void fetchChecklistSummary();
+    const timer = window.setInterval(refresh, 20000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [fetchChecklistSummary, user?.id]);
 
   useEffect(() => {
     console.log('🔍 [DASHBOARD] useEffect executado, user:', user?.id);
@@ -539,6 +557,7 @@ const Dashboard = () => {
     tone: string;
     to: string;
     onClick?: () => void;
+    attention?: boolean;
   }> = [
     {
       title: 'Estoque baixo',
@@ -557,13 +576,16 @@ const Dashboard = () => {
         : 'Inativo',
       hint: checklistSummary.enabled
         ? checklistSummary.completed
-          ? 'Conferência do dia registrada'
+          ? checklistSummary.hasNotes
+            ? 'Você tem observações da equipe'
+            : 'Conferência do dia registrada'
           : 'Concluir antes de liberar o turno'
         : 'Ative para exigir conferência diária',
       icon: ClipboardCheck,
       tone: checklistNeedsAction ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700',
       to: '/dashboard',
       onClick: () => setChecklistOpen(true),
+      attention: checklistSummary.hasNotes,
     },
     {
       title: 'Contas a vencer',
@@ -767,7 +789,14 @@ const Dashboard = () => {
                   <div className={`rounded-2xl border p-2 ${card.tone}`}>
                     <Icon className="h-5 w-5" />
                   </div>
-                  <ChevronRight className="h-4 w-4 text-slate-400" />
+                  <div className="flex items-center gap-2">
+                    {card.attention && (
+                      <span className="inline-flex animate-pulse items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">
+                        <MessageSquareText className="h-3 w-3" /> Obs.
+                      </span>
+                    )}
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                  </div>
                 </div>
                 <div className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{card.title}</div>
                 <div className="mt-1 text-xl font-bold text-slate-900">{card.value}</div>
@@ -874,7 +903,14 @@ const Dashboard = () => {
                         <div className={`rounded-2xl border p-2 ${card.tone}`}>
                           <Icon className="h-5 w-5" />
                         </div>
-                        <ChevronRight className="h-4 w-4 text-slate-400" />
+                        <div className="flex items-center gap-2">
+                          {card.attention && (
+                            <span className="inline-flex animate-pulse items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">
+                              <MessageSquareText className="h-3 w-3" /> Você tem observações
+                            </span>
+                          )}
+                          <ChevronRight className="h-4 w-4 text-slate-400" />
+                        </div>
                       </div>
                       <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{card.title}</div>
                       <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{card.value}</div>

@@ -31,6 +31,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // System notifications
   showNotification: (title, body) => ipcRenderer.invoke('show-notification', title, body),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  getPendingOAuthCallback: () => ipcRenderer.invoke('get-pending-oauth-callback'),
+  onOAuthCallback: (callback) => {
+    const listener = (_event, url) => callback(url);
+    ipcRenderer.on('oauth-callback', listener);
+    return () => ipcRenderer.removeListener('oauth-callback', listener);
+  },
   
   // Platform detection
   isElectron: true,

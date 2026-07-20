@@ -35,6 +35,7 @@ export default function PixSetup() {
   const [popPayExpiresAt, setPopPayExpiresAt] = useState('');
   const [termsOpen, setTermsOpen] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [awaitingExternalAuth, setAwaitingExternalAuth] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -85,6 +86,32 @@ export default function PixSetup() {
     void loadPopPay();
   }, [loadPopPay]);
 
+  useEffect(() => {
+    if (!awaitingExternalAuth) return;
+    let cancelled = false;
+    let attempts = 0;
+    const checkConnection = async () => {
+      attempts += 1;
+      const { data } = await invokeEdgeFunction('poppay-settings', { action: 'status' }, { timeoutMs: 20000 });
+      if (cancelled) return;
+      const connected = data?.connection?.status === 'connected' && data?.connection?.enabled !== false;
+      if (connected) {
+        setPopPayConnected(true);
+        setPopPayExpiresAt(String(data?.connection?.expires_at || ''));
+        setAwaitingExternalAuth(false);
+        toast({ title: 'PopPay conectado', description: 'A autorização foi concluída no navegador e o aplicativo já foi atualizado.' });
+      } else if (attempts >= 100) {
+        setAwaitingExternalAuth(false);
+      }
+    };
+    const timer = window.setInterval(() => void checkConnection(), 3000);
+    void checkConnection();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [awaitingExternalAuth, toast]);
+
   const connectPopPay = () => {
     setTermsAccepted(false);
     setTermsOpen(true);
@@ -99,7 +126,17 @@ export default function PixSetup() {
         termsVersion: POPPAY_TERMS_VERSION,
       }, { timeoutMs: 60000 });
       if (status >= 400 || !data?.ok || !data?.url) throw new Error(data?.message || data?.error || 'Não foi possível iniciar o PopPay.');
-      window.location.href = String(data.url);
+      const authorizationUrl = String(data.url);
+      const desktopApi = window.electronAPI;
+      if (desktopApi?.isElectron && desktopApi.openExternal) {
+        const result = await desktopApi.openExternal(authorizationUrl);
+        if (!result?.success) throw new Error(result?.error || 'Não foi possível abrir o navegador.');
+        setAwaitingExternalAuth(true);
+        setTermsOpen(false);
+        toast({ title: 'Continue no navegador', description: 'Depois de autorizar o Mercado Pago, volte ao PopSystem. Esta tela será atualizada automaticamente.' });
+      } else {
+        window.location.href = authorizationUrl;
+      }
     } catch (error: unknown) {
       toast({ title: 'PopPay indisponível', description: error instanceof Error ? error.message : String(error), variant: 'destructive' });
     } finally {
@@ -213,8 +250,8 @@ export default function PixSetup() {
                 </p>
               </div>
             </div>
-            <Button onClick={connectPopPay} disabled={popPayLoading || !popPayConfigured} className="bg-emerald-700 shadow-md hover:bg-emerald-800">
-              {popPayConnected ? 'Reconectar' : 'Conectar PopPay'}<ArrowRight className="ml-2 h-4 w-4" />
+            <Button onClick={connectPopPay} disabled={popPayLoading || awaitingExternalAuth || !popPayConfigured} className="bg-emerald-700 shadow-md hover:bg-emerald-800">
+              {awaitingExternalAuth ? 'Aguardando autorização...' : popPayConnected ? 'Reconectar' : 'Conectar PopPay'}<ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
           <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 sm:p-6">

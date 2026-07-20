@@ -20,6 +20,7 @@ on:
       - "package-lock.json"
       - "vite.config.*"
       - ".github/workflows/desktop-release.yml"
+      - ".github/workflows/electron-build.yml"
 
 permissions:
   contents: write

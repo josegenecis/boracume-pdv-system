@@ -103,7 +103,7 @@ const Orders = () => {
   const [requireDriver, setRequireDriver] = useState(false);
   const [payoutMode, setPayoutMode] = useState<'delivery_fee' | 'fixed'>('delivery_fee');
   const [fixedPayout, setFixedPayout] = useState(0);
-  const [deliveryPersonnel, setDeliveryPersonnel] = useState<Array<{ id: string; name: string; status?: string }>>([]);
+  const [deliveryPersonnel, setDeliveryPersonnel] = useState<Array<{ id: string; name: string; status?: string; app_enabled?: boolean }>>([]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignOrderIds, setAssignOrderIds] = useState<string[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState('');
@@ -300,10 +300,10 @@ const Orders = () => {
       try {
         const { data } = await supabase
           .from('delivery_personnel')
-          .select('id,name,status')
+          .select('id,name,status,app_enabled')
           .eq('user_id', user.id)
           .order('name');
-        setDeliveryPersonnel(((data as any[]) || []).map(d => ({ id: String(d.id), name: String(d.name), status: d.status })));
+        setDeliveryPersonnel(((data as any[]) || []).map(d => ({ id: String(d.id), name: String(d.name), status: d.status, app_enabled: Boolean(d.app_enabled) })));
       } catch {
         setDeliveryPersonnel([]);
       }
@@ -561,6 +561,24 @@ const Orders = () => {
       }
 
       console.log('✅ Status atualizado no banco de dados:', data);
+
+      const operation = (data as any)?.__operation;
+      if (operation?.deliveryOffer?.created) {
+        toast({
+          title: 'Entrega ofertada automaticamente',
+          description: 'Os motoboys online já receberam o pedido no aplicativo.',
+        });
+      }
+      if (operation?.whatsapp && !operation.whatsapp.ok && !operation.whatsapp.skipped) {
+        const providerError = String(operation.whatsapp.error || '');
+        toast({
+          title: 'Status atualizado, mas o WhatsApp não foi entregue',
+          description: providerError.includes('463')
+            ? 'O provedor recusou o telefone do cliente. Confira se o número está correto e possui WhatsApp.'
+            : 'Confira a conexão do WhatsApp e o telefone informado no pedido.',
+          variant: 'destructive',
+        });
+      }
 
       setOrders(prev => prev.map(order =>
         order.id === orderId
@@ -839,6 +857,42 @@ const Orders = () => {
     setAssignOrderIds(deliveryOrderIds);
     setSelectedDriverId('');
     setAssignDialogOpen(true);
+  };
+
+  const offerOrdersToDriverApp = async () => {
+    if (!user?.id || assignOrderIds.length === 0) return;
+    const appDrivers = deliveryPersonnel.filter((driver) => driver.app_enabled);
+    if (appDrivers.length === 0) {
+      toast({ title: 'Nenhum motoboy com acesso ao app', description: 'Libere o aplicativo no cadastro do motoboy.', variant: 'destructive' });
+      return;
+    }
+    setAssigningDriver(true);
+    try {
+      for (const orderId of assignOrderIds) {
+        const order = orders.find((item) => item.id === orderId);
+        const payoutAmount = payoutMode === 'fixed'
+          ? Math.max(0, Number(fixedPayout) || 0)
+          : Math.max(0, Number((order as any)?.delivery_fee) || 0);
+        const { error } = await (supabase.from('delivery_offers' as any) as any).insert({
+          restaurant_id: user.id,
+          order_id: orderId,
+          target_driver_id: selectedDriverId && appDrivers.some((driver) => driver.id === selectedDriverId) ? selectedDriverId : null,
+          payout_amount: payoutAmount,
+          status: 'open',
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+        if (error) {
+          if (String(error.code) === '23505') throw new Error('Este pedido já está sendo oferecido aos motoboys.');
+          throw error;
+        }
+      }
+      setAssignDialogOpen(false);
+      setAssignOrderIds([]);
+      setSelectedDriverId('');
+      toast({ title: 'Oferta enviada', description: 'Os motoboys online receberão o card para aceitar a entrega.' });
+    } catch (error: any) {
+      toast({ title: 'Não foi possível ofertar', description: error?.message, variant: 'destructive' });
+    } finally { setAssigningDriver(false); }
   };
 
   const onKanbanDragEnd = async (result: DropResult) => {
@@ -1983,7 +2037,7 @@ const Orders = () => {
             </DialogHeader>
             <div className="space-y-4">
               <div className="text-sm text-muted-foreground">
-                {assignOrderIds.length} pedido(s) para sair para entrega.
+                {assignOrderIds.length} pedido(s). Você pode atribuir agora ou enviar uma oferta pelo app.
               </div>
               <div className="space-y-2">
                 <div className="text-sm font-medium">Entregador</div>
@@ -2029,6 +2083,16 @@ const Orders = () => {
                     }}
                   >
                     Continuar sem motoboy
+                  </Button>
+                )}
+                {deliveryPersonnel.some((driver) => driver.app_enabled) && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={assigningDriver}
+                    onClick={offerOrdersToDriverApp}
+                  >
+                    Ofertar no app
                   </Button>
                 )}
                 <Button

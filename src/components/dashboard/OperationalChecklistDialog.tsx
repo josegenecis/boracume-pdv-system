@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardCheck, Copy, Loader2, Plus, QrCode, ShieldCheck, Trash2 } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Clock3, Copy, Loader2, MessageSquareText, Plus, QrCode, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ interface ChecklistTask {
 
 interface ChecklistRun {
   id: string;
+  business_date?: string;
   status: string;
   checked_task_ids: string[];
   notes?: string | null;
@@ -57,6 +58,7 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
   const [enabled, setEnabled] = useState(false);
   const [tasks, setTasks] = useState<ChecklistTask[]>([]);
   const [run, setRun] = useState<ChecklistRun | null>(null);
+  const [recentRuns, setRecentRuns] = useState<ChecklistRun[]>([]);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
   const [publicToken, setPublicToken] = useState('');
@@ -105,7 +107,7 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [{ data: settings }, tasksResult, { data: currentRun }] = await Promise.all([
+      const [{ data: settings }, tasksResult, { data: currentRun }, { data: runHistory }] = await Promise.all([
         (supabase as any)
           .from('restaurant_checklist_settings')
           .select('*')
@@ -123,6 +125,12 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
           .eq('user_id', user.id)
           .eq('business_date', todayKey())
           .maybeSingle(),
+        (supabase as any)
+          .from('restaurant_checklist_runs')
+          .select('id, business_date, status, checked_task_ids, notes, completed_by, completed_at')
+          .eq('user_id', user.id)
+          .order('business_date', { ascending: false })
+          .limit(15),
       ]);
 
       let loadedSettings = settings;
@@ -156,6 +164,7 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
       setPublicToken(String(loadedSettings?.public_token || ''));
       setTasks(loadedTasks);
       setRun(currentRun || null);
+      setRecentRuns(runHistory || []);
       setCheckedIds(new Set(ids));
       setNotes(String(currentRun?.notes || ''));
     } catch (error: any) {
@@ -309,6 +318,7 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
       if (error) throw error;
 
       setRun(data);
+      setRecentRuns((current) => [data, ...current.filter((item) => item.id !== data.id)].slice(0, 15));
       toast({
         title: 'Checklist salvo',
         description: payload.status === 'completed' ? 'Turno conferido e registrado.' : 'Progresso salvo.',
@@ -442,6 +452,34 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
               <Progress value={progress} className="h-2" />
             </div>
 
+            {!locked && run?.status === 'completed' && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-amber-100 p-2 text-amber-700">
+                    <MessageSquareText className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-slate-900">Registro deixado pelo funcionário hoje</div>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-slate-500">
+                      <span className="inline-flex items-center gap-1">
+                        <UserRound className="h-3.5 w-3.5" />
+                        {run.completed_by || 'Funcionário'}
+                      </span>
+                      {run.completed_at && (
+                        <span className="inline-flex items-center gap-1">
+                          <Clock3 className="h-3.5 w-3.5" />
+                          {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(run.completed_at))}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 whitespace-pre-wrap rounded-xl border border-amber-200/70 bg-white p-3 text-sm text-slate-700">
+                      {run.notes?.trim() || 'O funcionário concluiu o checklist sem adicionar observações.'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3">
               {tasks.map((task) => (
                 <div
@@ -516,6 +554,38 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
                 className="min-h-24 rounded-2xl"
               />
             </div>
+
+            {!locked && recentRuns.length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3">
+                  <div className="font-bold text-slate-900">Histórico do checklist</div>
+                  <div className="text-xs text-slate-500">Últimos 15 registros enviados pela equipe.</div>
+                </div>
+                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {recentRuns.map((item) => (
+                    <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-bold text-slate-800">
+                          {item.business_date
+                            ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(`${item.business_date}T12:00:00Z`))
+                            : 'Data não informada'}
+                        </div>
+                        <div className="text-xs font-semibold text-emerald-700">Concluído</div>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {item.completed_by || 'Funcionário'}
+                        {item.completed_at
+                          ? ` • ${new Intl.DateTimeFormat('pt-BR', { timeStyle: 'short' }).format(new Date(item.completed_at))}`
+                          : ''}
+                      </div>
+                      <div className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                        {item.notes?.trim() || 'Sem observações.'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               {!locked && (

@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { Truck, Clock, CheckCircle, AlertTriangle, QrCode, Package, MessageCircle } from 'lucide-react';
+import { Truck, Clock, CheckCircle, AlertTriangle, QrCode, Package, MessageCircle, MapPin, Navigation } from 'lucide-react';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
+import { DeliveryGoogleMap } from '@/components/delivery/DeliveryGoogleMap';
 
 interface Order {
   id: string;
@@ -27,6 +28,7 @@ const OrderTracking: React.FC = () => {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [pixOpen, setPixOpen] = useState(false);
+  const [deliveryTracking, setDeliveryTracking] = useState<any>(null);
 
   const statusSteps = useMemo(() => (
     [
@@ -73,6 +75,21 @@ const OrderTracking: React.FC = () => {
       if (channel) supabase.removeChannel(channel);
     };
   }, [orderId]);
+
+  useEffect(() => {
+    if (!orderId || order?.status !== 'in_delivery') {
+      if (order?.status === 'delivered' || order?.status === 'completed') setDeliveryTracking((current: any) => current ? { ...current, active: false } : current);
+      return;
+    }
+    let mounted = true;
+    const fetchLocation = async () => {
+      const { data } = await supabase.functions.invoke('motoboy-tracking', { body: { orderId } });
+      if (mounted && data) setDeliveryTracking(data);
+    };
+    fetchLocation();
+    const timer = window.setInterval(fetchLocation, 8000);
+    return () => { mounted = false; window.clearInterval(timer); };
+  }, [orderId, order?.status]);
 
   if (loading) {
     return (
@@ -169,6 +186,23 @@ const OrderTracking: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {order.status === 'in_delivery' && deliveryTracking?.location && (
+              <div className="overflow-hidden rounded-2xl border bg-slate-50">
+                <div className="flex items-center justify-between gap-3 p-4">
+                  <div><p className="flex items-center gap-2 font-bold text-emerald-800"><MapPin className="h-5 w-5" /> Motoboy a caminho</p><p className="mt-1 text-xs text-muted-foreground">{deliveryTracking?.driver?.name || deliveryTracking?.driver?.[0]?.name || 'Sua entrega'} • atualização em tempo real</p></div>
+                  <Badge className="bg-emerald-600">Ao vivo</Badge>
+                </div>
+                <DeliveryGoogleMap
+                  driver={{
+                    latitude: Number(deliveryTracking.location.latitude),
+                    longitude: Number(deliveryTracking.location.longitude),
+                  }}
+                  destination={deliveryTracking.destination || null}
+                />
+                <div className="flex items-center gap-2 px-4 py-3 text-xs text-slate-500"><Navigation className="h-4 w-4" /> Última posição: {new Date(deliveryTracking.location.recorded_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Total</span>
