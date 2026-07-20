@@ -82,6 +82,7 @@ import { useGlobalOrderAutoAccept } from '@/hooks/useGlobalOrderAutoAccept';
 import LicenseExpiredLock from '@/components/license/LicenseExpiredLock';
 import './App.css';
 import './styles/responsive.css';
+import 'leaflet/dist/leaflet.css';
 
 const queryClient = new QueryClient();
 

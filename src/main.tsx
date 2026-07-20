@@ -1,9 +1,4 @@
-import React from 'react'
 import { createRoot } from 'react-dom/client'
-import App from './App.tsx'
-// import SimpleApp from './App.simple.tsx'
-// import AuthOnlyApp from './App.auth-only.tsx'
-import 'leaflet/dist/leaflet.css'
 import './index.css'
 
 if (import.meta.env.PROD) {
@@ -59,11 +54,26 @@ if ('serviceWorker' in navigator) {
       url.searchParams.set('v', String(Date.now()))
       window.location.replace(url.toString())
     }
-  } catch {}
+  } catch {
+    // Ignore malformed URLs; the application can continue without cache cleanup.
+  }
 })();
 
-createRoot(document.getElementById("root")!).render(
-  // <React.StrictMode>
-    <App />
-  // </React.StrictMode>
-);
+const marketingPaths = new Set(['/', '/landing', '/termos', '/privacidade', '/lgpd']);
+const mainDomains = new Set([
+  'popsystem.com.br',
+  'www.popsystem.com.br',
+  'boracume.com',
+  'www.boracume.com',
+  'localhost',
+  '127.0.0.1',
+]);
+const hostname = window.location.hostname;
+const isMainDomain = mainDomains.has(hostname) || hostname.endsWith('.vercel.app');
+const isMarketingEntry = isMainDomain && marketingPaths.has(window.location.pathname);
+
+const root = createRoot(document.getElementById('root')!);
+
+void (isMarketingEntry ? import('./LandingApp.tsx') : import('./App.tsx')).then(({ default: RootApp }) => {
+  root.render(<RootApp />);
+});

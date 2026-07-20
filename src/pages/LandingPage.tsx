@@ -1,6 +1,5 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   BadgeCheck,
@@ -30,7 +29,9 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import LandingLayout from '@/components/landing/LandingLayout';
+import ProductProofSection from '@/components/landing/ProductProofSection';
 import { ScrollToTop } from '@/components/landing/ScrollToTop';
+import { trackMarketing } from '@/lib/marketingAnalytics';
 
 const SUPPORT_PHONE = '5585992918273';
 const WHATSAPP_URL = `https://wa.me/${SUPPORT_PHONE}?text=${encodeURIComponent('Olá! Quero conhecer o PopSystem e organizar meu restaurante.')}`;
@@ -166,6 +167,11 @@ const LandingPage = () => (
       <meta name="keywords" content="sistema para restaurante, PDV restaurante, cardápio digital, sistema delivery, controle de estoque restaurante, gestão para restaurante" />
       <meta property="og:title" content="PopSystem | Seu restaurante inteiro em uma única tela" />
       <meta property="og:description" content="Venda mais rápido, reduza erros e saiba exatamente o que acontece no seu restaurante." />
+      <meta property="og:image" content="https://popsystem.com.br/og-popsystem.webp" />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:image" content="https://popsystem.com.br/og-popsystem.webp" />
       <link rel="canonical" href="https://popsystem.com.br/" />
     </Helmet>
 
@@ -186,11 +192,11 @@ const LandingPage = () => (
               O PopSystem conecta vendas, salão, delivery, cozinha, estoque, financeiro e marketing para você ganhar velocidade, reduzir erros e enxergar o lucro de verdade.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link to="/login?tab=register"><Button className="h-14 w-full rounded-xl bg-[#ef6c20] px-7 text-base font-black text-white shadow-xl shadow-black/20 hover:bg-[#ff7b2d] sm:w-auto">Começar agora <ArrowRight className="ml-2 h-5 w-5" /></Button></Link>
-              <a href={WHATSAPP_URL} target="_blank" rel="noreferrer"><Button variant="outline" className="h-14 w-full rounded-xl border-white/20 bg-white/10 px-7 text-base font-bold text-white backdrop-blur hover:bg-white hover:text-[#064733] sm:w-auto"><MessageCircle className="mr-2 h-5 w-5" />Falar com especialista</Button></a>
+              <Button asChild className="h-14 w-full rounded-xl bg-[#ef6c20] px-7 text-base font-black text-white shadow-xl shadow-black/20 hover:bg-[#ff7b2d] sm:w-auto"><a href="/login?tab=register" onClick={() => trackMarketing('landing_signup_click', 'hero')}>Começar agora <ArrowRight className="ml-2 h-5 w-5" /></a></Button>
+              <Button asChild variant="outline" className="h-14 w-full rounded-xl border-white/20 bg-white/10 px-7 text-base font-bold text-white backdrop-blur hover:bg-white hover:text-[#064733] sm:w-auto"><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" onClick={() => trackMarketing('landing_whatsapp_click', 'hero')}><MessageCircle className="mr-2 h-5 w-5" />Falar com especialista</a></Button>
             </div>
             <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-white/70">
-              {['Sem taxa por pedido', 'Acesso pela internet', 'Implantação acompanhada'].map(item => <span key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#9bd85f]" />{item}</span>)}
+              {['Sem comissão do sistema sobre pedidos', 'Acesso pela internet', 'Implantação acompanhada'].map(item => <span key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#9bd85f]" />{item}</span>)}
             </div>
           </div>
           <DashboardPreview />
@@ -205,6 +211,8 @@ const LandingPage = () => (
           </div>
         </div>
       </section>
+
+      <ProductProofSection />
 
       <section id="funcionalidades" className="bg-[#f6f8f4] py-24">
         <div className="container">
@@ -238,7 +246,7 @@ const LandingPage = () => (
       <section id="inteligencia" className="relative overflow-hidden bg-[#071f18] py-24 text-white">
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(45deg, transparent 45%, #fff 45%, #fff 46%, transparent 46%)', backgroundSize: '32px 32px' }} />
         <div className="container relative grid gap-14 lg:grid-cols-[.9fr_1.1fr] lg:items-center">
-          <div><Eyebrow light>Inteligência que vira ação</Eyebrow><h2 className="text-4xl font-black leading-[1.03] tracking-[-.045em] md:text-5xl">O sistema não mostra só números. Ele ajuda você a decidir.</h2><p className="mt-6 text-lg font-medium leading-8 text-white/65">Descubra o que vende mais, onde sua margem escapa e qual ação pode melhorar o resultado — sem passar horas montando planilhas.</p><Link to="/login?tab=register" className="mt-8 inline-flex items-center gap-2 font-black text-[#a8df75] hover:text-white">Quero enxergar meu restaurante <ArrowRight className="h-5 w-5" /></Link></div>
+          <div><Eyebrow light>Inteligência que vira ação</Eyebrow><h2 className="text-4xl font-black leading-[1.03] tracking-[-.045em] md:text-5xl">O sistema não mostra só números. Ele ajuda você a decidir.</h2><p className="mt-6 text-lg font-medium leading-8 text-white/65">Descubra o que vende mais, onde sua margem escapa e qual ação pode melhorar o resultado — sem passar horas montando planilhas.</p><a href="/login?tab=register" onClick={() => trackMarketing('landing_signup_click', 'intelligence')} className="mt-8 inline-flex items-center gap-2 font-black text-[#a8df75] hover:text-white">Quero enxergar meu restaurante <ArrowRight className="h-5 w-5" /></a></div>
           <div className="grid gap-3 sm:grid-cols-2">
             {[
               [TrendingUp, 'Venda melhor', 'Veja produtos campeões, horários fortes e ticket médio.'], [BarChart3, 'Proteja sua margem', 'Acompanhe CMV, despesas e desempenho da operação.'], [Bot, 'Ganhe produtividade', 'Use IA para conteúdo, atendimento e tarefas repetitivas.'], [Megaphone, 'Traga o cliente de volta', 'Crie ofertas, campanhas e ações de fidelização.'],
@@ -260,23 +268,23 @@ const LandingPage = () => (
 
       <section id="planos" className="bg-white py-24">
         <div className="container">
-          <div className="mx-auto max-w-3xl text-center"><Eyebrow>Planos para cada fase</Eyebrow><h2 className="text-4xl font-black tracking-[-.04em] text-[#073e2e] md:text-5xl">Comece com o que precisa.<br />Evolua sem recomeçar.</h2><p className="mt-5 text-lg font-medium text-[#687a73]">Sem taxa por pedido. Uma loja já está incluída em todos os planos.</p></div>
+          <div className="mx-auto max-w-3xl text-center"><Eyebrow>Planos para cada fase</Eyebrow><h2 className="text-4xl font-black tracking-[-.04em] text-[#073e2e] md:text-5xl">Comece com o que precisa.<br />Evolua sem recomeçar.</h2><p className="mt-5 text-lg font-medium text-[#687a73]">Sem comissão do sistema sobre pedidos. Uma loja já está incluída em todos os planos.</p></div>
           <div className="mt-14 grid gap-5 lg:grid-cols-3">
             {plans.map(plan => <article key={plan.name} className={`relative flex flex-col rounded-[26px] border p-7 ${plan.featured ? 'border-[#ef6c20] bg-[#fffaf6] shadow-[0_24px_70px_-30px_rgba(239,108,32,.55)] lg:-translate-y-3' : 'border-[#dfe7e1] bg-white'}`}>
               {plan.featured && <span className="absolute -top-3 left-7 rounded-full bg-[#ef6c20] px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-white">Mais escolhido</span>}
               <h3 className="text-2xl font-black text-[#073e2e]">{plan.name}</h3><p className="mt-2 min-h-[52px] text-sm font-medium leading-6 text-[#6d7e77]">{plan.description}</p>
               <div className="mt-7 flex items-end gap-1 text-[#073e2e]"><span className="mb-2 text-sm font-black">R$</span><strong className="text-5xl font-black tracking-[-.06em]">{plan.price}</strong><span className="mb-2 text-sm font-bold text-[#7d8d87]">/mês</span></div>
               <div className="my-7 h-px bg-[#e4eae5]" /><div className="flex-1 space-y-3">{plan.items.map(item => <div key={item} className="flex gap-3 text-sm font-bold text-[#315548]"><span className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-[#eaf6e2]"><Check className="h-3 w-3 text-[#57932f]" /></span>{item}</div>)}</div>
-              <Link to="/login?tab=register" className="mt-8"><Button className={`h-13 w-full rounded-xl text-sm font-black ${plan.featured ? 'bg-[#ef6c20] text-white hover:bg-[#db5d16]' : 'bg-[#064733] text-white hover:bg-[#08392b]'}`}>Escolher {plan.name}<ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+              <Button asChild className={`mt-8 h-13 w-full rounded-xl text-sm font-black ${plan.featured ? 'bg-[#ef6c20] text-white hover:bg-[#db5d16]' : 'bg-[#064733] text-white hover:bg-[#08392b]'}`}><a href="/login?tab=register" onClick={() => trackMarketing('landing_plan_click', plan.name)}>Escolher {plan.name}<ArrowRight className="ml-2 h-4 w-4" /></a></Button>
             </article>)}
           </div>
-          <p className="mt-6 text-center text-xs font-semibold text-[#84938d]">Fiscal/NFC-e disponível conforme configuração e homologação aplicável à operação.</p>
+          <p className="mt-6 text-center text-xs font-semibold text-[#84938d]">Tarifas de meios de pagamento são informadas separadamente. Fiscal/NFC-e disponível conforme configuração e homologação aplicável à operação.</p>
         </div>
       </section>
 
       <section id="duvidas" className="bg-[#f6f8f4] py-24">
         <div className="container grid gap-12 lg:grid-cols-[.65fr_1.35fr]">
-          <div><Eyebrow>Sem complicação</Eyebrow><h2 className="text-4xl font-black tracking-[-.04em] text-[#073e2e]">Dúvidas de quem está pronto para mudar.</h2><p className="mt-5 text-base font-medium leading-7 text-[#6b7d75]">Ainda ficou alguma pergunta? Nossa equipe conhece a rotina de restaurante e ajuda você a escolher o melhor caminho.</p><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="mt-7 inline-flex items-center gap-2 font-black text-[#e95f12]"><Headphones className="h-5 w-5" />Falar com a equipe</a></div>
+          <div><Eyebrow>Sem complicação</Eyebrow><h2 className="text-4xl font-black tracking-[-.04em] text-[#073e2e]">Dúvidas de quem está pronto para mudar.</h2><p className="mt-5 text-base font-medium leading-7 text-[#6b7d75]">Ainda ficou alguma pergunta? Nossa equipe conhece a rotina de restaurante e ajuda você a escolher o melhor caminho.</p><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" onClick={() => trackMarketing('landing_whatsapp_click', 'faq')} className="mt-7 inline-flex items-center gap-2 font-black text-[#e95f12]"><Headphones className="h-5 w-5" />Falar com a equipe</a></div>
           <div className="grid gap-3 sm:grid-cols-2">{faqs.map(([question, answer]) => <article key={question} className="rounded-[20px] border border-[#e0e7e1] bg-white p-5"><h3 className="text-base font-black text-[#073e2e]">{question}</h3><p className="mt-3 text-sm font-medium leading-6 text-[#6d7e77]">{answer}</p></article>)}</div>
         </div>
       </section>
@@ -285,7 +293,7 @@ const LandingPage = () => (
         <div className="absolute -right-20 -top-32 h-96 w-96 rounded-full border-[80px] border-white/10" />
         <div className="container relative flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-center">
           <div className="max-w-3xl"><div className="text-xs font-black uppercase tracking-[.22em] text-white/70">Seu restaurante pode rodar melhor</div><h2 className="mt-4 text-4xl font-black leading-[1.03] tracking-[-.045em] md:text-5xl">Troque o improviso por uma operação que você consegue comandar.</h2></div>
-          <div className="flex w-full flex-col gap-3 sm:w-auto"><Link to="/login?tab=register"><Button className="h-14 w-full rounded-xl bg-white px-7 text-base font-black text-[#d9560b] hover:bg-[#fff7ef]">Quero conhecer o PopSystem <ArrowRight className="ml-2 h-5 w-5" /></Button></Link><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="text-center text-sm font-bold text-white/85 hover:text-white">Prefiro falar pelo WhatsApp</a></div>
+          <div className="flex w-full flex-col gap-3 sm:w-auto"><Button asChild className="h-14 w-full rounded-xl bg-white px-7 text-base font-black text-[#d9560b] hover:bg-[#fff7ef]"><a href="/login?tab=register" onClick={() => trackMarketing('landing_signup_click', 'final')}>Quero conhecer o PopSystem <ArrowRight className="ml-2 h-5 w-5" /></a></Button><a href={WHATSAPP_URL} target="_blank" rel="noreferrer" onClick={() => trackMarketing('landing_whatsapp_click', 'final')} className="text-center text-sm font-bold text-white/85 hover:text-white">Prefiro falar pelo WhatsApp</a></div>
         </div>
       </section>
 
