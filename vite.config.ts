@@ -25,15 +25,7 @@ export default defineConfig(({ mode }) => ({
     minify: false,
     sourcemap: false,
     rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select'],
-          supabase: ['@supabase/supabase-js'],
-          charts: ['recharts'],
-          utils: ['date-fns', 'clsx', 'tailwind-merge']
-        }
-      }
+      output: {},
     },
     chunkSizeWarningLimit: 1000
   },
