@@ -176,6 +176,7 @@ const NFCeManager: React.FC = () => {
 
       const { data, error } = await supabase.functions.invoke('nfce-operations', {
         body: {
+          _storeId: user?.id,
           operation: 'consultar',
           cupom_id: cupomId
         }
@@ -219,6 +220,7 @@ const NFCeManager: React.FC = () => {
 
       const { data, error } = await supabase.functions.invoke('nfce-operations', {
         body: {
+          _storeId: user?.id,
           operation: 'cancelar',
           cupom_id: cupomId,
           motivo: 'Cancelamento solicitado pelo usuário'
@@ -275,6 +277,7 @@ const NFCeManager: React.FC = () => {
 
       const { data, error } = await supabase.functions.invoke('nfce-operations', {
         body: {
+          _storeId: user?.id,
           operation: 'download_xml',
           cupom_id: cupomId
         }

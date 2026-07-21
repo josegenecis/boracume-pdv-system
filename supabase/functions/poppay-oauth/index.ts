@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-explicit-any no-import-prefix
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getEnv } from '../_shared/poppay.ts'
+import { resolveStoreUserId } from '../_shared/multi-store.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -47,8 +48,15 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: 'invalid_state' }), { status: 400, headers: corsHeaders })
     }
     const userId = String(oauthState.user_id || '')
-    if (!userId || (authenticatedUserId && authenticatedUserId !== userId)) {
+    if (!userId) {
       return new Response(JSON.stringify({ ok: false, error: 'invalid_state_owner' }), { status: 400, headers: corsHeaders })
+    }
+    if (authenticatedUserId) {
+      try {
+        await resolveStoreUserId(supabase, authenticatedUserId, userId)
+      } catch {
+        return new Response(JSON.stringify({ ok: false, error: 'invalid_state_owner' }), { status: 400, headers: corsHeaders })
+      }
     }
     const createdAt = new Date(String(oauthState.created_at || '')).getTime()
     if (!Number.isFinite(createdAt) || Date.now() - createdAt > 30 * 60 * 1000) {

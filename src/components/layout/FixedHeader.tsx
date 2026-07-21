@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { FeatureKey } from '@/lib/featureAccess';
 import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
+import StoreSwitcher from '@/components/multistore/StoreSwitcher';
 
 const FixedHeader = () => {
   const { user } = useAuth();
@@ -81,7 +82,7 @@ const FixedHeader = () => {
 
     const loadWhatsAppStatus = async () => {
       try {
-        const { data } = await supabase.functions.invoke('whatsapp-status', { method: 'GET' });
+        const { data } = await supabase.functions.invoke('whatsapp-status', { body: { _storeId: user?.id } });
         if (!active) return;
         setWhatsAppConnected(data?.status === 'connected');
       } catch {
@@ -96,7 +97,7 @@ const FixedHeader = () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [user?.id]);
 
   const goToFeature = (path: string, feature: FeatureKey) => {
     if (!canAccessFeature(feature)) {
@@ -130,6 +131,7 @@ const FixedHeader = () => {
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-3">
+          <StoreSwitcher />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

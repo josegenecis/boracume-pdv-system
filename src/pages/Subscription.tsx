@@ -60,7 +60,7 @@ const emptyCardForm = {
 };
 
 const Subscription = () => {
-  const { subscription, refreshSubscription, user } = useAuth();
+  const { subscription, refreshSubscription, user, accountUser, billingOwnerId } = useAuth();
   const { toast } = useToast();
   const [loadingPlanId, setLoadingPlanId] = useState<number | null>(null);
   const [storeCounts, setStoreCounts] = useState<Record<number, number>>({});
@@ -85,14 +85,14 @@ const Subscription = () => {
   }, []);
 
   useEffect(() => {
-    if (!pixPayment || !user?.id) return;
+    if (!pixPayment || !accountUser?.id) return;
 
     let stopped = false;
     const checkPaymentStatus = async () => {
       const { data } = await supabase
         .from('subscriptions')
         .select('status,plan_id,store_count,billing_cycle')
-        .eq('user_id', user.id)
+        .eq('user_id', billingOwnerId || accountUser.id)
         .maybeSingle();
 
       const expectedPlanActive = data?.status === 'active'
@@ -119,7 +119,7 @@ const Subscription = () => {
     };
     // As funções do contexto são instáveis; o polling deve reiniciar apenas quando a cobrança mudar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pixPayment, user?.id, checkoutPlan?.planId, checkoutPlan?.storeCount, checkoutPlan?.billingPeriod]);
+  }, [pixPayment, accountUser?.id, billingOwnerId, checkoutPlan?.planId, checkoutPlan?.storeCount, checkoutPlan?.billingPeriod]);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A';
@@ -509,6 +509,21 @@ const Subscription = () => {
     ? offeredPlan.monthlyPrice + offeredExtraStores * Number(offeredPlan.extraStorePrice || 0)
     : 0;
   const maxCheckoutInstallments = Math.min(12, Math.max(1, Number(checkoutPlan?.billingMonths || 1)));
+
+  if (accountUser && billingOwnerId && accountUser.id !== billingOwnerId) {
+    return (
+      <Card className="mx-auto max-w-2xl overflow-hidden border-[#B8D7CA] shadow-lg">
+        <div className="h-2 bg-gradient-to-r from-[#003223] via-[#087A55] to-[#FF6400]" />
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-[#003223]"><Store className="h-5 w-5 text-[#087A55]" /> Assinatura administrada pela matriz</CardTitle>
+          <CardDescription>Esta unidade utiliza o plano Multi da rede. Alterações de plano, quantidade de lojas e pagamentos ficam disponíveis somente para a conta principal.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Badge className="bg-[#EAF7F0] text-[#087A55] hover:bg-[#EAF7F0]">Unidade vinculada e ativa</Badge>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] py-8 px-4">

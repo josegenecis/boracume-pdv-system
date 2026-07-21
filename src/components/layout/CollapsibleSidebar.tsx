@@ -36,6 +36,7 @@ import {
   User,
   LogOut,
   Package,
+  Network,
   Download,
   Megaphone,
   X
@@ -229,6 +230,7 @@ const CollapsibleSidebar = () => {
   }, [subscription]);
 
   const standaloneLinks: SidebarLink[] = [
+    { to: '/lojas', icon: Network, label: 'Minha Rede', detail: 'Multi', feature: 'multiStore', area: 'dashboard' },
     { to: '/agente', icon: Bot, label: 'Ajuda Inteligente', feature: 'agent', area: 'agent' },
     { to: '/downloads', icon: Download, label: 'App Desktop', feature: 'desktop', area: 'desktop' },
     { to: '/subscription', icon: Crown, label: 'Planos', detail: currentPlanLabel, accent: true },

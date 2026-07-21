@@ -31,6 +31,10 @@ export const invokeEdgeFunction = async (
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+    const activeStoreId = typeof window !== 'undefined' ? String(localStorage.getItem('popsystem_active_store_id') || '') : '';
+    const requestBody = body && typeof body === 'object' && !Array.isArray(body)
+      ? { ...(body as Record<string, unknown>), _storeId: activeStoreId || undefined }
+      : body;
     const invokePromise = fetch(`${SUPABASE_URL}/functions/v1/${functionPath}`, {
       method: 'POST',
       headers: {
@@ -39,7 +43,7 @@ export const invokeEdgeFunction = async (
         'Content-Type': 'application/json',
         'X-Client-Info': 'boracume-app',
       },
-      body: JSON.stringify(body ?? {}),
+      body: JSON.stringify(requestBody ?? {}),
       signal: controller.signal,
     }).then(async (response) => {
       const text = await response.text();

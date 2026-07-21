@@ -74,7 +74,7 @@ const WhatsAppIntegration: React.FC = () => {
   const checkStatus = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-status', {
-        method: 'GET'
+        body: { _storeId: user?.id }
       });
       if (data?.status === 'connected') {
         setSettings(prev => ({ ...prev, connected: true, phone_number: data.phone || prev.phone_number }));
@@ -143,7 +143,7 @@ const WhatsAppIntegration: React.FC = () => {
     const checkInterval = setInterval(async () => {
       try {
         const { data, error } = await supabase.functions.invoke('whatsapp-status', {
-          method: 'GET'
+          body: { _storeId: user?.id }
         });
         
         if (data?.status === 'connected') {
@@ -170,7 +170,7 @@ const WhatsAppIntegration: React.FC = () => {
       console.log("Conectando na EvoGo...");
 
       const { data: connectData, error: connectError } = await supabase.functions.invoke('whatsapp-connect', {
-        method: 'POST'
+        body: { _storeId: user?.id }
       });
 
       if (connectError) throw new Error(connectError.message);
@@ -193,7 +193,7 @@ const WhatsAppIntegration: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       const { data: qrData, error: qrError } = await supabase.functions.invoke('whatsapp-qrcode', {
-        method: 'GET'
+        body: { _storeId: user?.id }
       });
 
       if (qrError) throw new Error(qrError.message);

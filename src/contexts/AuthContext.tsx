@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -57,13 +57,34 @@ interface Subscription {
   updated_at: string;
 }
 
+export interface StoreAccess {
+  network_id: string | null;
+  network_name: string;
+  store_user_id: string;
+  store_name: string;
+  store_email: string | null;
+  is_primary: boolean;
+  store_status: 'active' | 'suspended';
+  billing_owner_id: string;
+  can_manage: boolean;
+}
+
 interface AuthContextType {
   user: User | null;
+  accountUser: User | null;
   session: Session | null;
   profile: Profile | null;
   subscription: Subscription | null;
   loading: boolean;
   isLoading: boolean;
+  stores: StoreAccess[];
+  activeStore: StoreAccess | null;
+  activeStoreId: string | null;
+  billingOwnerId: string | null;
+  canManageStores: boolean;
+  storesLoading: boolean;
+  switchStore: (storeUserId: string) => Promise<void>;
+  refreshStores: () => Promise<void>;
   signOut: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, restaurantName: string) => Promise<void>;
@@ -87,18 +108,99 @@ let initializationInProgress = false;
 let initializationPromise: Promise<void> | null = null;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [accountUser, setAccountUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  const [stores, setStores] = useState<StoreAccess[]>([]);
+  const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
+  const [billingOwnerId, setBillingOwnerId] = useState<string | null>(null);
+  const [storesLoading, setStoresLoading] = useState(false);
   const { toast } = useToast();
+
+  const activeStore = useMemo(
+    () => stores.find((store) => store.store_user_id === activeStoreId) || stores[0] || null,
+    [stores, activeStoreId]
+  );
+  const user = useMemo<User | null>(() => {
+    if (!accountUser || !activeStore || activeStore.store_user_id === accountUser.id) return accountUser;
+    return {
+      ...accountUser,
+      id: activeStore.store_user_id,
+      email: activeStore.store_email || accountUser.email,
+      user_metadata: {
+        ...accountUser.user_metadata,
+        restaurant_name: activeStore.store_name,
+        delegated_by: accountUser.id,
+      },
+    } as User;
+  }, [accountUser, activeStore]);
+  const canManageStores = Boolean(stores.some((store) => store.can_manage));
 
   // Refs para controle de debounce e cleanup
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const authSubscriptionRef = useRef<any>(null);
   const isMountedRef = useRef(true);
   const lastInitTimeRef = useRef<number>(0);
+
+  const loadStoreAccess = async (authenticatedUser: User): Promise<StoreAccess> => {
+    setStoresLoading(true);
+    try {
+      const { data, error } = await (supabase as any).rpc('get_my_store_access');
+      if (error) throw error;
+      const rows = (Array.isArray(data) ? data : []).filter(
+        (row: StoreAccess) => row?.store_user_id && row?.store_status === 'active'
+      ) as StoreAccess[];
+      const fallback: StoreAccess = {
+        network_id: null,
+        network_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
+        store_user_id: authenticatedUser.id,
+        store_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
+        store_email: authenticatedUser.email || null,
+        is_primary: true,
+        store_status: 'active',
+        billing_owner_id: authenticatedUser.id,
+        can_manage: false,
+      };
+      const availableStores = rows.length ? rows : [fallback];
+      const storageKey = `popsystem_active_store_${authenticatedUser.id}`;
+      const savedStoreId = localStorage.getItem(storageKey);
+      const selected = availableStores.find((store) => store.store_user_id === savedStoreId)
+        || availableStores.find((store) => store.store_user_id === authenticatedUser.id)
+        || availableStores[0];
+      if (isMountedRef.current) {
+        setStores(availableStores);
+        setActiveStoreId(selected.store_user_id);
+        setBillingOwnerId(selected.billing_owner_id || authenticatedUser.id);
+        localStorage.setItem('popsystem_active_store_id', selected.store_user_id);
+      }
+      return selected;
+    } catch (error) {
+      // Compatibility while the multi-store migration is not present yet.
+      console.warn('[MULTILOJAS] Usando loja única:', error);
+      const fallback: StoreAccess = {
+        network_id: null,
+        network_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
+        store_user_id: authenticatedUser.id,
+        store_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
+        store_email: authenticatedUser.email || null,
+        is_primary: true,
+        store_status: 'active',
+        billing_owner_id: authenticatedUser.id,
+        can_manage: false,
+      };
+      if (isMountedRef.current) {
+        setStores([fallback]);
+        setActiveStoreId(authenticatedUser.id);
+        setBillingOwnerId(authenticatedUser.id);
+        localStorage.setItem('popsystem_active_store_id', authenticatedUser.id);
+      }
+      return fallback;
+    } finally {
+      if (isMountedRef.current) setStoresLoading(false);
+    }
+  };
 
   useEffect(() => {
     debugLogger.auth('provider_mounted', { timestamp: Date.now() });
@@ -159,7 +261,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const refreshed = await supabase.auth.refreshSession();
         const next = refreshed?.data?.session;
         if (next?.user && isMountedRef.current) {
-          setUser(next.user);
+          setAccountUser(next.user);
           setSession(next);
         }
       } catch {}
@@ -258,11 +360,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               userId: session.user.id,
               email: session.user.email 
             });
-            setUser(session.user);
+            setAccountUser(session.user);
             setSession(session);
-            
-            // Carregar dados do usuário em background - NÃO BLOQUEAR
-            loadUserDataInBackground(session.user.id);
+            const selectedStore = await loadStoreAccess(session.user);
+
+            // Carregar perfil da unidade e assinatura da conta principal.
+            loadUserDataInBackground(selectedStore.store_user_id, selectedStore.billing_owner_id);
           } else {
             console.log('ℹ️ [AUTH] Nenhuma sessão encontrada via getSession');
           }
@@ -282,7 +385,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user) {
               console.log('✅ [AUTH] SIGNED_IN - Processando nova autenticação');
-              setUser(session.user);
+              setAccountUser(session.user);
               setSession(session);
               // Reiniciar auto-refresh quando um novo login ocorrer
               /*
@@ -292,14 +395,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.warn('⚠️ [AUTH] Falha ao reiniciar auto-refresh:', e?.message || e);
               }
               */
-              loadUserDataInBackground(session.user.id);
+              const selectedStore = await loadStoreAccess(session.user);
+              loadUserDataInBackground(selectedStore.store_user_id, selectedStore.billing_owner_id);
               
             } else if (event === 'SIGNED_OUT') {
               console.log('🚪 [AUTH] SIGNED_OUT - Limpando dados');
-              setUser(null);
+              setAccountUser(null);
               setSession(null);
               setProfile(null);
               setSubscription(null);
+              setStores([]);
+              setActiveStoreId(null);
+              setBillingOwnerId(null);
               // stopTokenAutoRefresh();
             }
           });
@@ -336,13 +443,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Função otimizada para carregar dados do usuário em background
-  const loadUserDataInBackground = useCallback(async (userId: string) => {
+  const loadUserDataInBackground = useCallback(async (storeUserId: string, subscriptionOwnerId?: string) => {
     try {
       console.log('📊 [AUTH] Carregando dados do usuário em background...');
       
       // Carregar em paralelo com timeout REDUZIDO para 1.5 segundos
-      const profilePromise = fetchProfileWithTimeout(userId, 1500);
-      const subscriptionPromise = fetchSubscriptionWithTimeout(userId, 1500);
+      const profilePromise = fetchProfileWithTimeout(storeUserId, 1500);
+      const subscriptionPromise = fetchSubscriptionWithTimeout(subscriptionOwnerId || storeUserId, 1500);
       
       const [profileResult, subscriptionResult] = await Promise.allSettled([
         profilePromise,
@@ -392,11 +499,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const fetchSubscriptionWithTimeout = async (userId: string, timeout: number = 1500) => {
-    const subscriptionPromise = supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const subscriptionPromise = (async () => {
+      const effectiveResult = await (supabase as any).rpc('get_my_billing_subscription');
+      if (!effectiveResult.error) {
+        return { data: Array.isArray(effectiveResult.data) ? effectiveResult.data[0] || null : effectiveResult.data, error: null };
+      }
+      // Backward-compatible fallback before the multi-store migration exists.
+      return supabase.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    })();
       
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Timeout no carregamento da assinatura')), timeout)
@@ -433,8 +543,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshSubscription = async () => {
-    if (user) {
-      await fetchSubscription(user.id);
+    if (accountUser) {
+      await fetchSubscription(billingOwnerId || accountUser.id);
     }
   };
 
@@ -544,10 +654,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearAllCache();
       
       // Resetar estados
-      setUser(null);
+      setAccountUser(null);
       setSession(null);
       setProfile(null);
       setSubscription(null);
+      setStores([]);
+      setActiveStoreId(null);
+      setBillingOwnerId(null);
       
     } catch (error) {
       console.error('Error signing out:', error);
@@ -558,9 +671,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshUser = async () => {
-    if (user) {
-      await loadUserDataInBackground(user.id);
+    if (accountUser && activeStoreId) {
+      await loadUserDataInBackground(activeStoreId, billingOwnerId || accountUser.id);
     }
+  };
+
+  const refreshStores = async () => {
+    if (!accountUser) return;
+    const selectedStore = await loadStoreAccess(accountUser);
+    await loadUserDataInBackground(selectedStore.store_user_id, selectedStore.billing_owner_id);
+  };
+
+  const switchStore = async (storeUserId: string) => {
+    if (!accountUser) return;
+    const selected = stores.find((store) => store.store_user_id === storeUserId && store.store_status === 'active');
+    if (!selected) throw new Error('Loja não disponível para esta conta.');
+    localStorage.setItem(`popsystem_active_store_${accountUser.id}`, selected.store_user_id);
+    localStorage.removeItem('operator_session');
+    localStorage.removeItem('waiter_session');
+    setProfile(null);
+    setActiveStoreId(selected.store_user_id);
+    setBillingOwnerId(selected.billing_owner_id || accountUser.id);
+    localStorage.setItem('popsystem_active_store_id', selected.store_user_id);
+    await loadUserDataInBackground(selected.store_user_id, selected.billing_owner_id || accountUser.id);
+    window.dispatchEvent(new CustomEvent('active-store-changed', { detail: selected }));
   };
 
   const syncGoogleUserData = async (googleUser: any) => {
@@ -618,8 +752,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
     } catch (error) {
       console.error('❌ Erro na sincronização do Google User:', error);
-      if (user) {
-        await logOAuthUserSync(user.id, 'google', 'error', error instanceof Error ? error.message : 'Unknown error');
+      if (accountUser) {
+        await logOAuthUserSync(accountUser.id, 'google', 'error', error instanceof Error ? error.message : 'Unknown error');
       }
       throw error;
     }
@@ -627,11 +761,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value = {
     user,
+    accountUser,
     session,
     profile,
     subscription,
     loading,
     isLoading: loading,
+    stores,
+    activeStore,
+    activeStoreId,
+    billingOwnerId,
+    canManageStores,
+    storesLoading,
+    switchStore,
+    refreshStores,
     signOut,
     signIn,
     signUp,

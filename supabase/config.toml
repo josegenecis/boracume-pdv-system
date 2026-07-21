@@ -174,3 +174,8 @@ entrypoint = "./functions/create-asaas-subscription/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/asaas-webhook/index.ts"
+
+[functions.store-network]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/store-network/index.ts"

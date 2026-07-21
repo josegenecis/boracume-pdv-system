@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-explicit-any no-import-prefix
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getEnv } from '../_shared/poppay.ts'
+import { resolveStoreUserId } from '../_shared/multi-store.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,11 +24,12 @@ Deno.serve(async (req) => {
   try {
     const url = getEnv('SUPABASE_URL', 'BORACUME_SUPABASE_URL')
     const serviceKey = getEnv('SUPABASE_SERVICE_ROLE_KEY', 'BORACUME_SERVICE_ROLE_KEY', 'SERVICE_ROLE_KEY')
-    const userId = await getAuthUserId(req)
-    if (!url || !serviceKey || !userId) return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), { status: 401, headers: corsHeaders })
+    const authenticatedUserId = await getAuthUserId(req)
+    if (!url || !serviceKey || !authenticatedUserId) return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), { status: 401, headers: corsHeaders })
     const body = await req.json().catch(() => ({}))
     const action = String(body?.action || 'status')
     const supabase = createClient(url, serviceKey)
+    const userId = await resolveStoreUserId(supabase, authenticatedUserId, body?._storeId)
 
     if (action === 'set_split_enabled') {
       return new Response(JSON.stringify({ ok: false, error: 'operation_not_allowed' }), { status: 403, headers: corsHeaders })

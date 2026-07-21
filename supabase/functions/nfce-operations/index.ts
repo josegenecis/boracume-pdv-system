@@ -4,6 +4,7 @@ import { loadCertificateFromBase64, validateCertificate } from './certificate-ut
 import { SefazClient } from './sefaz-client.ts';
 import { getSefazEndpoint } from './sefaz-endpoints.ts';
 import { getQRCodeBaseUrl } from './qrcode-generator.ts';
+import { resolveStoreUserId } from '../_shared/multi-store.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,6 +43,7 @@ interface NFCeData {
   };
   observacoes?: string;
   motivo?: string;
+  _storeId?: string;
 }
 
 serve(async (req) => {
@@ -64,25 +66,26 @@ serve(async (req) => {
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) throw new Error('Invalid authorization token');
+    const storeUserId = await resolveStoreUserId(supabase, user.id, requestData._storeId);
 
     switch (requestData.operation) {
       case 'emitir':
-        return await emitirNFCe(supabase, user.id, requestData);
+        return await emitirNFCe(supabase, storeUserId, requestData);
       case 'consultar':
-        return await consultarNFCe(supabase, user.id, required(requestData.cupom_id, 'cupom_id'));
+        return await consultarNFCe(supabase, storeUserId, required(requestData.cupom_id, 'cupom_id'));
       case 'cancelar':
         return await cancelarNFCe(
           supabase,
-          user.id,
+          storeUserId,
           required(requestData.cupom_id, 'cupom_id'),
           requestData.motivo || 'Cancelamento solicitado pelo usuario'
         );
       case 'download_xml':
-        return await downloadXML(supabase, user.id, required(requestData.cupom_id, 'cupom_id'));
+        return await downloadXML(supabase, storeUserId, required(requestData.cupom_id, 'cupom_id'));
       case 'testar_conexao':
-        return await testarConexaoSefaz(supabase, user.id);
+        return await testarConexaoSefaz(supabase, storeUserId);
       case 'validar_config':
-        return await validarConfiguracaoFiscal(supabase, user.id);
+        return await validarConfiguracaoFiscal(supabase, storeUserId);
       default:
         throw new Error('Operacao nao suportada');
     }

@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-explicit-any no-import-prefix
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getEnv } from '../_shared/poppay.ts'
+import { resolveStoreUserId } from '../_shared/multi-store.ts'
 
 const POPPAY_TERMS_VERSION = '2026-07-v2'
 const POPPAY_TERMS_SNAPSHOT = {
@@ -60,8 +61,8 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: 'poppay_not_configured', message: 'O PopPay ainda nao possui credenciais de producao configuradas.' }), { status: 503, headers: corsHeaders })
     }
 
-    const userId = await getAuthUserId(req)
-    if (!userId) return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), { status: 401, headers: corsHeaders })
+    const authenticatedUserId = await getAuthUserId(req)
+    if (!authenticatedUserId) return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), { status: 401, headers: corsHeaders })
 
     const body = await req.json().catch(() => ({}))
     if (body?.acceptedTerms !== true || body?.termsVersion !== POPPAY_TERMS_VERSION) {
@@ -74,6 +75,7 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceKey)
+    const userId = await resolveStoreUserId(supabase, authenticatedUserId, body?._storeId)
     const { error: acceptanceError } = await supabase.from('poppay_terms_acceptances').insert({
       user_id: userId,
       terms_version: POPPAY_TERMS_VERSION,

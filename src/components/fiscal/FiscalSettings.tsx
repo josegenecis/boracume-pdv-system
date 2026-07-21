@@ -638,7 +638,7 @@ const FiscalSettings: React.FC = () => {
       }
 
       const { data, error } = await supabase.functions.invoke('nfce-operations', {
-        body: { operation: 'validar_config' }
+        body: { operation: 'validar_config', _storeId: user?.id }
       });
 
       if (error) throw error;

@@ -78,6 +78,8 @@ import SystemAdminDashboard from '@/pages/SystemAdminDashboard';
 import ChecklistPublic from '@/pages/ChecklistPublic';
 import MotoboyLogin from '@/pages/MotoboyLogin';
 import MotoboyApp from '@/pages/MotoboyApp';
+import Stores from '@/pages/Stores';
+import StoreInvitation from '@/pages/StoreInvitation';
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import TableOrderFlowSettings from '@/components/settings/TableOrderFlowSettings';
 import { useGlobalOrderAutoAccept } from '@/hooks/useGlobalOrderAutoAccept';
@@ -150,6 +152,7 @@ function AppContent() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Navigate to="/login?tab=register" replace />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/lojas/convite" element={<StoreInvitation />} />
       <Route path="/operator-login" element={<RouteGuard><OperatorLogin /></RouteGuard>} />
       
       {/* Rota específica para o aplicativo desktop - sem layout padrão */}
@@ -174,6 +177,9 @@ function AppContent() {
           <Route path="/relatorios" element={<OperatorRoute area="reports"><FeatureRoute feature="reports"><Relatorios /></FeatureRoute></OperatorRoute>} />
           <Route path="/configuracoes" element={<OperatorRoute area="settings"><FeatureRoute feature="settings"><Configuracoes /></FeatureRoute></OperatorRoute>} />
           <Route path="/subscription" element={<Subscription />} />
+          <Route path="/lojas" element={<FeatureRoute feature="multiStore"><Stores /></FeatureRoute>} />
+          <Route path="/multilojas" element={<Navigate to="/lojas" replace />} />
+          <Route path="/rede" element={<Navigate to="/lojas" replace />} />
           <Route path="/loyalty" element={<FeatureRoute feature="marketing"><Loyalty /></FeatureRoute>} />
           <Route path="/bairros-entrega" element={<OperatorRoute area="delivery"><FeatureRoute feature="delivery"><BairrosEntrega /></FeatureRoute></OperatorRoute>} />
           <Route path="/entregadores" element={<OperatorRoute area="delivery"><FeatureRoute feature="deliveryTeam"><Entregadores /></FeatureRoute></OperatorRoute>} />

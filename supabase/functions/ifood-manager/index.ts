@@ -18,6 +18,7 @@ import {
   upsertIfoodSettings,
   acknowledgeIfoodEvents,
 } from '../_shared/ifood.ts'
+import { resolveStoreUserId } from '../_shared/multi-store.ts'
 
 const parseMerchantSummary = (merchant: any) => ({
   id: String(merchant?.id || ''),
@@ -31,13 +32,14 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const userId = await getAuthUserId(req)
-    if (!userId) {
+    const authenticatedUserId = await getAuthUserId(req)
+    if (!authenticatedUserId) {
       return okJson({ ok: false, error: 'unauthorized' }, 401)
     }
 
     const supabase = createServiceClient()
     const body = await req.json().catch(() => ({}))
+    const userId = await resolveStoreUserId(supabase, authenticatedUserId, body?._storeId)
     const action = String(body?.action || 'overview')
     const settings = await getUserIfoodSettings(supabase, userId)
     const currentSettings = sanitizeIfoodSettings(settings) || null
