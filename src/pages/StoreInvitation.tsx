@@ -15,6 +15,7 @@ export default function StoreInvitation() {
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const token = useMemo(() => {
     const queryToken = new URLSearchParams(location.search).get('token') || '';
     if (queryToken) localStorage.setItem(STORAGE_KEY, queryToken);
@@ -29,6 +30,11 @@ export default function StoreInvitation() {
         body: { action: 'accept', token },
       });
       if (invokeError || !data?.ok) {
+        let responseBody = data as { error?: string; message?: string } | null;
+        const context = (invokeError as { context?: Response } | null)?.context;
+        if (!responseBody && context?.json) {
+          responseBody = await context.json().catch(() => null) as { error?: string; message?: string } | null;
+        }
         const messages: Record<string, string> = {
           invitation_email_mismatch: 'Este convite foi enviado para outro e-mail. Entre com o endereço que recebeu o convite.',
           invitation_expired: 'Este convite expirou. Solicite um novo convite ao proprietário da rede.',
@@ -36,7 +42,9 @@ export default function StoreInvitation() {
           network_capacity_reached: 'A rede atingiu o limite de lojas contratado.',
           invalid_invitation: 'O convite é inválido ou não existe mais.',
         };
-        setError(messages[data?.error] || data?.message || invokeError?.message || 'Não foi possível aceitar o convite.');
+        const code = responseBody?.error || '';
+        setErrorCode(code);
+        setError(messages[code] || responseBody?.message || invokeError?.message || 'Não foi possível aceitar o convite.');
         setAccepting(false);
         return;
       }
@@ -67,7 +75,14 @@ export default function StoreInvitation() {
           {accepted && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center"><CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" /><p className="mt-2 font-bold text-emerald-900">Unidade vinculada com sucesso</p><p className="mt-1 text-sm text-emerald-800">Agora você pode identificar seu operador e começar a configurar a loja.</p></div>}
           {!accountUser && token && <><div className="flex items-start gap-3 rounded-2xl border bg-white p-4"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#087A55]" /><p className="text-sm text-muted-foreground">Entre usando exatamente o e-mail que recebeu o convite. Se ainda não possui conta, use o botão de criação recebido por e-mail.</p></div><Button className="w-full bg-[#087A55] hover:bg-[#056843]" onClick={() => navigate('/login', { state: { from: { pathname: '/lojas/convite' } } })}><LogIn className="mr-2 h-4 w-4" />Entrar para aceitar</Button></>}
           {accepted && <Button className="w-full bg-[#FF6400] hover:bg-[#D95700]" onClick={() => navigate('/operator-login', { replace: true })}>Acessar minha unidade</Button>}
-          {accountUser && error && <Button variant="outline" className="w-full" onClick={() => navigate('/dashboard')}>Voltar ao painel</Button>}
+          {accountUser && errorCode === 'invitation_email_mismatch' && <Button
+            className="w-full bg-[#087A55] hover:bg-[#056843]"
+            onClick={async () => {
+              await supabase.auth.signOut({ scope: 'local' });
+              navigate('/login', { state: { from: { pathname: '/lojas/convite' } }, replace: true });
+            }}
+          >Entrar com o e-mail convidado</Button>}
+          {accountUser && error && errorCode !== 'invitation_email_mismatch' && <Button variant="outline" className="w-full" onClick={() => navigate('/dashboard')}>Voltar ao painel</Button>}
         </CardContent>
       </Card>
     </div>
