@@ -107,6 +107,20 @@ export const useAuth = () => {
 let initializationInProgress = false;
 let initializationPromise: Promise<void> | null = null;
 
+const withAuthTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs = 5000): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Tempo limite ao carregar a sessão da loja.')), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [accountUser, setAccountUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -147,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadStoreAccess = async (authenticatedUser: User): Promise<StoreAccess> => {
     setStoresLoading(true);
     try {
-      const { data, error } = await (supabase as any).rpc('get_my_store_access');
+      const { data, error } = await withAuthTimeout((supabase as any).rpc('get_my_store_access'));
       if (error) throw error;
       const rows = (Array.isArray(data) ? data : []).filter(
         (row: StoreAccess) => row?.store_user_id && row?.store_status === 'active'
@@ -378,7 +392,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Configurar listener de mudanças de auth - APENAS UMA VEZ
         if (!authSubscriptionRef.current) {
-          authSubscriptionRef.current = supabase.auth.onAuthStateChange(async (event, session) => {
+          authSubscriptionRef.current = supabase.auth.onAuthStateChange((event, session) => {
             if (!isMountedRef.current) return;
             
             console.log('🔄 [AUTH] Auth state changed:', event, session?.user?.email);
@@ -395,8 +409,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.warn('⚠️ [AUTH] Falha ao reiniciar auto-refresh:', e?.message || e);
               }
               */
-              const selectedStore = await loadStoreAccess(session.user);
-              loadUserDataInBackground(selectedStore.store_user_id, selectedStore.billing_owner_id);
+              // Nunca consultar o Supabase dentro do callback de onAuthStateChange.
+              // O cliente mantém um lock interno durante este evento e uma nova
+              // chamada aqui pode bloquear todas as consultas seguintes.
+              // TOKEN_REFRESHED só precisa atualizar a sessão local.
+              if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
+                const authenticatedUser = session.user;
+                window.setTimeout(() => {
+                  if (!isMountedRef.current) return;
+                  void loadStoreAccess(authenticatedUser).then((selectedStore) => {
+                    if (!isMountedRef.current) return;
+                    void loadUserDataInBackground(selectedStore.store_user_id, selectedStore.billing_owner_id);
+                  });
+                }, 0);
+              }
               
             } else if (event === 'SIGNED_OUT') {
               console.log('🚪 [AUTH] SIGNED_OUT - Limpando dados');

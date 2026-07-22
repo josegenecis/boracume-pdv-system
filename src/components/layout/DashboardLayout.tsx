@@ -6,7 +6,7 @@ import SoundPermissionHelper from '@/components/notifications/SoundPermissionHel
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
 import { useAuth } from '@/contexts/AuthContext';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
-import { Loader2 } from 'lucide-react';
+import CompactLoader from '@/components/ui/compact-loader';
 import { supabase } from '@/integrations/supabase/client';
 import DesktopBackButton from '@/components/desktop/DesktopBackButton';
 
@@ -31,9 +31,12 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
       
       try {
         // Verifica produtos e status do perfil em paralelo
-        const [productsResult, profileResult] = await Promise.all([
-          supabase.from('products').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          supabase.from('profiles').select('onboarding_completed').eq('id', user.id).maybeSingle()
+        const [productsResult, profileResult] = await Promise.race([
+          Promise.all([
+            supabase.from('products').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+            supabase.from('profiles').select('onboarding_completed').eq('id', user.id).maybeSingle()
+          ]),
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('Tempo limite ao preparar o painel.')), 6000)),
         ]);
         
         if (!mounted) return;
@@ -72,10 +75,7 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
   if (loading || checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-emerald-50 dark:from-[#07110d] dark:via-[#0b1512] dark:to-[#101c17]">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-boracume-orange mx-auto mb-4" />
-          <p className="text-gray-500 text-sm dark:text-slate-400">Carregando...</p>
-        </div>
+        <CompactLoader label="Preparando seu painel..." />
       </div>
     );
   }

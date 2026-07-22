@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import CompactLoader from '@/components/ui/compact-loader';
 
 interface ChecklistTask {
   id: string;
@@ -49,6 +50,20 @@ const defaultTasks = [
 ];
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
+
+const withTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs = 8000): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('A conexão demorou mais que o esperado. Tente novamente.')), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
 
 export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProps> = ({ open, onOpenChange, onUpdated, locked = false }) => {
   const { user } = useAuth();
@@ -107,7 +122,7 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [{ data: settings }, tasksResult, { data: currentRun }, { data: runHistory }] = await Promise.all([
+      const [{ data: settings }, tasksResult, { data: currentRun }, { data: runHistory }] = await withTimeout(Promise.all([
         (supabase as any)
           .from('restaurant_checklist_settings')
           .select('*')
@@ -131,7 +146,7 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
           .eq('user_id', user.id)
           .order('business_date', { ascending: false })
           .limit(15),
-      ]);
+      ]));
 
       let loadedSettings = settings;
       if (!loadedSettings) {
@@ -353,8 +368,7 @@ export const OperationalChecklistDialog: React.FC<OperationalChecklistDialogProp
 
         {loading ? (
           <div className="flex min-h-64 items-center justify-center text-slate-500">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Carregando checklist...
+            <CompactLoader label="Carregando checklist..." />
           </div>
         ) : (
           <div className="space-y-5">

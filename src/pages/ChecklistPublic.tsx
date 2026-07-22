@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import CompactLoader from '@/components/ui/compact-loader';
 
 interface PublicChecklistTask {
   id: string;
@@ -61,7 +62,10 @@ export const ChecklistPublic: React.FC = () => {
     if (!token) return;
     setLoading(true);
     try {
-      const { data: result, error } = await (supabase as any).rpc('get_checklist_by_token', { p_token: token });
+      const { data: result, error } = await Promise.race([
+        (supabase as any).rpc('get_checklist_by_token', { p_token: token }),
+        new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('Tempo limite ao carregar o checklist.')), 8000)),
+      ]);
       if (error) throw error;
       const payload = result as PublicChecklistData;
       setData(payload);
@@ -162,8 +166,7 @@ export const ChecklistPublic: React.FC = () => {
         <div className="mt-4 flex-1 rounded-[28px] border border-[#8CC850]/20 bg-white p-4 shadow-sm">
           {loading ? (
             <div className="flex min-h-80 items-center justify-center text-slate-500">
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Carregando checklist...
+              <CompactLoader label="Carregando checklist..." />
             </div>
           ) : !data ? (
             <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
