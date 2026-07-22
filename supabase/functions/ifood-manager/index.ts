@@ -214,7 +214,13 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'sync_events') {
       const pollingResponse = await fetchIfoodPollingEvents(supabase, settings)
-      const events = Array.isArray(pollingResponse?.data) ? pollingResponse.data : []
+      const events = (Array.isArray(pollingResponse?.data) ? pollingResponse.data : [])
+        .slice()
+        .sort((left: any, right: any) => {
+          const leftTime = new Date(left?.createdAt || 0).getTime()
+          const rightTime = new Date(right?.createdAt || 0).getTime()
+          return leftTime - rightTime
+        })
 
       let inserted = 0
       let duplicates = 0
@@ -229,13 +235,13 @@ Deno.serve(async (req: Request) => {
           if (duplicate) duplicates += 1
           else inserted += 1
 
-          if (!duplicate) {
-            try {
-              await processIfoodEvent(supabase, settings, eventRow)
-              processed += 1
-            } catch {
-              // evento fica persistido com erro para reprocessamento manual
-            }
+          try {
+            // O upsert do pedido é idempotente, então eventos reenviados também
+            // podem recuperar um processamento que falhou anteriormente.
+            await processIfoodEvent(supabase, settings, eventRow)
+            processed += 1
+          } catch {
+            // evento fica persistido com erro para reprocessamento manual
           }
         }
 

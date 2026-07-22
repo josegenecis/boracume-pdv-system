@@ -264,6 +264,9 @@ const buildOrderVariations = (detail: any, paymentSummary: any, benefitsSummary:
 export const sanitizeIfoodSettings = (settings: any) => {
   if (!settings) return null
   const meta = parseSettingsMeta(settings.refresh_token)
+  // Registros criados antes de `merchant_enabled` existir guardam apenas o
+  // status online/offline. Considere ambos para não desativar lojas legadas.
+  const merchantEnabled = meta.merchant_enabled === true || settings.status === 'online'
 
   return {
     id: settings.id,
@@ -271,7 +274,7 @@ export const sanitizeIfoodSettings = (settings: any) => {
     merchant_name: meta.merchant_name || '',
     merchant_timezone: meta.merchant_timezone || '',
     merchant_state: meta.merchant_state || '',
-    merchant_enabled: Boolean(meta.merchant_enabled),
+    merchant_enabled: merchantEnabled,
     status: settings.status || 'offline',
     auth_mode: meta.auth_mode || 'centralized',
     client_id: settings.client_id || '',
@@ -409,7 +412,8 @@ export const ensureIfoodAccessToken = async (supabase: any, settings: any) => {
 }
 
 const joinUrl = (baseUrl: string, path: string, query?: Record<string, any>) => {
-  const url = new URL(path.replace(/^\//, ''), `${baseUrl.replace(/\/$/, '')}/`)
+  const normalizedPath = path.startsWith('/') ? `.${path}` : `./${path}`
+  const url = new URL(normalizedPath, `${baseUrl.replace(/\/$/, '')}/`)
   if (query) {
     Object.entries(query).forEach(([key, value]) => {
       if (value === undefined || value === null || value === '') return
@@ -512,13 +516,20 @@ export const acknowledgeIfoodEvents = async (supabase: any, settings: any, event
 
   if (payload.length === 0) return { status: 204, data: null }
 
-  return await ifoodApiRequest(supabase, settings, {
+  const response = await ifoodApiRequest(supabase, settings, {
     baseUrl: EVENTS_BASE_URL,
     path: '/events/acknowledgment',
     method: 'POST',
     body: payload,
     expectedStatuses: [200, 202, 204],
   })
+
+  await supabase
+    .from('ifood_events')
+    .update({ acknowledged_at: new Date().toISOString() })
+    .in('ifood_event_id', payload.map((event) => event.id))
+
+  return response
 }
 
 export const getIfoodOrderDetails = async (supabase: any, settings: any, orderId: string) =>
@@ -617,18 +628,15 @@ export const persistIfoodEvent = async (
   let duplicate = false
   let existingRow: any = null
 
-  if (merchantId && eventId) {
-    const { data: recent } = await supabase
+  if (eventId) {
+    const { data: existing } = await supabase
       .from('ifood_events')
       .select('*')
-      .eq('merchant_id', merchantId)
-      .order('created_at', { ascending: false })
-      .limit(100)
+      .eq('ifood_event_id', eventId)
+      .maybeSingle()
 
-    if (Array.isArray(recent)) {
-      existingRow = recent.find((row: any) => String(row?.payload?.id || '') === eventId) || null
-      duplicate = Boolean(existingRow)
-    }
+    existingRow = existing || null
+    duplicate = Boolean(existingRow)
   }
 
   if (duplicate && existingRow) {
@@ -641,6 +649,14 @@ export const persistIfoodEvent = async (
       user_id: userId,
       merchant_id: merchantId || null,
       event_type: pickFirstString(payload?.code, payload?.fullCode, payload?.type) || null,
+      ifood_event_id: eventId || null,
+      order_id: pickFirstString(payload?.orderId) || null,
+      full_code: pickFirstString(payload?.fullCode) || null,
+      sales_channel: pickFirstString(payload?.salesChannel) || null,
+      event_created_at: parseDate(payload?.createdAt),
+      source: _context?.source || 'webhook',
+      signature: _context?.signature || null,
+      http_status: _context?.httpStatus || null,
       payload,
       headers: _context?.headers || {},
     })
@@ -679,8 +695,31 @@ const buildLocalOrderPayload = (userId: string, detail: any, fallbackStatusCode?
       detail?.orderer?.phone,
   )
 
+  const variations = buildOrderVariations(detail, paymentSummary, benefitsSummary, fallbackStatusCode)
+  const externalStatus = pickFirstString(fallbackStatusCode, detail?.status)
+  const customerDocument = pickFirstString(
+    detail?.customer?.documentNumber,
+    detail?.customer?.documents?.[0]?.number,
+    detail?.customer?.taxPayerIdentificationNumber,
+  )
+  const pickupCode = pickFirstString(detail?.pickupCode, detail?.delivery?.pickupCode)
+  const scheduledAt = parseDate(detail?.delivery?.deliveryDateTimeStart || detail?.takeout?.takeoutDateTime)
+  const now = new Date().toISOString()
+
   return {
     user_id: userId,
+    source: 'ifood',
+    external_order_id: normalizeString(detail?.id),
+    external_merchant_id: pickFirstString(detail?.merchant?.id, detail?.merchantId) || null,
+    external_status: externalStatus || null,
+    integration_payload: { provider: 'ifood', ifood: variations.ifood },
+    customer_document: customerDocument || null,
+    pickup_code: pickupCode || null,
+    scheduled_at: scheduledAt,
+    confirmed_at: externalStatus === 'CONFIRMED' ? now : null,
+    ready_at: externalStatus === 'READY_TO_PICKUP' ? now : null,
+    dispatched_at: externalStatus === 'DISPATCHED' ? now : null,
+    cancelled_at: externalStatus === 'CANCELLED' ? now : null,
     customer_name: pickFirstString(detail?.customer?.name, detail?.orderer?.name, 'Cliente iFood'),
     customer_phone: customerPhone || null,
     customer_address: buildCustomerAddress(detail) || null,
@@ -702,7 +741,7 @@ const buildLocalOrderPayload = (userId: string, detail: any, fallbackStatusCode?
     delivery_instructions: pickFirstString(detail?.delivery?.observations, detail?.observations) || null,
     estimated_time: pickFirstString(detail?.preparationStartDateTime, detail?.delivery?.deliveryDateTimeStart) || null,
     updated_at: new Date().toISOString(),
-    variations: buildOrderVariations(detail, paymentSummary, benefitsSummary, fallbackStatusCode),
+    variations,
   }
 }
 
@@ -783,26 +822,33 @@ export const processIfoodEvent = async (supabase: any, settings: any, eventRow: 
       localOrder = await applyEventStatusToLocalOrder(supabase, userId, event)
     }
 
-    const meta = parseSettingsMeta(settings.refresh_token)
     await upsertIfoodSettings(supabase, userId, {
       merchant_id: settings.merchant_id,
       last_event_at: parseDate(event?.createdAt) || new Date().toISOString(),
       last_sync_at: new Date().toISOString(),
       last_sync_status: 'ok',
       last_sync_message: `Evento ${fullCode || event?.code || 'N/A'} processado`,
-      status: meta.merchant_enabled ? 'online' : 'offline',
+      status: settings.status === 'online' ? 'online' : 'offline',
     })
+
+    await supabase
+      .from('ifood_events')
+      .update({ processed_at: new Date().toISOString(), processing_error: null })
+      .eq('id', eventRow.id)
 
     return { ok: true, localOrder }
   } catch (error: any) {
-    const meta = parseSettingsMeta(settings.refresh_token)
     await upsertIfoodSettings(supabase, userId, {
       merchant_id: settings.merchant_id,
       last_sync_at: new Date().toISOString(),
       last_sync_status: 'error',
       last_sync_message: String(error?.message || error),
-      status: meta.merchant_enabled ? 'online' : 'offline',
+      status: settings.status === 'online' ? 'online' : 'offline',
     })
+    await supabase
+      .from('ifood_events')
+      .update({ processing_error: String(error?.message || error) })
+      .eq('id', eventRow.id)
     throw error
   }
 }

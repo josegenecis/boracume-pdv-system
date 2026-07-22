@@ -130,6 +130,11 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/ifood-manager/index.ts"
 
+[functions.ifood-poller]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ifood-poller/index.ts"
+
 [functions.orders-update-status]
 enabled = true
 verify_jwt = false
