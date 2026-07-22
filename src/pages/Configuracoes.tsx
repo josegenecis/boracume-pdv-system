@@ -148,7 +148,7 @@ const Configuracoes: React.FC = () => {
               <option value="hardware">Impressoras e Balanças</option>
               <option value="totem">Totem</option>
               <option value="fiscal">Fiscal / NFC-e</option>
-              <option value="ifood">iFood (em breve)</option>
+              <option value="ifood">iFood</option>
               <option value="users">Usuários e Equipe</option>
               <option value="notifications">Notificações</option>
               <option value="support">Suporte</option>

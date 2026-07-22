@@ -154,7 +154,6 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
     name: 'Integração iFood',
     description: 'Integração com iFood para recebimento e operação de pedidos.',
     requiredPlanId: 2,
-    comingSoon: true,
   },
   agent: {
     key: 'agent',
