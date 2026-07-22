@@ -23,6 +23,7 @@ import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth
 import { verifyAdminPin } from '@/services/adminPin';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 import { formatPaymentMethodLabel } from '@/lib/orderDetails';
+import { IfoodLogo } from '@/components/icons/IfoodLogo';
 
 interface Order {
   id: string;
@@ -54,6 +55,36 @@ interface Order {
   integration_payload?: any;
   variations?: any;
 }
+
+const isIfoodOrder = (order: Order) => {
+  const providers = [
+    order.source,
+    order.integration_payload?.provider,
+    order.integration_payload?.ifood?.provider,
+    order.variations?.provider,
+    order.variations?.source,
+    order.variations?.ifood?.provider,
+  ];
+
+  return providers.some((provider) => String(provider || '').toLowerCase() === 'ifood');
+};
+
+const getOrderCardClass = (order: Order, baseClass: string) => (
+  isIfoodOrder(order)
+    ? `${baseClass} border-t-4 border-t-[#EA1D2C] border-l-[#EA1D2C] bg-gradient-to-br from-white via-white to-[#FFF1F2] ring-1 ring-[#EA1D2C]/15 shadow-[0_16px_32px_-24px_rgba(234,29,44,0.65)]`
+    : baseClass
+);
+
+const IfoodOrderBadge = ({ order }: { order: Order }) => {
+  if (!isIfoodOrder(order)) return null;
+
+  return (
+    <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-[#EA1D2C] px-2.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-white shadow-sm">
+      <span>Pedido</span>
+      <IfoodLogo className="h-4 w-auto" classNamePath="fill-white" />
+    </span>
+  );
+};
 
 const isTableServiceOrder = (order: any) => {
   const orderType = String(order?.order_type || '').toLowerCase();
@@ -1060,13 +1091,16 @@ const Orders = () => {
     const primaryAction = getMobilePrimaryAction(order);
 
     return (
-      <Card key={order.id} className="overflow-hidden rounded-[18px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_30px_-30px_rgba(0,50,35,0.18)]">
+      <Card key={order.id} className={getOrderCardClass(order, 'overflow-hidden rounded-[18px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_30px_-30px_rgba(0,50,35,0.18)]')}>
         <CardContent className="p-2.5">
           <div className="space-y-2">
             <button type="button" className="w-full text-left" onClick={() => openOrderDetails(order)}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[14px] font-bold text-slate-900">Pedido {order.order_number}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-[14px] font-bold text-slate-900">Pedido {order.order_number}</div>
+                    <IfoodOrderBadge order={order} />
+                  </div>
                   <div className="mt-0.5 text-[12px] font-medium text-slate-700">{order.customer_name}</div>
                   <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500">
                     <span className="inline-flex items-center gap-1">
@@ -1340,11 +1374,14 @@ const Orders = () => {
                     <div className="text-sm text-muted-foreground py-8 text-center">Nenhum pedido em entrega</div>
                   ) : (
                     inDeliveryOrders.map((order) => (
-                      <Card key={order.id} className="border-l-4 border-l-purple-500">
+                      <Card key={order.id} className={getOrderCardClass(order, 'overflow-hidden border-l-4 border-l-purple-500')}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="font-semibold">Pedido {order.order_number}</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="font-semibold">Pedido {order.order_number}</div>
+                                <IfoodOrderBadge order={order} />
+                              </div>
                               <div className="text-sm text-muted-foreground truncate">{order.customer_name}</div>
                               <div className="text-sm text-muted-foreground">{formatCurrency(order.total)}</div>
                             </div>
@@ -1374,11 +1411,14 @@ const Orders = () => {
                     <div className="text-sm text-muted-foreground py-8 text-center">Nenhum pedido despachado</div>
                   ) : (
                     deliveredOrders.map((order) => (
-                      <Card key={order.id} className="border-l-4 border-l-gray-400 cursor-pointer" onClick={() => openOrderDetails(order)}>
+                      <Card key={order.id} className={getOrderCardClass(order, 'overflow-hidden border-l-4 border-l-gray-400 cursor-pointer')} onClick={() => openOrderDetails(order)}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="font-semibold">Pedido {order.order_number}</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="font-semibold">Pedido {order.order_number}</div>
+                                <IfoodOrderBadge order={order} />
+                              </div>
                               <div className="text-sm text-muted-foreground truncate">{order.customer_name}</div>
                               <div className="text-sm text-muted-foreground">{formatCurrency(order.total)}</div>
                             </div>
@@ -1567,11 +1607,14 @@ const Orders = () => {
                           <Draggable key={order.id} draggableId={order.id} index={index}>
                             {(draggableProvided) => (
                               <div ref={draggableProvided.innerRef} {...draggableProvided.draggableProps}>
-                                <Card className="hover:shadow-sm transition-shadow">
+                                <Card className={getOrderCardClass(order, 'overflow-hidden hover:shadow-sm transition-shadow')}>
                                   <CardContent className="p-3" onClick={() => openOrderDetails(order)}>
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
-                                        <div className="font-semibold text-sm truncate">Pedido {order.order_number}</div>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <div className="font-semibold text-sm truncate">Pedido {order.order_number}</div>
+                                          <IfoodOrderBadge order={order} />
+                                        </div>
                                         <div className="text-xs text-muted-foreground truncate">{order.customer_name}</div>
                                       </div>
                                       <div className="flex flex-col items-end gap-1">
@@ -1636,11 +1679,12 @@ const Orders = () => {
             ) : (
               <div className="space-y-4">
                 {pendingOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-yellow-500 cursor-pointer hover:shadow-md transition-shadow">
+                  <Card key={order.id} className={getOrderCardClass(order, 'overflow-hidden border-l-4 border-l-yellow-500 cursor-pointer hover:shadow-md transition-shadow')}>
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
+                          <IfoodOrderBadge order={order} />
                           {getOrderStatusBadge(order)}
                           <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
@@ -1787,11 +1831,12 @@ const Orders = () => {
             ) : (
               <div className="space-y-4">
                 {activeOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow">
+                  <Card key={order.id} className={getOrderCardClass(order, 'overflow-hidden border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow')}>
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
+                          <IfoodOrderBadge order={order} />
                           {getOrderStatusBadge(order)}
                           <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
@@ -1948,11 +1993,12 @@ const Orders = () => {
             ) : (
               <div className="space-y-4">
                 {completedOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-purple-500 cursor-pointer hover:shadow-md transition-shadow">
+                  <Card key={order.id} className={getOrderCardClass(order, 'overflow-hidden border-l-4 border-l-purple-500 cursor-pointer hover:shadow-md transition-shadow')}>
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
+                          <IfoodOrderBadge order={order} />
                           {getOrderStatusBadge(order)}
                           <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
