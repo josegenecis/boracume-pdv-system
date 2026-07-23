@@ -162,6 +162,157 @@ async function extractAnotaCategories(rawUrl: string) {
   return normalizeAnotaCategories(data);
 }
 
+const OLACLICK_API_BASE = 'https://api.olaclick.app';
+
+async function fetchOlaClickJson(path: string, rawUrl: string) {
+  const response = await fetch(`${OLACLICK_API_BASE}${path}`, {
+    headers: {
+      accept: 'application/json, text/plain, */*',
+      origin: new URL(rawUrl).origin,
+      referer: rawUrl,
+      'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+    },
+    redirect: 'follow',
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`OlaClick respondeu ${response.status}. ${body.slice(0, 180)}`);
+  }
+
+  return response.json();
+}
+
+function olaClickProductPrice(product: any) {
+  const variants = (product?.product_variants || [])
+    .filter((variant: any) => variant && variant?.visible !== false)
+    .sort((a: any, b: any) => Number(a?.position ?? 9999) - Number(b?.position ?? 9999));
+
+  const first = variants[0];
+  return numberMoney(first?.price ?? first?.original_price ?? 0);
+}
+
+function normalizeOlaClickCategories(rawCategories: any[]) {
+  const visibleCategories = (rawCategories || [])
+    .filter((category: any) => category?.visible !== false && Array.isArray(category?.products));
+
+  // A OlaClick repete alguns produtos na categoria virtual "FAVORITE".
+  // A categoria NORMAL é a fonte canônica do cardápio e evita duplicações.
+  const normalCategories = visibleCategories.filter((category: any) => cleanText(category?.type).toUpperCase() === 'NORMAL');
+  const sourceCategories = normalCategories.length > 0 ? normalCategories : visibleCategories;
+  const seenProductIds = new Set<string>();
+
+  const categories = sourceCategories
+    .sort((a: any, b: any) => Number(a?.position ?? 9999) - Number(b?.position ?? 9999))
+    .map((category: any) => ({
+      name: cleanText(category?.name) || 'Geral',
+      items: (category?.products || [])
+        .filter((product: any) => {
+          if (!cleanText(product?.name) || product?.visible === false) return false;
+          const productId = cleanText(product?.id);
+          if (productId && seenProductIds.has(productId)) return false;
+          if (productId) seenProductIds.add(productId);
+          return true;
+        })
+        .sort((a: any, b: any) => Number(a?.position ?? 9999) - Number(b?.position ?? 9999))
+        .map((product: any) => {
+          const priceVariants = (product?.product_variants || [])
+            .filter((variant: any) => cleanText(variant?.name) && variant?.visible !== false)
+            .sort((a: any, b: any) => Number(a?.position ?? 9999) - Number(b?.position ?? 9999))
+            .map((variant: any) => ({
+              name: cleanText(variant?.name),
+              price: numberMoney(variant?.price ?? variant?.original_price ?? 0),
+            }))
+            .filter((variant: any) => variant.name);
+
+          const variations = (product?.modifier_categories || [])
+            .filter((group: any) => cleanText(group?.name) && group?.is_active !== false)
+            .sort((a: any, b: any) =>
+              Number(a?.product_modifier_category_position ?? a?.position ?? 9999) -
+              Number(b?.product_modifier_category_position ?? b?.position ?? 9999)
+            )
+            .map((group: any) => {
+              const minSelections = Number(group?.min_modifiers || 0);
+              const maxSelections = Number(group?.max_modifiers || 0);
+              const required = typeof group?.required === 'boolean'
+                ? group.required
+                : minSelections > 0;
+
+              return {
+                name: cleanText(group?.name) || 'Adicionais',
+                required,
+                max_selections: Math.max(1, maxSelections || 1),
+                options: (group?.modifiers || [])
+                  .filter((modifier: any) => cleanText(modifier?.name) && modifier?.visible !== false)
+                  .sort((a: any, b: any) => Number(a?.position ?? 9999) - Number(b?.position ?? 9999))
+                  .map((modifier: any) => ({
+                    name: cleanText(modifier?.name),
+                    price: numberMoney(modifier?.price ?? modifier?.original_price ?? 0),
+                  }))
+                  .filter((option: any) => option.name),
+              };
+            })
+            .filter((group: any) => group.options.length > 0);
+
+          return {
+            name: cleanText(product?.name),
+            description: cleanText(product?.description),
+            price: olaClickProductPrice(product),
+            image_url: cleanText(product?.images?.[0]?.image_url),
+            available: product?.visible !== false,
+            price_variants: priceVariants,
+            variations,
+          };
+        })
+        .filter((product: any) => product.name),
+    }))
+    .filter((category: any) => category.items.length > 0);
+
+  if (!categories.length) {
+    throw new Error('Não encontrei categorias ou produtos públicos nesse cardápio OlaClick.');
+  }
+
+  return categories;
+}
+
+async function extractOlaClickCategories(rawUrl: string) {
+  const parsedUrl = new URL(rawUrl);
+  const host = parsedUrl.hostname.toLowerCase();
+  if (host !== 'ola.click' && !host.endsWith('.ola.click')) {
+    throw new Error('Link da OlaClick inválido.');
+  }
+
+  const hostData = await fetchOlaClickJson(`/ms-companies/public/hosts/${encodeURIComponent(host)}`, rawUrl);
+  const companyId = cleanText(hostData?.data?.company_id);
+  if (!companyId) {
+    throw new Error('Não consegui identificar a empresa nesse link OlaClick.');
+  }
+
+  const [companyData, menuData] = await Promise.all([
+    fetchOlaClickJson(`/ms-companies/public/companies/${encodeURIComponent(companyId)}`, rawUrl),
+    fetchOlaClickJson(`/ms-products/public/companies/${encodeURIComponent(companyId)}/categories`, rawUrl),
+  ]);
+
+  const company = companyData?.data || {};
+  const rawCategories = Array.isArray(menuData?.data) ? menuData.data : [];
+  const categories = normalizeOlaClickCategories(rawCategories);
+  const products = categories.flatMap((category: any) => category.items || []);
+
+  console.log('[OlaClick] categorias encontradas:', categories.length);
+  console.log('[OlaClick] produtos encontrados:', products.length);
+  console.log('[OlaClick] produtos com complementos:', products.filter((product: any) => product.variations?.length).length);
+
+  return {
+    restaurant: {
+      name: cleanText(company?.name),
+      phone: cleanText(company?.whatsapp),
+      address: cleanText(company?.address),
+      logo: cleanText(company?.logo_url),
+    },
+    categories,
+  };
+}
+
 function cardapioWebSlugFromUrl(rawUrl: string) {
   try {
     const url = new URL(rawUrl);
@@ -566,6 +717,21 @@ Deno.serve(async (req: Request) => {
               const categories = await extractAnotaCategories(rawUrl);
               return new Response(
                 JSON.stringify({ success: true, status: 'completed', platform: 'anota-ai', categories }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              );
+            }
+
+            if (parsedUrl.host.toLowerCase() === 'ola.click' || parsedUrl.host.toLowerCase().endsWith('.ola.click')) {
+              console.log('[Start] Importação OlaClick direta no scrape-menu.');
+              const result = await extractOlaClickCategories(rawUrl);
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  status: 'completed',
+                  platform: 'olaclick',
+                  restaurant: result.restaurant,
+                  categories: result.categories,
+                }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
               );
             }
@@ -1218,10 +1384,6 @@ Deno.serve(async (req: Request) => {
                   
                   if (url.includes('cardapioweb.com') && !hasPrice && looksClosed) {
                     return 'O CardápioWeb não exibiu os itens (a loja parece estar fechada). Tente importar em horário de funcionamento.';
-                  }
-                  
-                  if (url.includes('ola.click')) {
-                     return 'A plataforma OlaClick possui proteção contra robôs que impede a leitura automática por link. Por favor, use a opção "Texto" (copie o cardápio e cole na aba Texto) para importar.';
                   }
                   
                   return 'Não foi possível extrair produtos do dataset.';
