@@ -8,7 +8,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import CompactLoader from '@/components/ui/compact-loader';
 import { supabase } from '@/integrations/supabase/client';
-import DesktopBackButton from '@/components/desktop/DesktopBackButton';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -114,7 +113,6 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
                 ${isMobile ? 'mobile-safe-bottom px-3 py-3 pb-32' : 'px-4 py-4 sm:px-6 sm:py-6'}
               `}
             >
-              <DesktopBackButton />
               {children}
             </div>
           </div>

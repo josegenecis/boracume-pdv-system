@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { logWhatsAppBotStep, pauseRestaurantBotForConversation } from '../_shared/whatsapp-bot.ts';
+import { isRecentAutomatedBotReply, logWhatsAppBotStep, pauseRestaurantBotForConversation } from '../_shared/whatsapp-bot.ts';
 import { processPopAiMessage } from '../_shared/pop-ai/whatsappAiWebhookHandler.ts';
 
 const corsHeaders = {
@@ -57,7 +57,32 @@ function pickMediaFromMessage(msg: any) {
 
 function normalizeNumber(remoteJid: string): string {
   const digits = String(remoteJid || '').split('@')[0].replace(/\D/g, '');
-  return digits;
+  if (digits.length < 10 || digits.length > 13) return '';
+  return digits.startsWith('55') ? digits : `55${digits}`;
+}
+
+function pickCustomerJid(data: any): string {
+  const key = data?.key || data?.data?.key || {};
+  const candidates = [
+    key?.remoteJidAlt,
+    data?.remoteJidAlt,
+    data?.data?.remoteJidAlt,
+    data?.senderPn,
+    data?.data?.senderPn,
+    key?.participantAlt,
+    data?.participantAlt,
+    data?.data?.participantAlt,
+    key?.remoteJid,
+    data?.remoteJid,
+    data?.data?.remoteJid,
+    data?.sender,
+    data?.data?.sender
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+
+  const phoneJid = candidates.find((value) => /@(s\.whatsapp\.net|c\.us)$/i.test(value));
+  if (phoneJid) return phoneJid;
+
+  return candidates.find((value) => !/@lid$/i.test(value) && Boolean(normalizeNumber(value))) || '';
 }
 
 function pickInstanceName(body: any): string {
@@ -218,7 +243,7 @@ Deno.serve(async (req: Request) => {
   const rawFromMe = getFromMeRaw(data);
   const fromMe = isMessageFromRestaurant(data);
 
-  const remoteJid = String(data?.key?.remoteJid || data?.remoteJid || '');
+  const remoteJid = pickCustomerJid(data);
   if (!remoteJid || remoteJid.includes('@g.us')) return json({ success: true, ignored: true });
 
   const customerPhone = normalizeNumber(remoteJid);
@@ -280,7 +305,12 @@ Deno.serve(async (req: Request) => {
   if (!userId) return json({ success: false, error: 'User not mapped for instance' }, 400);
 
   if (fromMe) {
-    if (isLikelyBotEcho(text)) {
+    if (isLikelyBotEcho(text) || await isRecentAutomatedBotReply({
+      supabase,
+      restaurantId: userId,
+      customerPhone,
+      text
+    })) {
       return json({ success: true, ignored: true, reason: 'bot_echo' });
     }
 

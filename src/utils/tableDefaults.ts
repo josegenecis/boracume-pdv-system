@@ -15,6 +15,7 @@ export async function ensureDefaultTables(userId?: string | null) {
   if (error) throw error;
 
   const existingTables = data || [];
+  const visibleTables = existingTables.filter((table) => !table.archived_at);
   const existingNumbers = new Set(
     existingTables
       .map((table) => Number(table.table_number))
@@ -25,7 +26,7 @@ export async function ensureDefaultTables(userId?: string | null) {
     .filter((tableNumber) => !existingNumbers.has(tableNumber));
 
   if (missingNumbers.length === 0) {
-    return existingTables;
+    return visibleTables;
   }
 
   const { error: insertError } = await supabase
@@ -50,5 +51,5 @@ export async function ensureDefaultTables(userId?: string | null) {
 
   if (refreshError) throw refreshError;
 
-  return refreshedTables || [];
+  return (refreshedTables || []).filter((table) => !table.archived_at);
 }

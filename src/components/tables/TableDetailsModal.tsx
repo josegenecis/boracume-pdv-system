@@ -9,7 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { Switch } from '@/components/ui/switch';
-import { Users, Clock, ArrowRightLeft, Printer, WalletCards, ReceiptText, Plus, Trash2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Users, Clock, ArrowRightLeft, Printer, WalletCards, ReceiptText, Plus, Trash2, UserRoundCheck } from 'lucide-react';
 import CheckoutModal, { CheckoutPaymentAmounts, CheckoutPaymentMethod } from '@/components/checkout/CheckoutModal';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -153,6 +155,10 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const [serviceChargeAccepted, setServiceChargeAccepted] = useState(false);
   const [serviceChargePercentage, setServiceChargePercentage] = useState(10);
   const [serviceChargeTaxWithhold, setServiceChargeTaxWithhold] = useState(0);
+  const [staffConsumptionOpen, setStaffConsumptionOpen] = useState(false);
+  const [staffEmployeeName, setStaffEmployeeName] = useState('');
+  const [staffDueDate, setStaffDueDate] = useState('');
+  const [staffNotes, setStaffNotes] = useState('');
   const { toast } = useToast();
   const { user } = useAuth();
   const { settings: checkoutSettings } = useCheckoutSettings();
@@ -386,6 +392,57 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       title: "Impressão enviada",
       description: "Comanda parcial enviada para impressão.",
     });
+  };
+
+  const handleDeferToStaff = async () => {
+    if (!table || !currentOrder || !user?.id) return;
+    if (!staffEmployeeName.trim()) {
+      toast({
+        title: 'Informe o funcionário',
+        description: 'O nome é obrigatório para manter a cobrança identificada.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (currentOrder.source !== 'table_accounts') {
+      toast({
+        title: 'Conta antiga não compatível',
+        description: 'Esta conta precisa ser fechada pelo fluxo atual. Novos lançamentos já permitem pagar depois.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { error } = await supabase.rpc('defer_table_account_to_staff', {
+        p_account_id: currentOrder.account_id || currentOrder.id,
+        p_employee_name: staffEmployeeName.trim(),
+        p_due_date: staffDueDate || null,
+        p_notes: staffNotes.trim() || null,
+      });
+      if (error) throw error;
+
+      toast({
+        title: 'Consumo registrado',
+        description: `A mesa ${table.table_number} foi liberada e a dívida ficou vinculada a ${staffEmployeeName.trim()}.`,
+      });
+      setStaffConsumptionOpen(false);
+      setStaffEmployeeName('');
+      setStaffDueDate('');
+      setStaffNotes('');
+      onRefresh();
+      onClose();
+    } catch (error) {
+      console.error('Erro ao lançar consumo do funcionário:', error);
+      toast({
+        title: 'Não foi possível liberar a mesa',
+        description: error instanceof Error ? error.message : 'Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const finalizeAccountRecord = async (accountRowId: string, nextAccountStatus: 'paid' | 'closed', paymentTimestamp: string) => {
@@ -1117,6 +1174,28 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             </Card>
 
             {/* Ações */}
+            <Card className="border-amber-200 bg-amber-50/70">
+              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 font-bold text-amber-950">
+                    <UserRoundCheck size={18} />
+                    Funcionário vai pagar depois?
+                  </div>
+                  <p className="mt-1 text-sm text-amber-800">
+                    Registre o responsável, preserve os itens e libere a mesa sem apagar a movimentação.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0 border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+                  onClick={() => setStaffConsumptionOpen(true)}
+                >
+                  Lançar para funcionário
+                </Button>
+              </CardContent>
+            </Card>
+
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(340px,1.2fr)]">
               {/* Transferir Mesa */}
               <Card className="min-w-0">
@@ -1239,6 +1318,56 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           </div>
         )}
       </DialogContent>
+      </Dialog>
+
+      <Dialog open={staffConsumptionOpen} onOpenChange={setStaffConsumptionOpen}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Registrar consumo de funcionário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              A conta de {formatCurrency(currentOrder?.total || 0)} será preservada e a Mesa {table.table_number} ficará livre.
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="staff-employee-name">Funcionário responsável</Label>
+              <Input
+                id="staff-employee-name"
+                value={staffEmployeeName}
+                onChange={(event) => setStaffEmployeeName(event.target.value)}
+                placeholder="Ex.: João da cozinha"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="staff-due-date">Data combinada para pagamento (opcional)</Label>
+              <Input
+                id="staff-due-date"
+                type="date"
+                value={staffDueDate}
+                onChange={(event) => setStaffDueDate(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="staff-notes">Observação (opcional)</Label>
+              <Textarea
+                id="staff-notes"
+                value={staffNotes}
+                onChange={(event) => setStaffNotes(event.target.value)}
+                placeholder="Ex.: descontar no pagamento do dia 30"
+                rows={3}
+              />
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setStaffConsumptionOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void handleDeferToStaff()} disabled={loading || !staffEmployeeName.trim()}>
+                Registrar e liberar mesa
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
       </Dialog>
 
       <CheckoutModal

@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { extractPhoneFromRemoteJid } from "../_shared/restaurant-whatsapp.ts";
-import { logWhatsAppBotStep, pauseRestaurantBotForConversation } from "../_shared/whatsapp-bot.ts";
+import { isRecentAutomatedBotReply, logWhatsAppBotStep, pauseRestaurantBotForConversation } from "../_shared/whatsapp-bot.ts";
 import { processPopAiMessage } from "../_shared/pop-ai/whatsappAiWebhookHandler.ts";
 
 const corsHeaders = {
@@ -145,6 +145,34 @@ function isMessageFromRestaurant(item: any) {
   return toBooleanFlag(getFromMeRaw(item));
 }
 
+function pickCustomerJid(item: any) {
+  const key = item?.key || item?.data?.key || {};
+  const candidates = [
+    key?.remoteJidAlt,
+    item?.remoteJidAlt,
+    item?.data?.remoteJidAlt,
+    item?.senderPn,
+    item?.data?.senderPn,
+    key?.participantAlt,
+    item?.participantAlt,
+    item?.data?.participantAlt,
+    key?.remoteJid,
+    item?.remoteJid,
+    item?.data?.remoteJid,
+    item?.Info?.Chat,
+    item?.data?.Info?.Chat
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+
+  const phoneJid = candidates.find((value) => /@(s\.whatsapp\.net|c\.us)$/i.test(value));
+  if (phoneJid) return phoneJid;
+
+  return candidates.find((value) => {
+    if (/@lid$/i.test(value)) return false;
+    const digits = value.split('@')[0].split(':')[0].replace(/\D/g, '');
+    return digits.length >= 10 && digits.length <= 13;
+  }) || '';
+}
+
 serve(async (req) => {
   const debugMode = new URL(req.url).searchParams.get('debug') === '1';
   if (req.method === 'OPTIONS') {
@@ -279,14 +307,7 @@ serve(async (req) => {
 
       const outgoingMessages = candidates.filter((item: any) => {
         const key = item?.key || item?.data?.key || {};
-        const remoteJid = String(
-          key?.remoteJid ||
-          item?.remoteJid ||
-          item?.data?.remoteJid ||
-          item?.Info?.Chat ||
-          item?.data?.Info?.Chat ||
-          ''
-        );
+        const remoteJid = pickCustomerJid(item);
         const fromMe = isMessageFromRestaurant(item);
         return fromMe && remoteJid && !remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast');
       });
@@ -294,14 +315,7 @@ serve(async (req) => {
       if (outgoingMessages.length > 0) {
         const primaryOutgoing = outgoingMessages[0];
         const key = primaryOutgoing?.key || primaryOutgoing?.data?.key || {};
-        const remoteJid = String(
-          key?.remoteJid ||
-          primaryOutgoing?.remoteJid ||
-          primaryOutgoing?.data?.remoteJid ||
-          primaryOutgoing?.Info?.Chat ||
-          primaryOutgoing?.data?.Info?.Chat ||
-          ''
-        );
+        const remoteJid = pickCustomerJid(primaryOutgoing);
         let outgoingText = Array.from(new Set(outgoingMessages
           .map((outgoing: any) => {
             const message =
@@ -322,7 +336,16 @@ serve(async (req) => {
         const phone = extractPhoneFromRemoteJid(remoteJid);
         if (!outgoingText) outgoingText = '[mensagem enviada pelo restaurante]';
 
-        if (phone && outgoingText && !isLikelyBotEcho(outgoingText)) {
+        const isBotEcho = phone && outgoingText
+          ? isLikelyBotEcho(outgoingText) || await isRecentAutomatedBotReply({
+              supabase: supabaseClient,
+              restaurantId: instanceRow.restaurant_id,
+              customerPhone: phone,
+              text: outgoingText
+            })
+          : false;
+
+        if (phone && outgoingText && !isBotEcho) {
           const pauseResult = await pauseRestaurantBotForConversation({
             supabase: supabaseClient,
             restaurantId: instanceRow.restaurant_id,
@@ -345,14 +368,7 @@ serve(async (req) => {
 
       const incomingMessages = candidates.filter((item: any) => {
         const key = item?.key || item?.data?.key || {};
-        const remoteJid = String(
-          key?.remoteJid ||
-          item?.remoteJid ||
-          item?.data?.remoteJid ||
-          item?.Info?.Chat ||
-          item?.data?.Info?.Chat ||
-          ''
-        );
+        const remoteJid = pickCustomerJid(item);
         const fromMe = isMessageFromRestaurant(item);
         return !fromMe && remoteJid && !remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast');
       });
@@ -360,14 +376,7 @@ serve(async (req) => {
       if (incomingMessages.length > 0) {
         const primaryIncoming = incomingMessages[0];
         const key = primaryIncoming?.key || primaryIncoming?.data?.key || {};
-        const remoteJid = String(
-          key?.remoteJid ||
-          primaryIncoming?.remoteJid ||
-          primaryIncoming?.data?.remoteJid ||
-          primaryIncoming?.Info?.Chat ||
-          primaryIncoming?.data?.Info?.Chat ||
-          ''
-        );
+        const remoteJid = pickCustomerJid(primaryIncoming);
         const text = Array.from(new Set(incomingMessages
           .map((incoming: any) => {
             const message =

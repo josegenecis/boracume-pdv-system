@@ -223,7 +223,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   if (showVariations && selectedProduct) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-2xl overflow-x-hidden overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Personalizar Produto</DialogTitle>
           </DialogHeader>
@@ -244,12 +244,12 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-4xl overflow-x-hidden overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Selecionar Produto</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
+        <div className="min-w-0 max-w-full space-y-4 overflow-hidden">
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
@@ -261,7 +261,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
           </div>
 
           {categoriesWithProducts.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
               <Button
                 type="button"
                 variant={selectedCategoryId === 'all' ? 'default' : 'outline'}
@@ -294,14 +294,14 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
               </p>
             </div>
           ) : layout === 'list' ? (
-            <div className="divide-y rounded-xl border bg-white">
+            <div className="min-w-0 max-w-full divide-y overflow-hidden rounded-xl border bg-white">
               {filteredProducts.map((product) => {
                 const isLowStock = product.track_stock && product.stock_quantity <= product.low_stock_threshold;
                 return (
                   <button
                     key={product.id}
                     type="button"
-                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#F8FAF8] ${
+                    className={`flex min-w-0 max-w-full items-center gap-3 overflow-hidden px-3 py-2.5 text-left transition-colors hover:bg-[#F8FAF8] ${
                       isLowStock ? 'bg-red-50/60' : ''
                     }`}
                     onClick={() => handleProductSelect(product)}
@@ -309,10 +309,12 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 	                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-slate-50">
 	                      <ProductThumb product={product} />
 	                    </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 overflow-hidden">
                       <div className="truncate text-sm font-semibold text-[#082F23]">{product.name}</div>
                       {product.description ? (
-                        <div className="truncate text-xs text-slate-500">{product.description}</div>
+                        <div className="max-w-full truncate text-xs text-slate-500" title={product.description}>
+                          {product.description}
+                        </div>
                       ) : null}
                     </div>
                     {isLowStock ? (
@@ -320,7 +322,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                         Estoque baixo
                       </Badge>
                     ) : null}
-                    <div className="shrink-0 rounded-full bg-[#F0F7E8] px-3 py-1 text-sm font-bold text-[#0B5137]">
+                    <div className="shrink-0 rounded-full bg-[#F0F7E8] px-2 py-1 text-xs font-bold text-[#0B5137] sm:px-3 sm:text-sm">
                       R$ {Number(product.price || 0).toFixed(2)}
                     </div>
                   </button>

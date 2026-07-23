@@ -664,7 +664,7 @@ function buildOrderSummary(draft: any) {
 async function loadOrderDraft(supabase: any, conversationId: string) {
   const { data } = await supabase
     .from('whatsapp_messages')
-    .select('id, content')
+    .select('id, content, sent_at')
     .eq('conversation_id', conversationId)
     .eq('sender', 'bot')
     .eq('message_type', 'order_draft')
@@ -672,7 +672,21 @@ async function loadOrderDraft(supabase: any, conversationId: string) {
     .limit(1)
     .maybeSingle();
   try {
-    return data?.content ? JSON.parse(String(data.content)) : null;
+    if (!data?.content) return null;
+    const parsed = JSON.parse(String(data.content));
+    if (!parsed || parsed.cleared) return parsed || null;
+
+    const rawTtl = Number(getEnv('WHATSAPP_ORDER_DRAFT_TTL_MINUTES', '180'));
+    const ttlMinutes = Number.isFinite(rawTtl) && rawTtl > 0 ? rawTtl : 180;
+    const updatedAt = new Date(String(parsed.updated_at || data.sent_at || '')).getTime();
+    if (!Number.isFinite(updatedAt) || Date.now() - updatedAt > ttlMinutes * 60_000) {
+      return null;
+    }
+
+    return {
+      ...parsed,
+      updated_at: parsed.updated_at || data.sent_at
+    };
   } catch {
     return null;
   }
@@ -1569,22 +1583,47 @@ async function callOpenAiBot(payload: {
     return '';
   }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/evolution-bot-ai`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-boracume-key': BORACUME_INTERNAL_KEY
-    },
-    body: JSON.stringify(payload)
-  });
+  // O cliente Supabase é usado apenas para auditoria local e contém referências
+  // circulares. Nunca deve ser serializado no payload enviado à função de IA.
+  const requestPayload = {
+    message: payload.message,
+    restaurantId: payload.restaurantId,
+    customerPhone: payload.customerPhone,
+    instance: payload.instance,
+    media: payload.media || null,
+    conversationHistory: payload.conversationHistory
+  };
 
-  const data = await response.json().catch(() => null);
-  await logWhatsAppBotStep(payload.supabase, payload.restaurantId, response.ok ? 'whatsapp_bot_openai_ok' : 'whatsapp_bot_openai_error', response.ok ? 'OpenAI respondeu para o bot' : 'OpenAI não respondeu com sucesso para o bot', {
-    status: response.status,
+  let response: Response | null = null;
+  let lastError = '';
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
+    try {
+      response = await fetch(`${SUPABASE_URL}/functions/v1/evolution-bot-ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-boracume-key': BORACUME_INTERNAL_KEY
+        },
+        body: JSON.stringify(requestPayload),
+        signal: controller.signal
+      });
+      if (response.ok || response.status < 500) break;
+    } catch (error: any) {
+      lastError = String(error?.message || error || 'network_error');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const data = response ? await response.json().catch(() => null) : null;
+  await logWhatsAppBotStep(payload.supabase, payload.restaurantId, response?.ok ? 'whatsapp_bot_openai_ok' : 'whatsapp_bot_openai_error', response?.ok ? 'OpenAI respondeu para o bot' : 'OpenAI não respondeu com sucesso para o bot', {
+    status: response?.status || 0,
     instance: payload.instance,
     customerPhone: payload.customerPhone,
     hasMessage: Boolean(String(data?.message || '').trim()),
-    error: String(data?.error || data?.details || '')
+    error: String(data?.error || data?.details || lastError || '')
   });
   const message = String(data?.message || '').trim();
   if (/^teste ok\b/i.test(message)) return '';
@@ -1741,6 +1780,80 @@ export async function sendEvolutionText(restaurantId: string, instanceName: stri
       data: attempt.data || attempt.error || null
     }))
   };
+}
+
+function normalizeBotReplyForComparison(value: unknown) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+async function markAutomatedBotReply(
+  supabase: any,
+  restaurantId: string,
+  customerPhone: string,
+  conversationId: string,
+  replyText: string
+) {
+  await logWhatsAppBotStep(
+    supabase,
+    restaurantId,
+    'whatsapp_bot_outgoing_marker',
+    'Resposta automática preparada para envio',
+    {
+      customerPhone,
+      conversationId,
+      replyText: normalizeBotReplyForComparison(replyText)
+    }
+  );
+}
+
+async function sendTrackedBotText(params: {
+  supabase: any;
+  restaurantId: string;
+  instanceName: string;
+  customerPhone: string;
+  conversationId: string;
+  replyText: string;
+}) {
+  await markAutomatedBotReply(
+    params.supabase,
+    params.restaurantId,
+    params.customerPhone,
+    params.conversationId,
+    params.replyText
+  );
+  return sendEvolutionText(
+    params.restaurantId,
+    params.instanceName,
+    params.customerPhone,
+    params.replyText
+  );
+}
+
+export async function isRecentAutomatedBotReply(params: {
+  supabase: any;
+  restaurantId: string;
+  customerPhone: string;
+  text: string;
+}) {
+  const text = normalizeBotReplyForComparison(params.text);
+  if (!text || !params.supabase || !params.restaurantId) return false;
+
+  const cutoff = new Date(Date.now() - 3 * 60_000).toISOString();
+  const { data } = await params.supabase
+    .from('agent_activity_logs')
+    .select('metadata, created_at')
+    .eq('user_id', params.restaurantId)
+    .eq('action_type', 'whatsapp_bot_outgoing_marker')
+    .gte('created_at', cutoff)
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  const phone = normalizePhone(params.customerPhone);
+  return (data || []).some((row: any) => {
+    const metadata = row?.metadata || {};
+    return normalizePhone(String(metadata.customerPhone || '')) === phone &&
+      normalizeBotReplyForComparison(metadata.replyText) === text;
+  });
 }
 
 async function transcribeIncomingAudio(media: any) {
@@ -1900,7 +2013,14 @@ export async function processRestaurantBotMessage(params: {
       .eq('status', 'queued');
 
     const optOutReply = `Pronto. Não vou enviar novas ofertas por aqui. Se precisar falar com o ${context.restaurantName}, é só mandar mensagem.`;
-    const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, optOutReply);
+    const sendResult = await sendTrackedBotText({
+      supabase,
+      restaurantId,
+      instanceName,
+      customerPhone,
+      conversationId,
+      replyText: optOutReply
+    });
     if (sendResult?.ok) {
       await supabase.from('whatsapp_messages').insert({
         conversation_id: conversationId,
@@ -2074,7 +2194,14 @@ export async function processRestaurantBotMessage(params: {
       products.find((item: any) => String(item.id) === String(draftProductId));
     if (product) {
       const replyText = buildProductComplementsReply(restaurantId, product, variationsByProduct);
-      const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, replyText);
+      const sendResult = await sendTrackedBotText({
+        supabase,
+        restaurantId,
+        instanceName,
+        customerPhone,
+        conversationId,
+        replyText
+      });
       if (!sendResult?.ok) return { ok: false, error: 'send_failed', details: sendResult };
       await supabase.from('whatsapp_messages').insert({
         conversation_id: conversationId,
@@ -2088,7 +2215,14 @@ export async function processRestaurantBotMessage(params: {
     const complementMatches = findComplementAvailability(text, products, variationsByProduct);
     if (complementMatches.length > 0) {
       const replyText = buildComplementAvailabilityReply(text, complementMatches);
-      const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, replyText);
+      const sendResult = await sendTrackedBotText({
+        supabase,
+        restaurantId,
+        instanceName,
+        customerPhone,
+        conversationId,
+        replyText
+      });
       if (!sendResult?.ok) return { ok: false, error: 'send_failed', details: sendResult };
       await supabase.from('whatsapp_messages').insert({
         conversation_id: conversationId,
@@ -2101,9 +2235,18 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
-  const existingDraft = await loadOrderDraft(supabase, conversationId);
+  let existingDraft = await loadOrderDraft(supabase, conversationId);
+  const draftAgeMinutes = existingDraft?.updated_at ? minutesSince(existingDraft.updated_at) : Number.POSITIVE_INFINITY;
+  if (existingDraft && greetingIntent && draftAgeMinutes > 30) {
+    await clearOrderDraft(supabase, conversationId);
+    existingDraft = null;
+  }
   const hasActiveOrderDraft = Boolean(existingDraft && !existingDraft.cleared && Array.isArray(existingDraft.items));
-  const shouldRunWhatsAppOrderFlow = hasActiveOrderDraft || wantsWhatsAppOrderFlow(text) || (wantsToOrder(text) && hasProductClue(text));
+  const shouldRunWhatsAppOrderFlow = !problemIntent && (
+    hasActiveOrderDraft ||
+    wantsWhatsAppOrderFlow(text) ||
+    (wantsToOrder(text) && hasProductClue(text))
+  );
 
   if (shouldRunWhatsAppOrderFlow) {
     try {
@@ -2126,7 +2269,14 @@ export async function processRestaurantBotMessage(params: {
           replyPreview: String(orderFlow.replyText).slice(0, 160)
         });
 
-        const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, orderFlow.replyText);
+        const sendResult = await sendTrackedBotText({
+          supabase,
+          restaurantId,
+          instanceName,
+          customerPhone,
+          conversationId,
+          replyText: orderFlow.replyText
+        });
         if (!sendResult?.ok) {
           return { ok: false, error: 'send_failed', details: sendResult };
         }
@@ -2249,7 +2399,14 @@ export async function processRestaurantBotMessage(params: {
       : (renderConfiguredText(getBotConfig(context).human_transfer_message, context.restaurantName, restaurantId, customerName) ||
         `Claro. Vou chamar um atendente do ${context.restaurantName} para continuar por aqui.`);
 
-    const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, handoffText);
+    const sendResult = await sendTrackedBotText({
+      supabase,
+      restaurantId,
+      instanceName,
+      customerPhone,
+      conversationId,
+      replyText: handoffText
+    });
     if (sendResult?.ok) {
       await supabase.from('whatsapp_messages').insert({
         conversation_id: conversationId,
@@ -2409,7 +2566,14 @@ export async function processRestaurantBotMessage(params: {
     trackIntent
   });
 
-  const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, replyText);
+  const sendResult = await sendTrackedBotText({
+    supabase,
+    restaurantId,
+    instanceName,
+    customerPhone,
+    conversationId,
+    replyText
+  });
   if (!sendResult?.ok) {
     const sendDetails = sendResult as any;
     await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_send_error', 'Falha ao enviar resposta do bot no WhatsApp', {

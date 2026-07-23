@@ -1649,8 +1649,82 @@ export type Database = {
           },
         ]
       }
+      staff_consumptions: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          due_date: string | null
+          employee_name: string
+          id: string
+          items: Json
+          notes: string | null
+          paid_at: string | null
+          paid_by: string | null
+          payment_method: string | null
+          source_account_id: string | null
+          source_table_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          due_date?: string | null
+          employee_name: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_method?: string | null
+          source_account_id?: string | null
+          source_table_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          due_date?: string | null
+          employee_name?: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_method?: string | null
+          source_account_id?: string | null
+          source_table_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_consumptions_source_account_id_fkey"
+            columns: ["source_account_id"]
+            isOneToOne: false
+            referencedRelation: "table_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_consumptions_source_table_id_fkey"
+            columns: ["source_table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tables: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           capacity: number | null
           created_at: string
           id: string
@@ -1661,6 +1735,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           capacity?: number | null
           created_at?: string
           id?: string
@@ -1671,6 +1747,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           capacity?: number | null
           created_at?: string
           id?: string
@@ -1915,6 +1993,15 @@ export type Database = {
         Args: { p_numero: string }
         Returns: number
       }
+      defer_table_account_to_staff: {
+        Args: {
+          p_account_id: string
+          p_due_date?: string
+          p_employee_name: string
+          p_notes?: string
+        }
+        Returns: string
+      }
       generate_nfce_access_key: {
         Args: {
           p_uf: string
@@ -1931,6 +2018,10 @@ export type Database = {
       get_next_nfce_number: {
         Args: { p_user_id: string; p_serie: string }
         Returns: number
+      }
+      settle_staff_consumption: {
+        Args: { p_payment_method: string; p_receivable_id: string }
+        Returns: undefined
       }
     }
     Enums: {

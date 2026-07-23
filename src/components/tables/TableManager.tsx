@@ -14,6 +14,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import { ensureDefaultTables } from '@/utils/tableDefaults';
 import TableDetailsModal from './TableDetailsModal';
 import AddProductToTableModal from './AddProductToTableModal';
+import StaffConsumptionManager from './StaffConsumptionManager';
 
 interface Table {
   id: string;
@@ -121,23 +122,41 @@ const TableManager: React.FC = () => {
   };
 
   const handleDelete = async (tableId: string) => {
+    const table = tables.find((item) => item.id === tableId);
+    if (table?.status === 'occupied') {
+      toast({
+        title: 'Mesa com conta aberta',
+        description: 'Feche, transfira ou lance a conta como consumo de funcionário antes de arquivar a mesa.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const ok = await confirm({
-      title: 'Excluir mesa',
-      description: 'Tem certeza que deseja excluir esta mesa?',
-      confirmText: 'Excluir',
+      title: 'Arquivar mesa',
+      description: 'A mesa sairá da operação, mas todo o histórico será preservado para auditoria.',
+      confirmText: 'Arquivar',
       cancelText: 'Cancelar',
       variant: 'destructive',
     });
     if (!ok) return;
 
     try {
-      const { error } = await supabase.from('tables').delete().eq('id', tableId);
+      const { error } = await supabase
+        .from('tables')
+        .update({
+          archived_at: new Date().toISOString(),
+          archived_by: user?.id || null,
+          status: 'available',
+        })
+        .eq('id', tableId)
+        .eq('user_id', user?.id);
 
       if (error) throw error;
 
       toast({
         title: 'Sucesso',
-        description: 'Mesa excluida com sucesso.',
+        description: 'Mesa arquivada sem apagar o histórico.',
       });
 
       void fetchTables();
@@ -145,7 +164,7 @@ const TableManager: React.FC = () => {
       console.error('Erro ao excluir mesa:', error);
       toast({
         title: 'Erro',
-        description: 'Erro ao excluir mesa.',
+        description: error instanceof Error ? error.message : 'Erro ao arquivar mesa.',
         variant: 'destructive',
       });
     }
@@ -224,13 +243,15 @@ const TableManager: React.FC = () => {
 
   return (
     <div className={isMobile ? 'space-y-3' : 'space-y-4'}>
-      <div className={`flex ${isMobile ? 'items-center justify-end' : 'items-center justify-between'}`}>
+      <div className={`flex ${isMobile ? 'items-center justify-end' : 'items-center justify-between'} gap-2`}>
         {!isMobile && (
           <div>
             <h2 className="text-xl font-bold">Operacao de Mesas</h2>
             <p className="text-sm text-muted-foreground">Abra, acompanhe, transfira e feche contas sem sair do salao.</p>
           </div>
         )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <StaffConsumptionManager />
         <Dialog open={showForm} onOpenChange={setShowForm}>
           <DialogTrigger asChild>
             <Button
@@ -289,6 +310,7 @@ const TableManager: React.FC = () => {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {!isMobile && (
@@ -391,6 +413,7 @@ const TableManager: React.FC = () => {
                     void handleDelete(table.id);
                   }}
                   className={`${isMobile ? 'h-7 rounded-xl px-1.5' : 'h-8 px-2'} hover:border-red-200 hover:bg-red-50 hover:text-red-600`}
+                  title="Arquivar mesa sem apagar o histórico"
                 >
                   <Trash2 size={isMobile ? 12 : 14} />
                 </Button>
