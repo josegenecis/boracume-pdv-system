@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { buildPhoneCandidates, extractPhoneFromRemoteJid, normalizePhone } from '../_shared/restaurant-whatsapp.ts';
+import { getStoreAvailability } from '../_shared/store-hours.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -187,6 +188,7 @@ function buildSystemPrompt(context: {
   defaultMessage: string;
   autoResponses: any;
   aiSettings: any;
+  storeAvailability: any;
 }) {
   const ordersText = context.latestOrders.length
     ? context.latestOrders
@@ -223,6 +225,9 @@ function buildSystemPrompt(context: {
     'Use o link do cardápio quando o cliente pedir menu, quiser escolher sabores/opções, mandar mensagem genérica ou quando não houver produto suficiente no contexto.',
     'Se houver reclamação, problema no pedido, cobrança, cancelamento sensível ou pedido para falar com pessoa, diga que vai chamar um atendente.',
     'Não prometa prazo, desconto, frete grátis ou disponibilidade se isso não estiver no contexto.',
+    context.storeAvailability?.configured && !context.storeAvailability?.isOpen
+      ? 'A loja está fechada agora. Não diga que está aberta, não incentive finalizar pedido e informe a próxima abertura disponível no contexto.'
+      : '',
     'Não envie textos longos. Use no máximo 5 linhas na maioria das respostas.',
     'Se faltar dado essencial, responda de forma útil e honesta, sem mencionar detalhes técnicos.',
     'Não mencione OpenAI, modelo, prompt, JSON, contexto interno ou Supabase.',
@@ -244,6 +249,7 @@ function buildSystemPrompt(context: {
     `- Upsell inteligente: ${settings.upsellEnabled ? 'ativo; sugerir complementos reais quando fizer sentido' : 'desativado; não sugerir venda adicional sem pedido do cliente'}`,
     '',
     `Restaurante: ${context.restaurantName}`,
+    `Situação de funcionamento agora: ${JSON.stringify(context.storeAvailability || {})}`,
     `Cliente: ${context.customerName}`,
     `Telefone do cliente: ${context.customerPhone}`,
     `Link do cardápio para pedido: ${context.menuLink}`,
@@ -377,7 +383,7 @@ Deno.serve(async (req: Request) => {
 
     const phoneCandidates = buildPhoneCandidates(customerPhone);
     const [profileResult, settingsResult, aiSettingsResult, customerResult, ordersResult, productsResult] = await Promise.all([
-      supabase.from('profiles').select('restaurant_name').eq('id', restaurantId).maybeSingle(),
+      supabase.from('profiles').select('restaurant_name,opening_hours').eq('id', restaurantId).maybeSingle(),
       supabase.from('whatsapp_settings').select('enabled, default_message, auto_responses').eq('user_id', restaurantId).maybeSingle(),
       supabase.from('ai_settings').select('*').eq('restaurant_id', restaurantId).maybeSingle(),
       supabase.from('customers').select('name').eq('user_id', restaurantId).in('phone', phoneCandidates).order('updated_at', { ascending: false }).limit(1).maybeSingle(),
@@ -408,7 +414,8 @@ Deno.serve(async (req: Request) => {
       whatsappEnabled: settingsResult?.data?.enabled !== false,
       defaultMessage: String(settingsResult?.data?.default_message || ''),
       autoResponses,
-      aiSettings
+      aiSettings,
+      storeAvailability: getStoreAvailability(profileResult?.data?.opening_hours)
     }) + '\n\nSe a mensagem indicar pedido complexo, ajude a coletar dados sem inventar itens. Seja curto, vendedor e profissional.';
 
     const reply = await openAiAssistantReply({

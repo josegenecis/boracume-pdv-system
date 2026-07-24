@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, Copy, Loader2, Mail, Network, Plus, RefreshCw, RotateCw, Store, TrendingUp, Users } from 'lucide-react';
+import { AlertTriangle, Building2, Copy, Loader2, Mail, Network, Plus, ReceiptText, RefreshCw, RotateCw, Scale, Store, TrendingDown, TrendingUp, WalletCards } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -31,8 +31,13 @@ type Summary = {
   store_user_id: string;
   store_name: string;
   order_count: number;
+  cancelled_order_count: number;
   gross_sales: number;
+  expense_total: number;
+  operational_balance: number;
   average_ticket: number;
+  has_open_cash: boolean;
+  last_sale_at: string | null;
 };
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -59,8 +64,13 @@ export default function Stores() {
 
   const totals = useMemo(() => summary.reduce((result, row) => ({
     orders: result.orders + Number(row.order_count || 0),
+    cancelledOrders: result.cancelledOrders + Number(row.cancelled_order_count || 0),
     sales: result.sales + Number(row.gross_sales || 0),
-  }), { orders: 0, sales: 0 }), [summary]);
+    expenses: result.expenses + Number(row.expense_total || 0),
+    balance: result.balance + Number(row.operational_balance || 0),
+  }), { orders: 0, cancelledOrders: 0, sales: 0, expenses: 0, balance: 0 }), [summary]);
+  const networkAverageTicket = totals.orders > 0 ? totals.sales / totals.orders : 0;
+  const openCashCount = summary.filter((row) => row.has_open_cash).length;
 
   const loadNetwork = useCallback(async () => {
     setLoading(true);
@@ -227,11 +237,20 @@ export default function Stores() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card><CardContent className="flex items-center gap-4 p-5"><div className="rounded-2xl bg-[#EAF7F0] p-3"><Store className="text-[#087A55]" /></div><div><p className="text-sm text-muted-foreground">Unidades ativas</p><p className="text-2xl font-bold text-[#003223]">{managedStores.filter((store) => store.status === 'active').length}</p></div></CardContent></Card>
-        <Card><CardContent className="flex items-center gap-4 p-5"><div className="rounded-2xl bg-[#FFF1E8] p-3"><TrendingUp className="text-[#FF6400]" /></div><div><p className="text-sm text-muted-foreground">Vendas no mês</p><p className="text-2xl font-bold text-[#003223]">{money.format(totals.sales)}</p></div></CardContent></Card>
-        <Card><CardContent className="flex items-center gap-4 p-5"><div className="rounded-2xl bg-[#EEF2FF] p-3"><Users className="text-indigo-700" /></div><div><p className="text-sm text-muted-foreground">Pedidos no mês</p><p className="text-2xl font-bold text-[#003223]">{totals.orders}</p></div></CardContent></Card>
+        <Card><CardContent className="flex items-center gap-4 p-5"><div className="rounded-2xl bg-[#FFF1E8] p-3"><TrendingUp className="text-[#FF6400]" /></div><div><p className="text-sm text-muted-foreground">Vendas da rede</p><p className="text-xl font-bold text-[#003223]">{money.format(totals.sales)}</p></div></CardContent></Card>
+        <Card><CardContent className="flex items-center gap-4 p-5"><div className="rounded-2xl bg-red-50 p-3"><TrendingDown className="text-red-600" /></div><div><p className="text-sm text-muted-foreground">Despesas da rede</p><p className="text-xl font-bold text-red-700">{money.format(totals.expenses)}</p></div></CardContent></Card>
+        <Card><CardContent className="flex items-center gap-4 p-5"><div className="rounded-2xl bg-emerald-50 p-3"><Scale className="text-emerald-700" /></div><div><p className="text-sm text-muted-foreground">Saldo operacional</p><p className={`text-xl font-bold ${totals.balance >= 0 ? 'text-emerald-800' : 'text-red-700'}`}>{money.format(totals.balance)}</p></div></CardContent></Card>
+        <Card><CardContent className="flex items-center gap-4 p-5"><div className="rounded-2xl bg-[#EEF2FF] p-3"><ReceiptText className="text-indigo-700" /></div><div><p className="text-sm text-muted-foreground">Ticket médio da rede</p><p className="text-xl font-bold text-[#003223]">{money.format(networkAverageTicket)}</p></div></CardContent></Card>
       </div>
+
+      {(openCashCount > 0 || totals.cancelledOrders > 0) && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {openCashCount > 0 && <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900"><WalletCards className="h-5 w-5 shrink-0" /><div><p className="font-bold">{openCashCount} caixa(s) aberto(s) agora</p><p className="text-sm">Acompanhe o encerramento das unidades antes do fim do expediente.</p></div></div>}
+          {totals.cancelledOrders > 0 && <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-900"><AlertTriangle className="h-5 w-5 shrink-0" /><div><p className="font-bold">{totals.cancelledOrders} pedido(s) cancelado(s) no mês</p><p className="text-sm">Compare as unidades para identificar recorrências.</p></div></div>}
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
         <Card>
@@ -241,7 +260,7 @@ export default function Stores() {
               const row = summary.find((item) => item.store_user_id === store.store_user_id);
               return <div key={store.store_user_id} className="flex flex-wrap items-center gap-3 rounded-2xl border p-4">
                 <div className="rounded-xl bg-[#EAF7F0] p-2.5"><Building2 className="h-5 w-5 text-[#087A55]" /></div>
-                <div className="min-w-0 flex-1"><p className="truncate font-bold text-[#003223]">{store.store_name}</p><p className="truncate text-xs text-muted-foreground">{store.store_email}</p><p className="mt-1 text-xs font-semibold text-[#087A55]">{Number(row?.order_count || 0)} pedidos · {money.format(Number(row?.gross_sales || 0))}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate font-bold text-[#003223]">{store.store_name}</p><p className="truncate text-xs text-muted-foreground">{store.store_email}</p><p className="mt-1 text-xs font-semibold text-[#087A55]">{Number(row?.order_count || 0)} pedidos · {money.format(Number(row?.gross_sales || 0))} em vendas</p><p className="mt-1 text-xs text-slate-500">Despesas: {money.format(Number(row?.expense_total || 0))} · Saldo: {money.format(Number(row?.operational_balance || 0))}</p></div>
                 <Badge variant={store.status === 'active' ? 'default' : 'secondary'}>{store.status === 'active' ? 'Ativa' : 'Suspensa'}</Badge>
                 {store.status === 'active' && <Button variant="outline" size="sm" onClick={() => void accessStore(store.store_user_id)}>Acessar</Button>}
                 {!store.is_primary && <Button variant="ghost" size="sm" onClick={() => void setStoreStatus(store)}>{store.status === 'active' ? 'Suspender' : 'Reativar'}</Button>}

@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { buildMenuShareUrl, buildPhoneCandidates, buildTrackShareUrl, fillTemplate, loadRestaurantContext, normalizePhone, sendRestaurantWhatsApp } from './restaurant-whatsapp.ts';
+import { buildClosedStoreReply, getStoreAvailability } from './store-hours.ts';
 
 function getEnv(name: string, fallback = '') {
   return String(Deno.env.get(name) || fallback).trim();
@@ -2183,6 +2184,55 @@ export async function processRestaurantBotMessage(params: {
   const canSendMenuReply = explicitMenuIntent || shouldSendFirstMenuGreeting;
   const menuLink = buildMenuShareUrl(restaurantId);
   const firstMenuGreetingText = buildConfiguredSmartMenuGreeting(context, restaurantId, customerName, true);
+  const storeAvailability = getStoreAvailability(profileRow?.opening_hours);
+  const shouldInformClosed = storeAvailability.configured &&
+    !storeAvailability.isOpen &&
+    !trackIntent &&
+    !humanIntent &&
+    !problemIntent &&
+    (
+      isFirstConversationTouch ||
+      greetingIntent ||
+      explicitMenuIntent ||
+      openingHoursIntent ||
+      promotionsIntent ||
+      complementsInfoIntent ||
+      productInfoIntent ||
+      wantsToOrder(text)
+    );
+
+  if (shouldInformClosed) {
+    const replyText = buildClosedStoreReply({
+      restaurantName: context.restaurantName,
+      restaurantId,
+      availability: storeAvailability,
+      menuUrl: menuLink,
+    });
+    const sendResult = await sendTrackedBotText({
+      supabase,
+      restaurantId,
+      instanceName,
+      customerPhone,
+      conversationId,
+      replyText,
+    });
+    if (!sendResult?.ok) return { ok: false, error: 'send_failed', details: sendResult };
+    await supabase.from('whatsapp_messages').insert({
+      conversation_id: conversationId,
+      content: replyText,
+      sender: 'bot',
+      message_type: 'text',
+      delivered: true,
+    });
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_store_closed', 'Bot informou que a loja está fechada', {
+      instanceName,
+      customerPhone,
+      conversationId,
+      todayClosed: storeAvailability.todayClosed,
+      nextOpening: storeAvailability.nextOpening || null,
+    });
+    return { ok: true, replyText, conversationId, strategy: 'store_closed' };
+  }
 
   if (complementsInfoIntent && !wantsToOrder(text)) {
     const { products, variationsByProduct } = await loadMenuForOrdering(supabase, restaurantId);
