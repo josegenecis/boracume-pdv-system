@@ -3,23 +3,27 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getEnv } from '../_shared/poppay.ts'
 import { resolveStoreUserId } from '../_shared/multi-store.ts'
 
-const POPPAY_TERMS_VERSION = '2026-07-v3'
-const POPPAY_TERMS_SNAPSHOT = {
+const POPPAY_TERMS_VERSION = '2026-07-v4'
+
+const termsSnapshot = (enablePix: boolean, enableCreditOnline: boolean) => ({
   document: '/termos#poppay',
   privacy: '/privacidade',
-  integrated_fee_reference_bps: 199,
-  marketplace_fee_bps: 100,
+  channels: {
+    pix: enablePix,
+    credit_online: enableCreditOnline,
+  },
+  integrated_pix_fee_reference_bps: 199,
   credit_marketplace_fee_bps: 50,
   credit_installments: 1,
   statements: [
     'Autoriza o PopSystem/PopPay a conectar a conta Mercado Pago e operar pagamentos, consultas e devolucoes solicitadas no sistema.',
-    'Na condicao comercial vigente, a tarifa integrada de referencia e de 1,99% por transacao PIX para processamento, conciliacao e repasse imediato.',
-    'A tarifa integrada e composta pela tarifa operacional PopPay de 1% e pela tarifa de processamento do Mercado Pago aplicavel a conta conectada, que pode variar conforme o contrato do titular.',
-    'O credito online e opcional, aceita somente pagamento a vista e exige aceite especifico da tarifa operacional PopPay vigente, cujo padrao atual e de 0,5%, alem da tarifa de processamento do Mercado Pago aplicavel a conta conectada.',
-    'Os descontos incidem sobre o recebivel do restaurante e nao sao adicionados ao valor pago pelo consumidor.',
-    'A autorizacao pode ser revogada, observadas as operacoes ja iniciadas e as obrigacoes legais de guarda.',
+    'O PIX possui tarifa integrada vigente de 1,99% por transacao e confirmacao instantanea apos a aprovacao.',
+    'O credito online aceita somente pagamento a vista e possui tarifa de processamento do Mercado Pago aplicavel a conta conectada mais tarifa operacional PopPay vigente de 0,5%.',
+    'No credito, a confirmacao do pagamento ocorre em tempo real, enquanto a disponibilidade do saldo segue o prazo contratado pelo titular com o Mercado Pago.',
+    'As tarifas incidem sobre o recebivel do restaurante e nao sao adicionadas ao valor pago pelo consumidor.',
+    'Os canais podem ser desativados e a autorizacao pode ser revogada, observadas as operacoes ja iniciadas e as obrigacoes legais de guarda.',
   ],
-}
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -76,15 +80,24 @@ Deno.serve(async (req) => {
         termsVersion: POPPAY_TERMS_VERSION,
       }), { status: 412, headers: corsHeaders })
     }
+    const enablePix = body?.enablePix !== false
+    const enableCreditOnline = body?.enableCreditOnline !== false
+    if (!enablePix && !enableCreditOnline) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'payment_channel_required',
+        message: 'Selecione PIX ou cartão online para conectar o PopPay.',
+      }), { status: 400, headers: corsHeaders })
+    }
 
     const supabase = createClient(supabaseUrl, serviceKey)
     const userId = await resolveStoreUserId(supabase, authenticatedUserId, body?._storeId)
     const { error: acceptanceError } = await supabase.from('poppay_terms_acceptances').insert({
       user_id: userId,
       terms_version: POPPAY_TERMS_VERSION,
-      source: 'poppay_oauth',
+      source: 'poppay_checkout_bundle',
       user_agent: req.headers.get('user-agent')?.slice(0, 500) || null,
-      terms_snapshot: POPPAY_TERMS_SNAPSHOT,
+      terms_snapshot: termsSnapshot(enablePix, enableCreditOnline),
     })
     if (acceptanceError) throw acceptanceError
 
@@ -94,6 +107,9 @@ Deno.serve(async (req) => {
       user_id: userId,
       state,
       code_verifier: verifier,
+      enable_pix: enablePix,
+      enable_credit_online: enableCreditOnline,
+      terms_version: POPPAY_TERMS_VERSION,
     })
     if (error) throw error
 

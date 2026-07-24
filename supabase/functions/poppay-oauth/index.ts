@@ -3,6 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getEnv } from '../_shared/poppay.ts'
 import { resolveStoreUserId } from '../_shared/multi-store.ts'
 
+const POPPAY_TERMS_VERSION = '2026-07-v4'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -41,7 +43,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey)
     const { data: oauthState, error: stateError } = await supabase
       .from('poppay_oauth_states')
-      .select('id,user_id,created_at,used_at,code_verifier')
+      .select('id,user_id,created_at,used_at,code_verifier,enable_pix,enable_credit_online,terms_version')
       .eq('state', String(state))
       .maybeSingle()
     if (stateError || !oauthState || oauthState.used_at) {
@@ -84,6 +86,9 @@ Deno.serve(async (req) => {
 
     const expiresIn = Number(token?.expires_in || 0)
     const expiresAt = expiresIn > 0 ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
+    const enablePix = oauthState.enable_pix !== false
+    const enableCreditOnline = oauthState.enable_credit_online !== false
+    const acceptedAt = new Date().toISOString()
     const { error: upsertError } = await supabase
       .from('poppay_connections')
       .upsert({
@@ -92,6 +97,11 @@ Deno.serve(async (req) => {
         enabled: true,
         split_enabled: true,
         fee_bps: 100,
+        credit_online_enabled: enableCreditOnline,
+        ...(enableCreditOnline ? {
+          credit_terms_version: String(oauthState.terms_version || POPPAY_TERMS_VERSION),
+          credit_terms_accepted_at: acceptedAt,
+        } : {}),
         mp_user_id: token?.user_id ? String(token.user_id) : null,
         access_token: String(token.access_token),
         refresh_token: token?.refresh_token ? String(token.refresh_token) : null,
@@ -110,7 +120,7 @@ Deno.serve(async (req) => {
       .from('pix_settings')
       .upsert({
         user_id: userId,
-        enabled: true,
+        enabled: enablePix,
         bank: 'mercadopago',
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' })
