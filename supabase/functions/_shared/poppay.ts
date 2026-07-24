@@ -16,7 +16,7 @@ export const envEnabled = (...keys: string[]) => {
 export const getPopPayConnection = async (supabase: any, userId: string) => {
   const { data, error } = await supabase
     .from('poppay_connections')
-    .select('id,user_id,status,enabled,split_enabled,fee_bps,mp_user_id,access_token,refresh_token,public_key,token_type,scope,expires_at')
+    .select('id,user_id,status,enabled,split_enabled,fee_bps,credit_online_enabled,credit_fee_bps,credit_terms_version,credit_terms_accepted_at,mp_user_id,access_token,refresh_token,public_key,token_type,scope,expires_at')
     .eq('user_id', userId)
     .maybeSingle()
 

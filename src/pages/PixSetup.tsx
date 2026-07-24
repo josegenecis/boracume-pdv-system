@@ -9,10 +9,10 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
-import { ArrowRight, CheckCircle2, ExternalLink, LockKeyhole, QrCode, ShieldCheck, Smartphone, Store, WalletCards } from 'lucide-react';
+import { ArrowRight, CheckCircle2, CreditCard, ExternalLink, LockKeyhole, QrCode, ShieldCheck, Smartphone, Store, WalletCards } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-const POPPAY_TERMS_VERSION = '2026-07-v2';
+const POPPAY_TERMS_VERSION = '2026-07-v3';
 const POPPAY_FEATURES: ReadonlyArray<{ icon: LucideIcon; title: string; description: string }> = [
   { icon: QrCode, title: 'QR Code imediato', description: 'Cobrança criada no checkout' },
   { icon: CheckCircle2, title: 'Baixa automática', description: 'Pedido atualizado ao pagar' },
@@ -36,6 +36,15 @@ export default function PixSetup() {
   const [termsOpen, setTermsOpen] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [awaitingExternalAuth, setAwaitingExternalAuth] = useState(false);
+  const [creditOnlineEnabled, setCreditOnlineEnabled] = useState(false);
+  const [creditTermsOpen, setCreditTermsOpen] = useState(false);
+  const [creditTermsAccepted, setCreditTermsAccepted] = useState(false);
+  const [creditSaving, setCreditSaving] = useState(false);
+  const [creditFeePercent, setCreditFeePercent] = useState(0.5);
+  const creditFeeLabel = creditFeePercent.toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  });
 
   useEffect(() => {
     const load = async () => {
@@ -80,6 +89,8 @@ export default function PixSetup() {
     setPopPayConfigured(Boolean(data?.configured));
     setPopPayConnected(data?.connection?.status === 'connected' && data?.connection?.enabled !== false);
     setPopPayExpiresAt(String(data?.connection?.expires_at || ''));
+    setCreditOnlineEnabled(data?.connection?.credit_online_enabled === true);
+    setCreditFeePercent(Number(data?.connection?.credit_fee_bps ?? 50) / 100);
   }, [activeUserId]);
 
   useEffect(() => {
@@ -98,6 +109,8 @@ export default function PixSetup() {
       if (connected) {
         setPopPayConnected(true);
         setPopPayExpiresAt(String(data?.connection?.expires_at || ''));
+        setCreditOnlineEnabled(data?.connection?.credit_online_enabled === true);
+        setCreditFeePercent(Number(data?.connection?.credit_fee_bps ?? 50) / 100);
         setAwaitingExternalAuth(false);
         toast({ title: 'PopPay conectado', description: 'A autorização foi concluída no navegador e o aplicativo já foi atualizado.' });
       } else if (attempts >= 100) {
@@ -184,6 +197,51 @@ export default function PixSetup() {
     }
   };
 
+  const setCreditOnline = async (nextEnabled: boolean) => {
+    if (nextEnabled) {
+      setCreditTermsAccepted(false);
+      setCreditTermsOpen(true);
+      return;
+    }
+    setCreditSaving(true);
+    try {
+      const { data, status } = await invokeEdgeFunction('poppay-settings', {
+        action: 'set_credit_online',
+        enabled: false,
+      }, { timeoutMs: 30000 });
+      if (status >= 400 || !data?.ok) throw new Error(data?.message || data?.error || 'Não foi possível desativar.');
+      setCreditOnlineEnabled(false);
+      toast({ title: 'Crédito online desativado', description: 'Os clientes não verão mais essa opção no cardápio.' });
+    } catch (error) {
+      toast({ title: 'Erro ao atualizar', description: error instanceof Error ? error.message : String(error), variant: 'destructive' });
+    } finally {
+      setCreditSaving(false);
+    }
+  };
+
+  const confirmCreditOnline = async () => {
+    if (!creditTermsAccepted) return;
+    setCreditSaving(true);
+    try {
+      const { data, status } = await invokeEdgeFunction('poppay-settings', {
+        action: 'set_credit_online',
+        enabled: true,
+        acceptedTerms: true,
+        termsVersion: POPPAY_TERMS_VERSION,
+      }, { timeoutMs: 30000 });
+      if (status >= 400 || !data?.ok) throw new Error(data?.message || data?.error || 'Não foi possível ativar.');
+      setCreditOnlineEnabled(true);
+      setCreditFeePercent(Number(data?.connection?.credit_fee_bps ?? 50) / 100);
+      setCreditTermsOpen(false);
+      setCreditTermsAccepted(false);
+      toast({ title: 'Crédito online ativado', description: 'O pagamento à vista já pode ser exibido no cardápio digital.' });
+    } catch (error) {
+      toast({ title: 'Erro ao ativar', description: error instanceof Error ? error.message : String(error), variant: 'destructive' });
+    } finally {
+      setCreditSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (!loaded || !activeUserId) return;
     if (!popPayConnected) return;
@@ -225,7 +283,7 @@ export default function PixSetup() {
           <div className="relative">
             <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wider"><ShieldCheck className="h-4 w-4" />Pagamentos protegidos</span>
             <CardTitle className="flex items-center gap-3 text-3xl font-black"><WalletCards className="h-8 w-8" />PopPay</CardTitle>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-emerald-50">PIX integrado ao seu restaurante: gere, confirme, concilie e devolva pagamentos sem sair do PopSystem.</p>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-emerald-50">PIX e crédito online integrados: receba, confirme, concilie e devolva pagamentos sem sair do PopSystem.</p>
           </div>
         </CardHeader>
         <CardContent className="space-y-6 p-5 sm:p-8">
@@ -256,7 +314,7 @@ export default function PixSetup() {
           </div>
           <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 sm:p-6">
             <div className="mb-5"><h2 className="text-lg font-bold text-emerald-950">Onde deseja receber com PopPay?</h2><p className="mt-1 text-sm text-muted-foreground">Ative os canais usados pelo restaurante.</p></div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border bg-white p-4">
                   <Store className="mb-3 h-5 w-5 text-orange-500" />
                   <Label htmlFor="poppay-online">Ativar PIX online (PopPay)</Label>
@@ -265,6 +323,22 @@ export default function PixSetup() {
                     <span className="text-sm text-muted-foreground">{enabled ? 'Ativo' : 'Inativo'}</span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">Exibe o pagamento imediato no Cardápio Digital.</p>
+                </div>
+                <div className="rounded-xl border border-emerald-100 bg-white p-4">
+                  <CreditCard className="mb-3 h-5 w-5 text-orange-500" />
+                  <Label htmlFor="poppay-credit-online">Aceitar crédito online</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Switch
+                      id="poppay-credit-online"
+                      checked={creditOnlineEnabled}
+                      onCheckedChange={(checked) => void setCreditOnline(checked)}
+                      disabled={!popPayConnected || creditSaving}
+                    />
+                    <span className="text-sm text-muted-foreground">{creditOnlineEnabled ? 'Ativo' : 'Inativo'}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Somente crédito à vista. Tarifa Mercado Pago + {creditFeeLabel}% PopPay sobre o recebível.
+                  </p>
                 </div>
                 <div className="rounded-xl border bg-white p-4">
                   <WalletCards className="mb-3 h-5 w-5 text-orange-500" />
@@ -315,6 +389,7 @@ export default function PixSetup() {
               <ul className="space-y-2 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-emerald-950">
                 <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />O restaurante continua sendo o recebedor das vendas.</li>
                 <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />Os recebimentos via PIX têm tarifa integrada atual de 1,99% por transação para processamento, conciliação e repasse imediato.</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />O crédito online é opcional, somente à vista, com tarifa do Mercado Pago mais a tarifa PopPay exibida no aceite específico.</li>
                 <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />A tarifa é descontada do recebível do restaurante e não aumenta o valor pago pelo consumidor.</li>
                 <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />A autorização pode ser revogada, respeitando operações e registros obrigatórios.</li>
               </ul>
@@ -330,6 +405,43 @@ export default function PixSetup() {
               <Button variant="outline" onClick={() => setTermsOpen(false)}>Cancelar</Button>
               <Button onClick={confirmConnectPopPay} disabled={!termsAccepted || popPayLoading} className="bg-emerald-700 hover:bg-emerald-800">
                 {popPayLoading ? 'Preparando conexão...' : 'Aceitar e conectar'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={creditTermsOpen} onOpenChange={(open) => {
+        if (!creditSaving) setCreditTermsOpen(open);
+        if (!open) setCreditTermsAccepted(false);
+      }}>
+        <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto border-0 p-0">
+          <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-orange-500 p-6 text-white sm:p-8">
+            <DialogHeader>
+              <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15"><CreditCard className="h-6 w-6" /></span>
+              <DialogTitle className="text-2xl font-black">Ativar crédito online</DialogTitle>
+              <DialogDescription className="text-emerald-50">Esta modalidade é opcional e pode ser desativada a qualquer momento.</DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="space-y-5 p-6 sm:px-8">
+            <ul className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">
+              <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />Serão aceitos somente pagamentos no cartão de crédito à vista (1x).</li>
+              <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />Não haverá parcelamento no checkout.</li>
+              <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />Será descontada a tarifa de processamento definida pelo Mercado Pago para a conta conectada.</li>
+              <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />Além dela, será descontada a tarifa operacional PopPay de {creditFeeLabel}% por transação aprovada.</li>
+              <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />As tarifas incidem sobre o recebível do restaurante e não aumentam o valor pago pelo consumidor.</li>
+            </ul>
+            <div className="flex gap-4 rounded-2xl border border-slate-200 p-4">
+              <Checkbox id="poppay-credit-terms" checked={creditTermsAccepted} onCheckedChange={(checked) => setCreditTermsAccepted(checked === true)} className="mt-0.5" />
+              <Label htmlFor="poppay-credit-terms" className="cursor-pointer text-sm font-normal leading-6 text-slate-700">
+                Li e aceito as condições do crédito online descritas nos <a href="/termos#poppay" target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 underline">Termos de Uso do PopPay <ExternalLink className="inline h-3 w-3" /></a>.
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">O aceite da versão {POPPAY_TERMS_VERSION}, incluindo a tarifa PopPay de {creditFeeLabel}%, será registrado com usuário, data e hora.</p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreditTermsOpen(false)} disabled={creditSaving}>Agora não</Button>
+              <Button onClick={confirmCreditOnline} disabled={!creditTermsAccepted || creditSaving} className="bg-emerald-700 hover:bg-emerald-800">
+                {creditSaving ? 'Ativando...' : 'Aceitar e ativar'}
               </Button>
             </DialogFooter>
           </div>

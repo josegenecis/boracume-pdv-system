@@ -364,6 +364,9 @@ export default function SystemAdminDashboard() {
   const [data, setData] = useState<AdminDashboardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+  const [popPayRestaurantEmail, setPopPayRestaurantEmail] = useState('');
+  const [popPayCreditFee, setPopPayCreditFee] = useState('0.50');
+  const [popPayFeeSaving, setPopPayFeeSaving] = useState(false);
 
   const metrics = data?.metrics || {};
   const lists = data?.lists;
@@ -420,6 +423,28 @@ export default function SystemAdminDashboard() {
     sessionStorage.removeItem(SESSION_KEY);
     setToken('');
     setData(null);
+  };
+
+  const savePopPayCreditFee = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPopPayFeeSaving(true);
+    try {
+      const { data: response, error } = await supabase.functions.invoke('admin-dashboard', {
+        body: {
+          action: 'set_poppay_credit_fee',
+          token,
+          restaurantEmail: popPayRestaurantEmail,
+          feePercent: Number(popPayCreditFee.replace(',', '.')),
+        },
+      });
+      if (error) throw error;
+      if (!response?.ok) throw new Error(response?.error || 'Não foi possível atualizar a tarifa.');
+      toast.success(`Tarifa de ${Number(response.creditFeePercent || 0).toLocaleString('pt-BR')}% aplicada a ${response.restaurant}. O crédito online foi desativado até um novo aceite.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível atualizar a tarifa.');
+    } finally {
+      setPopPayFeeSaving(false);
+    }
   };
 
   if (!token) {
@@ -513,6 +538,47 @@ export default function SystemAdminDashboard() {
       </header>
 
       <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 lg:px-8">
+        <Card className="rounded-lg border-emerald-200 bg-white shadow-sm">
+          <CardHeader className="p-5 pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg text-slate-950">
+              <DollarSign className="h-5 w-5 text-emerald-600" />
+              Tarifa do crédito online PopPay
+            </CardTitle>
+            <p className="text-sm text-slate-500">Controle interno por restaurante. O padrão é 0,5%; qualquer alteração exige novo aceite da loja.</p>
+          </CardHeader>
+          <CardContent className="p-5 pt-0">
+            <form onSubmit={savePopPayCreditFee} className="grid gap-3 md:grid-cols-[1fr_180px_auto] md:items-end">
+              <div className="space-y-2">
+                <Label htmlFor="poppay-restaurant-email">E-mail do restaurante</Label>
+                <Input
+                  id="poppay-restaurant-email"
+                  type="email"
+                  value={popPayRestaurantEmail}
+                  onChange={(event) => setPopPayRestaurantEmail(event.target.value)}
+                  placeholder="restaurante@email.com"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="poppay-credit-fee">Tarifa PopPay (%)</Label>
+                <Input
+                  id="poppay-credit-fee"
+                  type="number"
+                  min="0"
+                  max="10"
+                  step="0.01"
+                  value={popPayCreditFee}
+                  onChange={(event) => setPopPayCreditFee(event.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="bg-emerald-700 hover:bg-emerald-800" disabled={popPayFeeSaving}>
+                {popPayFeeSaving ? 'Salvando...' : 'Aplicar tarifa'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
         <section className="rounded-lg bg-[#003d2e] p-6 text-white shadow-sm">
           <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div>

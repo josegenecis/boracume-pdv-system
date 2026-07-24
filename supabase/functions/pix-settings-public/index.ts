@@ -44,7 +44,7 @@ export default async function handler(req: Request): Promise<Response> {
     const isMercadoPago = !providerKey || providerKey === 'mp' || providerKey.includes('mercadopago')
     const { data: popPayConnection } = await supabase
       .from('poppay_connections')
-      .select('status,enabled')
+      .select('status,enabled,public_key,credit_online_enabled')
       .eq('user_id', userId)
       .maybeSingle()
     const hasOnlineCredentials = popPayConnection?.status === 'connected' && popPayConnection?.enabled === true
@@ -60,6 +60,13 @@ export default async function handler(req: Request): Promise<Response> {
       ok: true,
       settings: publicSettings,
       onlineCheckoutAvailable: Boolean(data.enabled) && isMercadoPago && hasOnlineCredentials,
+      cardOnlineAvailable: hasOnlineCredentials &&
+        popPayConnection?.credit_online_enabled === true &&
+        Boolean(popPayConnection?.public_key),
+      mercadoPagoPublicKey: hasOnlineCredentials &&
+        popPayConnection?.credit_online_enabled === true
+        ? String(popPayConnection?.public_key || '')
+        : null,
     }), { headers })
   } catch {
     return new Response(JSON.stringify({ ok: false, error: 'internal_error' }), { status: 500, headers })

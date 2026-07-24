@@ -311,6 +311,44 @@ serve(async (req) => {
       return json({ ok: true, token: await createToken(user.email), user });
     }
 
+    if (body?.action === "set_poppay_credit_fee") {
+      const restaurantEmail = cleanText(body?.restaurantEmail).toLowerCase();
+      const feePercent = Number(body?.feePercent);
+      const feeBps = Math.round(feePercent * 100);
+      if (!restaurantEmail || !Number.isFinite(feePercent) || feeBps < 0 || feeBps > 1000) {
+        return json({ ok: false, error: "Informe o e-mail e uma tarifa entre 0% e 10%." }, 400);
+      }
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id,restaurant_name,email")
+        .ilike("email", restaurantEmail)
+        .limit(1)
+        .maybeSingle();
+      if (profileError || !profile?.id) return json({ ok: false, error: "Restaurante não encontrado." }, 404);
+
+      const { data: connection, error: updateError } = await supabase
+        .from("poppay_connections")
+        .update({
+          credit_fee_bps: feeBps,
+          credit_online_enabled: false,
+          credit_terms_version: null,
+          credit_terms_accepted_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", profile.id)
+        .select("credit_fee_bps,credit_online_enabled")
+        .maybeSingle();
+      if (updateError || !connection) return json({ ok: false, error: "A conta ainda não possui conexão PopPay." }, 409);
+
+      return json({
+        ok: true,
+        restaurant: profile.restaurant_name || profile.email,
+        creditFeePercent: Number(connection.credit_fee_bps || 0) / 100,
+        creditOnlineEnabled: connection.credit_online_enabled === true,
+        requiresNewAcceptance: true,
+      });
+    }
+
     const now = new Date();
     const nowMs = now.getTime();
     const today = startOfDay(now);

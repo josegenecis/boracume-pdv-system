@@ -99,14 +99,14 @@ serve(async (req) => {
     const prefetchCheckoutByCorrelation = async (cid: string) =>
       (await supabase
         .from('pix_checkouts')
-        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id, payment_connection, platform_fee_bps, platform_fee_cents')
+        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id, payment_connection, payment_kind, platform_fee_bps, platform_fee_cents')
         .eq('correlation_id', cid)
         .maybeSingle()).data
 
     const prefetchCheckoutByPaymentId = async (pid: string) =>
       (await supabase
         .from('pix_checkouts')
-        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id, payment_connection, platform_fee_bps, platform_fee_cents')
+        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id, payment_connection, payment_kind, platform_fee_bps, platform_fee_cents')
         .or(`transaction_id.eq.${pid},metadata->>payment_id.eq.${pid}`)
         .order('updated_at', { ascending: false })
         .limit(1)
@@ -186,7 +186,7 @@ serve(async (req) => {
         ? checkoutPrefetched
         : (await supabase
             .from('pix_checkouts')
-            .select('id, restaurant_user_id, status, provider, order_payload, order_id, payment_connection, platform_fee_bps, platform_fee_cents')
+            .select('id, restaurant_user_id, status, provider, order_payload, order_id, payment_connection, payment_kind, platform_fee_bps, platform_fee_cents')
             .eq('correlation_id', effectiveCid)
             .maybeSingle()).data
 
@@ -325,10 +325,23 @@ serve(async (req) => {
           return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
+        const providerFeeCents = Math.max(0, Math.round(
+          (Array.isArray(paymentJson?.fee_details) ? paymentJson.fee_details : [])
+            .filter((fee: any) => String(fee?.type || '').toLowerCase() !== 'application_fee')
+            .reduce((sum: number, fee: any) => sum + Number(fee?.amount || 0), 0) * 100
+        ))
+        const netReceivedRaw = Number(paymentJson?.transaction_details?.net_received_amount)
+        const netReceivedCents = Number.isFinite(netReceivedRaw) ? Math.max(0, Math.round(netReceivedRaw * 100)) : null
+
         // CREATE ORDER
         const locked = (await supabase
           .from('pix_checkouts')
-          .update({ status: 'PROCESSING', updated_at: new Date().toISOString() })
+          .update({
+            status: 'PROCESSING',
+            provider_fee_cents: providerFeeCents,
+            net_received_cents: netReceivedCents,
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', checkout.id)
           .neq('status', 'PAID')
           .neq('status', 'PROCESSING')
@@ -341,9 +354,10 @@ serve(async (req) => {
 
         if (checkout.order_id) {
           const targetOrderId = String(checkout.order_id)
+          const paidMethod = String(checkout.payment_kind || '') === 'credit_card' ? 'cartao_online' : 'pix_online'
           const { error: updErr } = await supabase
             .from('orders')
-            .update({ status: 'paid', acceptance_status: 'pending_acceptance', payment_method: 'pix_online' } as any)
+            .update({ status: 'paid', acceptance_status: 'pending_acceptance', payment_method: paidMethod } as any)
             .eq('id', targetOrderId)
           if (updErr) {
             await supabase
@@ -387,6 +401,7 @@ serve(async (req) => {
         const isPdv = payloadSource.toUpperCase() === 'PDV'
         // ... (rest of order creation)
         const orderNumber = payload?.order_number || `MP-${effectiveCid.slice(0, 8)}`
+        const paidMethod = String(checkout.payment_kind || '') === 'credit_card' ? 'cartao_online' : 'pix_online'
         const insertData: any = {
           user_id: checkout.restaurant_user_id,
           order_number: orderNumber,
@@ -399,7 +414,7 @@ serve(async (req) => {
           items: payload?.items || [],
           total: payload?.total || 0,
           delivery_fee: payload?.delivery_fee || 0,
-          payment_method: 'pix_online',
+          payment_method: paidMethod,
           status: payload?.status || (isPdv ? 'preparing' : 'pending'),
           acceptance_status: payload?.acceptance_status || (isPdv ? 'accepted' : 'pending_acceptance'),
           change_amount: payload?.change_amount ?? null,

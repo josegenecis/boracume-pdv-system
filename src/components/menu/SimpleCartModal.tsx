@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/card';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
+import PopPayCardCheckoutModal from '@/components/payment/PopPayCardCheckoutModal';
 import { getOrderItemDetailGroups } from '@/lib/orderDetails';
 import { useToast } from '@/hooks/use-toast';
 import { isConfiguredCartItem } from '@/hooks/useSimpleCart';
@@ -38,7 +39,7 @@ interface CartItem {
   uniqueId: string;
 }
 
-type PaymentMethodCode = 'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito' | 'cartao';
+type PaymentMethodCode = 'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito' | 'cartao' | 'cartao_online';
 type OrderMode = 'delivery' | 'pickup';
 
 interface CheckoutPaymentMethod {
@@ -74,6 +75,7 @@ const inferPaymentMethodCode = (method: { id?: string; name?: string; is_card?: 
   ].join(' ');
 
   if (raw.includes('pix')) return 'pix';
+  if (raw.includes('online') && (raw.includes('cartao') || raw.includes('credito') || raw.includes('credit'))) return 'cartao_online';
   if (raw.includes('debito')) return 'cartao_debito';
   if (raw.includes('credito') || raw.includes('credit')) return 'cartao_credito';
   if (raw.includes('dinheiro') || raw.includes('cash') || raw.includes('especie')) return 'dinheiro';
@@ -90,6 +92,8 @@ const getPaymentMethodIcon = (code: PaymentMethodCode): CheckoutPaymentMethod['i
       return 'cartao_debito';
     case 'cartao':
       return 'cartao';
+    case 'cartao_online':
+      return 'cartao_credito';
     default:
       return 'dinheiro';
   }
@@ -97,10 +101,11 @@ const getPaymentMethodIcon = (code: PaymentMethodCode): CheckoutPaymentMethod['i
 
 const paymentMethodPriority: Record<PaymentMethodCode, number> = {
   pix: 0,
-  cartao_credito: 1,
-  cartao_debito: 2,
-  cartao: 3,
-  dinheiro: 4
+  cartao_online: 1,
+  cartao_credito: 2,
+  cartao_debito: 3,
+  cartao: 4,
+  dinheiro: 5
 };
 
 const mapCheckoutPaymentMethod = (method: any): CheckoutPaymentMethod => {
@@ -111,10 +116,17 @@ const mapCheckoutPaymentMethod = (method: any): CheckoutPaymentMethod => {
     is_card: isCard,
     icon: typeof method?.icon === 'string' ? method.icon : null
   });
+  const displayName = code === 'cartao_credito'
+      ? 'Crédito na entrega'
+      : code === 'cartao_debito'
+        ? 'Débito na entrega'
+        : code === 'cartao'
+          ? 'Cartão na entrega'
+          : String(method?.name || '');
 
   return {
     id: String(method?.id || code),
-    name: String(method?.name || ''),
+    name: displayName,
     is_card: isCard,
     extra_fee_percent: Number(method?.extra_fee_percent || 0),
     icon: getPaymentMethodIcon(code),
@@ -124,8 +136,8 @@ const mapCheckoutPaymentMethod = (method: any): CheckoutPaymentMethod => {
 
 const fallbackPaymentMethods: CheckoutPaymentMethod[] = [
   { id: 'pix', name: 'PIX', is_card: false, extra_fee_percent: 0, icon: 'pix', code: 'pix' },
-  { id: 'cartao_credito', name: 'Cartão de Crédito', is_card: true, extra_fee_percent: 0, icon: 'cartao_credito', code: 'cartao_credito' },
-  { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito', code: 'cartao_debito' },
+  { id: 'cartao_credito', name: 'Crédito na entrega', is_card: true, extra_fee_percent: 0, icon: 'cartao_credito', code: 'cartao_credito' },
+  { id: 'cartao_debito', name: 'Débito na entrega', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito', code: 'cartao_debito' },
   { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro', code: 'dinheiro' }
 ];
 
@@ -186,6 +198,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [notes, setNotes] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [pixCheckout, setPixCheckout] = React.useState<null | { correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string; paymentId?: string }>(null);
+  const [cardCheckoutOrder, setCardCheckoutOrder] = React.useState<any | null>(null);
   const [upsellOpen, setUpsellOpen] = React.useState(false);
   const [upsellOffers, setUpsellOffers] = React.useState<UpsellOffer[]>([]);
   const [pendingOrderData, setPendingOrderData] = React.useState<any | null>(null);
@@ -216,7 +229,25 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [paymentMethods, setPaymentMethods] = useState<CheckoutPaymentMethod[]>([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<CheckoutPaymentMethod | null>(null);
   const [pixOnlineCheckoutAvailable, setPixOnlineCheckoutAvailable] = useState<boolean | null>(null);
+  const [cardOnlineCheckoutAvailable, setCardOnlineCheckoutAvailable] = useState(false);
+  const [mercadoPagoPublicKey, setMercadoPagoPublicKey] = useState('');
   const isPixSelected = selectedPaymentMethod?.code === 'pix';
+  const isCardOnlineSelected = selectedPaymentMethod?.code === 'cartao_online';
+  const visiblePaymentMethods = React.useMemo(() => {
+    const withoutOnline = paymentMethods.filter((method) => method.code !== 'cartao_online');
+    if (!cardOnlineCheckoutAvailable) return withoutOnline;
+    return [
+      ...withoutOnline,
+      {
+        id: 'cartao_online',
+        name: 'Crédito online',
+        is_card: true,
+        extra_fee_percent: 0,
+        icon: 'cartao_credito' as const,
+        code: 'cartao_online' as const,
+      },
+    ].sort((a, b) => paymentMethodPriority[a.code] - paymentMethodPriority[b.code]);
+  }, [paymentMethods, cardOnlineCheckoutAvailable]);
   const [step, setStep] = useState<'bag' | 'checkout'>('bag');
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
@@ -376,13 +407,19 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         }
 
         setPixOnlineCheckoutAvailable(Boolean(data.onlineCheckoutAvailable));
+        setCardOnlineCheckoutAvailable(Boolean(data.cardOnlineAvailable));
+        setMercadoPagoPublicKey(String(data.mercadoPagoPublicKey || ''));
       } catch {
         setPixOnlineCheckoutAvailable(null);
+        setCardOnlineCheckoutAvailable(false);
+        setMercadoPagoPublicKey('');
       }
     };
 
     if (isOpen) {
       setPixOnlineCheckoutAvailable(null);
+      setCardOnlineCheckoutAvailable(false);
+      setMercadoPagoPublicKey('');
       fetchPixOnlineAvailability();
     } else {
       setPixOnlineCheckoutAvailable(null);
@@ -806,6 +843,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   };
 
   const finalizeOrder = async (orderData: any) => {
+    const isOnlineCardOrder = selectedPaymentMethod?.code === 'cartao_online' ||
+      String(orderData?.payment_method || '') === 'cartao_online';
+    if (isOnlineCardOrder) {
+      if (!cardOnlineCheckoutAvailable || !mercadoPagoPublicKey) {
+        throw new Error('O crédito online não está habilitado para este restaurante.');
+      }
+      setCardCheckoutOrder({ ...orderData, payment_method: 'cartao_online' });
+      return;
+    }
+
     const isPixOrder = selectedPaymentMethod?.code === 'pix' || String(orderData?.payment_method || '').startsWith('pix');
     if (!isPixOrder) {
       await placeOrderNow(orderData);
@@ -1091,7 +1138,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   if (cart.length === 0) {
     return (
-      <Dialog open={isOpen && !pixCheckout} onOpenChange={onClose}>
+      <Dialog open={isOpen && !pixCheckout && !cardCheckoutOrder} onOpenChange={onClose}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Carrinho</DialogTitle>
@@ -1124,7 +1171,21 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           }}
         />
       ) : null}
-      <Dialog open={isOpen && !pixCheckout} onOpenChange={onClose}>
+      {cardCheckoutOrder ? (
+        <PopPayCardCheckoutModal
+          isOpen={!!cardCheckoutOrder}
+          onClose={() => setCardCheckoutOrder(null)}
+          restaurantUserId={userId}
+          publicKey={mercadoPagoPublicKey}
+          amount={Number(cardCheckoutOrder.total || finalTotal)}
+          orderPayload={cardCheckoutOrder}
+          onPaid={(orderId) => {
+            setCardCheckoutOrder(null);
+            onPixPaid?.(orderId);
+          }}
+        />
+      ) : null}
+      <Dialog open={isOpen && !pixCheckout && !cardCheckoutOrder} onOpenChange={onClose}>
       <DialogContent className="h-[100dvh] max-h-[100dvh] w-[calc(100dvw-1rem)] max-w-[calc(100dvw-1rem)] overflow-hidden overflow-x-hidden rounded-none border border-gray-100 bg-white p-0 shadow-2xl sm:h-[90dvh] sm:max-h-[90dvh] sm:max-w-lg sm:rounded-xl">
         <div className="flex flex-col h-full min-h-0">
           <DialogHeader className="border-b border-gray-100 px-4 py-4">
@@ -1505,7 +1566,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               <Label className="text-sm font-semibold mb-3 block" style={{ color: menuSecondaryColor }}>Forma de Pagamento *</Label>
 
               <div className="space-y-2">
-                {paymentMethods.length > 0 ? paymentMethods.map((option) => {
+                {visiblePaymentMethods.length > 0 ? visiblePaymentMethods.map((option) => {
                   const IconComponent = option.code === 'pix' ? Smartphone : option.is_card ? CreditCard : Banknote;
                   const isSelected = selectedPaymentMethod?.id === option.id;
                   return (
@@ -1563,6 +1624,15 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       </div>
                     </>
                   )}
+                </div>
+              )}
+
+              {isCardOnlineSelected && (
+                <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                  <div className="text-sm font-semibold text-emerald-950">Crédito online à vista</div>
+                  <div className="mt-1 text-sm text-emerald-800">
+                    O cartão será processado com segurança pelo Mercado Pago dentro do PopSystem. Não há parcelamento.
+                  </div>
                 </div>
               )}
 
