@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -33,6 +33,9 @@ export default function PixSetup() {
   const [popPayConfigured, setPopPayConfigured] = useState(false);
   const [popPayConnected, setPopPayConnected] = useState(false);
   const [popPayExpiresAt, setPopPayExpiresAt] = useState('');
+  const [popPayConnectedAt, setPopPayConnectedAt] = useState('');
+  const [cardOnlineReady, setCardOnlineReady] = useState(false);
+  const reconnectBaselineRef = useRef('');
   const [termsOpen, setTermsOpen] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [awaitingExternalAuth, setAwaitingExternalAuth] = useState(false);
@@ -89,6 +92,8 @@ export default function PixSetup() {
     setPopPayConfigured(Boolean(data?.configured));
     setPopPayConnected(data?.connection?.status === 'connected' && data?.connection?.enabled !== false);
     setPopPayExpiresAt(String(data?.connection?.expires_at || ''));
+    setPopPayConnectedAt(String(data?.connection?.connected_at || ''));
+    setCardOnlineReady(data?.connection?.card_online_ready === true);
     setCreditOnlineEnabled(data?.connection?.credit_online_enabled === true);
     setCreditFeePercent(Number(data?.connection?.credit_fee_bps ?? 50) / 100);
   }, [activeUserId]);
@@ -106,9 +111,13 @@ export default function PixSetup() {
       const { data } = await invokeEdgeFunction('poppay-settings', { action: 'status' }, { timeoutMs: 20000 });
       if (cancelled) return;
       const connected = data?.connection?.status === 'connected' && data?.connection?.enabled !== false;
-      if (connected) {
+      const connectedAt = String(data?.connection?.connected_at || '');
+      const isNewAuthorization = !reconnectBaselineRef.current || connectedAt !== reconnectBaselineRef.current;
+      if (connected && isNewAuthorization) {
         setPopPayConnected(true);
         setPopPayExpiresAt(String(data?.connection?.expires_at || ''));
+        setPopPayConnectedAt(connectedAt);
+        setCardOnlineReady(data?.connection?.card_online_ready === true);
         setCreditOnlineEnabled(data?.connection?.credit_online_enabled === true);
         setCreditFeePercent(Number(data?.connection?.credit_fee_bps ?? 50) / 100);
         setAwaitingExternalAuth(false);
@@ -134,6 +143,7 @@ export default function PixSetup() {
     if (!termsAccepted) return;
     setPopPayLoading(true);
     try {
+      reconnectBaselineRef.current = popPayConnected ? popPayConnectedAt : '';
       const { data, status } = await invokeEdgeFunction('poppay-oauth-start', {
         acceptedTerms: true,
         termsVersion: POPPAY_TERMS_VERSION,
@@ -332,13 +342,18 @@ export default function PixSetup() {
                       id="poppay-credit-online"
                       checked={creditOnlineEnabled}
                       onCheckedChange={(checked) => void setCreditOnline(checked)}
-                      disabled={!popPayConnected || creditSaving}
+                      disabled={!popPayConnected || !cardOnlineReady || creditSaving}
                     />
                     <span className="text-sm text-muted-foreground">{creditOnlineEnabled ? 'Ativo' : 'Inativo'}</span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
                     Somente crédito à vista. Tarifa Mercado Pago + {creditFeeLabel}% PopPay sobre o recebível.
                   </p>
+                  {popPayConnected && !cardOnlineReady ? (
+                    <p className="mt-2 text-xs font-semibold text-amber-700">
+                      Reconecte o PopPay uma única vez para liberar o cartão online. O PIX atual continua funcionando.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="rounded-xl border bg-white p-4">
                   <WalletCards className="mb-3 h-5 w-5 text-orange-500" />

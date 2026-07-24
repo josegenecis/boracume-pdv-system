@@ -34,6 +34,62 @@ const getAuthUserId = async (req: Request) => {
   return error ? '' : String(data?.user?.id || '')
 }
 
+const refreshConnectionPublicKey = async (
+  supabase: any,
+  userId: string,
+  connection: any,
+) => {
+  if (connection?.public_key || !connection?.refresh_token) return connection
+
+  const clientId = getEnv('POPPAY_CLIENT_ID')
+  const clientSecret = getEnv('POPPAY_CLIENT_SECRET')
+  if (!clientId || !clientSecret) return connection
+
+  const tokenResponse = await fetch('https://api.mercadopago.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: String(connection.refresh_token),
+    }),
+  })
+  const token = await tokenResponse.json().catch(() => ({}))
+  if (!tokenResponse.ok || !token?.access_token) return connection
+
+  const expiresIn = Number(token?.expires_in || 0)
+  const expiresAt = expiresIn > 0
+    ? new Date(Date.now() + expiresIn * 1000).toISOString()
+    : connection?.expires_at || null
+  const updatedConnection = {
+    ...connection,
+    access_token: String(token.access_token),
+    refresh_token: token?.refresh_token ? String(token.refresh_token) : connection.refresh_token,
+    public_key: token?.public_key ? String(token.public_key) : connection.public_key,
+    token_type: token?.token_type ? String(token.token_type) : connection.token_type,
+    scope: token?.scope ? String(token.scope) : connection.scope,
+    expires_at: expiresAt,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error } = await supabase
+    .from('poppay_connections')
+    .update({
+      access_token: updatedConnection.access_token,
+      refresh_token: updatedConnection.refresh_token,
+      public_key: updatedConnection.public_key || null,
+      token_type: updatedConnection.token_type || null,
+      scope: updatedConnection.scope || null,
+      expires_at: updatedConnection.expires_at,
+      last_error: null,
+      updated_at: updatedConnection.updated_at,
+    })
+    .eq('user_id', userId)
+
+  return error ? connection : updatedConnection
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   try {
@@ -60,11 +116,12 @@ Deno.serve(async (req) => {
           }), { status: 412, headers: corsHeaders })
         }
 
-        const { data: connection } = await supabase
+        const { data: storedConnection } = await supabase
           .from('poppay_connections')
-          .select('id,status,enabled,public_key,credit_fee_bps')
+          .select('id,status,enabled,public_key,credit_fee_bps,access_token,refresh_token,token_type,scope,expires_at')
           .eq('user_id', userId)
           .maybeSingle()
+        const connection = await refreshConnectionPublicKey(supabase, userId, storedConnection)
         if (!connection || connection.status !== 'connected' || connection.enabled !== true || !connection.public_key) {
           return new Response(JSON.stringify({
             ok: false,
@@ -108,15 +165,28 @@ Deno.serve(async (req) => {
         .eq('user_id', userId)
     }
 
-    const { data } = await supabase
+    const { data: storedConnection } = await supabase
       .from('poppay_connections')
-      .select('status,enabled,mp_user_id,expires_at,connected_at,last_error,credit_online_enabled,credit_fee_bps,credit_terms_version,credit_terms_accepted_at')
+      .select('status,enabled,mp_user_id,expires_at,connected_at,last_error,credit_online_enabled,credit_fee_bps,credit_terms_version,credit_terms_accepted_at,public_key,access_token,refresh_token,token_type,scope')
       .eq('user_id', userId)
       .maybeSingle()
+    const connection = await refreshConnectionPublicKey(supabase, userId, storedConnection)
     return new Response(JSON.stringify({
       ok: true,
       configured: Boolean(getEnv('POPPAY_CLIENT_ID') && getEnv('POPPAY_CLIENT_SECRET') && getEnv('POPPAY_REDIRECT_URI')),
-      connection: data || null,
+      connection: connection ? {
+        status: connection.status,
+        enabled: connection.enabled,
+        mp_user_id: connection.mp_user_id,
+        expires_at: connection.expires_at,
+        connected_at: connection.connected_at,
+        last_error: connection.last_error,
+        credit_online_enabled: connection.credit_online_enabled,
+        credit_fee_bps: connection.credit_fee_bps,
+        credit_terms_version: connection.credit_terms_version,
+        credit_terms_accepted_at: connection.credit_terms_accepted_at,
+        card_online_ready: Boolean(connection.public_key),
+      } : null,
     }), { headers: corsHeaders })
   } catch (error: any) {
     return new Response(JSON.stringify({ ok: false, error: 'internal_error', message: String(error?.message || error) }), { status: 500, headers: corsHeaders })

@@ -5,6 +5,56 @@ const url = Deno.env.get('SUPABASE_URL')!
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!
 const supabase = createClient(url, serviceKey)
 
+const recoverPublicKey = async (userId: string, connection: any) => {
+  if (connection?.public_key || !connection?.refresh_token) return connection
+  const clientId = Deno.env.get('POPPAY_CLIENT_ID') || ''
+  const clientSecret = Deno.env.get('POPPAY_CLIENT_SECRET') || ''
+  if (!clientId || !clientSecret) return connection
+
+  const tokenResponse = await fetch('https://api.mercadopago.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: String(connection.refresh_token),
+    }),
+  })
+  const token: any = await tokenResponse.json().catch(() => ({}))
+  if (!tokenResponse.ok || !token?.access_token) return connection
+
+  const expiresIn = Number(token?.expires_in || 0)
+  const expiresAt = expiresIn > 0
+    ? new Date(Date.now() + expiresIn * 1000).toISOString()
+    : connection?.expires_at || null
+  const next = {
+    ...connection,
+    access_token: String(token.access_token),
+    refresh_token: token?.refresh_token ? String(token.refresh_token) : connection.refresh_token,
+    public_key: token?.public_key ? String(token.public_key) : connection.public_key,
+    token_type: token?.token_type ? String(token.token_type) : connection.token_type,
+    scope: token?.scope ? String(token.scope) : connection.scope,
+    expires_at: expiresAt,
+  }
+
+  const { error } = await supabase
+    .from('poppay_connections')
+    .update({
+      access_token: next.access_token,
+      refresh_token: next.refresh_token,
+      public_key: next.public_key || null,
+      token_type: next.token_type || null,
+      scope: next.scope || null,
+      expires_at: next.expires_at,
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+
+  return error ? connection : next
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -40,11 +90,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '')
     const isMercadoPago = !providerKey || providerKey === 'mp' || providerKey.includes('mercadopago')
-    const { data: popPayConnection } = await supabase
+    const { data: storedPopPayConnection } = await supabase
       .from('poppay_connections')
-      .select('status,enabled,public_key,credit_online_enabled')
+      .select('status,enabled,public_key,credit_online_enabled,access_token,refresh_token,token_type,scope,expires_at')
       .eq('user_id', userId)
       .maybeSingle()
+    const popPayConnection = await recoverPublicKey(userId, storedPopPayConnection)
     const hasOnlineCredentials = popPayConnection?.status === 'connected' && popPayConnection?.enabled === true
     const publicSettings = {
       enabled: Boolean(data.enabled),

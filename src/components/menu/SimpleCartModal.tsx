@@ -233,20 +233,39 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [mercadoPagoPublicKey, setMercadoPagoPublicKey] = useState('');
   const isPixSelected = selectedPaymentMethod?.code === 'pix';
   const isCardOnlineSelected = selectedPaymentMethod?.code === 'cartao_online';
+  const isCardOnDeliverySelected = selectedPaymentMethod?.code === 'cartao';
   const visiblePaymentMethods = React.useMemo(() => {
-    const withoutOnline = paymentMethods.filter((method) => method.code !== 'cartao_online');
-    if (!cardOnlineCheckoutAvailable) return withoutOnline;
-    return [
-      ...withoutOnline,
-      {
+    const deliveryCardMethods = paymentMethods.filter((method) =>
+      ['cartao', 'cartao_credito', 'cartao_debito'].includes(method.code)
+    );
+    const normalizedMethods = paymentMethods.filter((method) =>
+      method.code !== 'cartao_online' &&
+      !['cartao', 'cartao_credito', 'cartao_debito'].includes(method.code)
+    );
+
+    if (deliveryCardMethods.length > 0) {
+      normalizedMethods.push({
+        id: 'cartao',
+        name: 'Cartão na entrega',
+        is_card: true,
+        extra_fee_percent: Math.max(...deliveryCardMethods.map((method) => method.extra_fee_percent || 0)),
+        icon: 'cartao',
+        code: 'cartao',
+      });
+    }
+
+    if (cardOnlineCheckoutAvailable) {
+      normalizedMethods.push({
         id: 'cartao_online',
-        name: 'Crédito online',
+        name: 'Cartão online',
         is_card: true,
         extra_fee_percent: 0,
         icon: 'cartao_credito' as const,
         code: 'cartao_online' as const,
-      },
-    ].sort((a, b) => paymentMethodPriority[a.code] - paymentMethodPriority[b.code]);
+      });
+    }
+
+    return normalizedMethods.sort((a, b) => paymentMethodPriority[a.code] - paymentMethodPriority[b.code]);
   }, [paymentMethods, cardOnlineCheckoutAvailable]);
   const [step, setStep] = useState<'bag' | 'checkout'>('bag');
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
@@ -1629,9 +1648,18 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
               {isCardOnlineSelected && (
                 <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                  <div className="text-sm font-semibold text-emerald-950">Crédito online à vista</div>
+                  <div className="text-sm font-semibold text-emerald-950">Cartão online • crédito à vista</div>
                   <div className="mt-1 text-sm text-emerald-800">
                     O cartão será processado com segurança pelo Mercado Pago dentro do PopSystem. Não há parcelamento.
+                  </div>
+                </div>
+              )}
+
+              {isCardOnDeliverySelected && (
+                <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-sm font-semibold text-gray-900">Cartão na entrega</div>
+                  <div className="mt-1 text-sm text-gray-700">
+                    O pagamento será feito em crédito ou débito na maquininha do restaurante.
                   </div>
                 </div>
               )}
