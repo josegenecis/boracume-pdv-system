@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, Copy, Loader2, Mail, Network, Plus, RefreshCw, Store, TrendingUp, Users } from 'lucide-react';
+import { Building2, Copy, Loader2, Mail, Network, Plus, RefreshCw, RotateCw, Store, TrendingUp, Users } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,7 @@ export default function Stores() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [summary, setSummary] = useState<Summary[]>([]);
   const [lastInviteUrl, setLastInviteUrl] = useState('');
+  const [resendingInvitationId, setResendingInvitationId] = useState('');
 
   const isActiveMulti = String(subscription?.status || '').toLowerCase() === 'active' && Number(subscription?.plan_id || 0) >= 3;
   const capacity = Math.max(1, Number(subscription?.store_count || 1));
@@ -137,6 +138,23 @@ export default function Stores() {
     if (!lastInviteUrl) return;
     await navigator.clipboard.writeText(lastInviteUrl);
     toast.success('Link do convite copiado.');
+  };
+
+  const resendInvitation = async (invitation: Invitation) => {
+    setResendingInvitationId(invitation.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('store-network', {
+        body: { action: 'invite', storeName: invitation.store_name, email: invitation.email },
+      });
+      if (error || !data?.ok) throw new Error(data?.message || data?.error || error?.message || 'Não foi possível reenviar o convite.');
+      setLastInviteUrl(String(data.invitationUrl || ''));
+      toast.success(data.emailNotice || 'Novo convite criado.');
+      await loadNetwork();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível reenviar o convite.');
+    } finally {
+      setResendingInvitationId('');
+    }
   };
 
   const setStoreStatus = async (store: ManagedStore) => {
@@ -244,7 +262,7 @@ export default function Stores() {
         </Card>
       </div>
 
-      {invitations.some((invitation) => invitation.status === 'pending') && <Card><CardHeader><CardTitle>Convites pendentes</CardTitle></CardHeader><CardContent className="space-y-2">{invitations.filter((invitation) => invitation.status === 'pending').map((invitation) => <div key={invitation.id} className="flex items-center justify-between rounded-xl border p-3"><div><p className="font-semibold">{invitation.store_name}</p><p className="text-sm text-muted-foreground">{invitation.email}</p></div><Badge variant="secondary">Aguardando aceite</Badge></div>)}</CardContent></Card>}
+      {invitations.some((invitation) => invitation.status === 'pending') && <Card><CardHeader><CardTitle>Convites pendentes</CardTitle><CardDescription>O status muda automaticamente assim que o convidado entra pelo link e conclui o aceite.</CardDescription></CardHeader><CardContent className="space-y-2">{invitations.filter((invitation) => invitation.status === 'pending').map((invitation) => <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"><div><p className="font-semibold">{invitation.store_name}</p><p className="text-sm text-muted-foreground">{invitation.email}</p></div><div className="flex items-center gap-2"><Badge variant="secondary">Aguardando aceite</Badge><Button variant="outline" size="sm" disabled={resendingInvitationId === invitation.id} onClick={() => void resendInvitation(invitation)}>{resendingInvitationId === invitation.id ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RotateCw className="mr-2 h-3.5 w-3.5" />}Reenviar</Button></div></div>)}</CardContent></Card>}
 
       <p className="text-center text-xs text-muted-foreground">Conta administradora: {accountUser?.email}</p>
     </div>

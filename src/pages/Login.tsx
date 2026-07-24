@@ -33,8 +33,14 @@ const Login = () => {
   }, [location.search, navigate]);
 
   // Obter destino do redirecionamento
-  const requestedFrom = location.state?.from?.pathname || '/dashboard';
-  const from = getOperatorPathForRequestedPath(getLocalOperatorSession(), requestedFrom);
+  const requestedPathname = location.state?.from?.pathname || '/dashboard';
+  const requestedSearch = location.state?.from?.search || '';
+  const requestedFrom = `${requestedPathname}${requestedSearch}`;
+  // Convites de loja precisam terminar o aceite antes da identificação do
+  // operador. Passar essa rota pelo resolvedor de operador descartava o token.
+  const from = requestedPathname === '/lojas/convite'
+    ? requestedFrom
+    : getOperatorPathForRequestedPath(getLocalOperatorSession(), requestedFrom);
 
   useEffect(() => {
     isMountedRef.current = true;

@@ -7,6 +7,9 @@ import { ReceiptText, UserRoundCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import AdminPinDialog from '@/components/security/AdminPinDialog';
+import { verifyAdminPin } from '@/services/adminPin';
+import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
 
 interface StaffConsumption {
   id: string;
@@ -39,6 +42,7 @@ const StaffConsumptionManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<StaffConsumption[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<Record<string, string>>({});
+  const [pendingSettlement, setPendingSettlement] = useState<StaffConsumption | null>(null);
 
   const loadRows = useCallback(async () => {
     if (!user?.id) return;
@@ -72,11 +76,12 @@ const StaffConsumptionManager: React.FC = () => {
     [rows],
   );
 
-  const settle = async (row: StaffConsumption) => {
+  const executeSettlement = async (row: StaffConsumption, authorizedWaiterId: string) => {
     const paymentMethod = paymentMethods[row.id] || 'desconto_folha';
-    const { error } = await supabase.rpc('settle_staff_consumption', {
+    const { error } = await (supabase as any).rpc('settle_staff_consumption_authorized', {
       p_receivable_id: row.id,
       p_payment_method: paymentMethod,
+      p_authorized_waiter_id: authorizedWaiterId,
     });
     if (error) {
       toast({
@@ -93,7 +98,17 @@ const StaffConsumptionManager: React.FC = () => {
     await loadRows();
   };
 
+  const settle = async (row: StaffConsumption) => {
+    const operator = getLocalOperatorSession();
+    if (operator?.id && isAdminOperator(operator)) {
+      await executeSettlement(row, operator.id);
+      return;
+    }
+    setPendingSettlement(row);
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" className="gap-2">
@@ -176,6 +191,25 @@ const StaffConsumptionManager: React.FC = () => {
         )}
       </DialogContent>
     </Dialog>
+    <AdminPinDialog
+      open={pendingSettlement !== null}
+      title="Autorizar baixa do consumo"
+      description="A baixa altera o saldo do funcionário e exige o PIN de um administrador."
+      confirmLabel="Registrar pagamento"
+      onCancel={() => setPendingSettlement(null)}
+      onConfirm={async (pin) => {
+        if (!user?.id || !pendingSettlement) return;
+        const authorization = await verifyAdminPin({ restaurantUserId: user.id, pin });
+        if (!authorization.ok || !authorization.waiterId) {
+          toast({ title: 'Sem permissão', description: 'PIN inválido ou o operador não é administrador.', variant: 'destructive' });
+          return;
+        }
+        const row = pendingSettlement;
+        setPendingSettlement(null);
+        await executeSettlement(row, authorization.waiterId);
+      }}
+    />
+    </>
   );
 };
 

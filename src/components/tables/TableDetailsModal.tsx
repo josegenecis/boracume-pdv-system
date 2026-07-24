@@ -22,6 +22,9 @@ import { PrinterService } from '@/utils/printerService';
 import { formatBRL, parseBRL } from '@/lib/currency';
 import { emitNfceForOrder, isFiscalEmissionActiveForUser } from '@/utils/nfceClient';
 import { useCheckoutSettings } from '@/hooks/useCheckoutSettings';
+import AdminPinDialog from '@/components/security/AdminPinDialog';
+import { verifyAdminPin } from '@/services/adminPin';
+import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
 
 interface Table {
   id: string;
@@ -159,6 +162,10 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const [staffEmployeeName, setStaffEmployeeName] = useState('');
   const [staffDueDate, setStaffDueDate] = useState('');
   const [staffNotes, setStaffNotes] = useState('');
+  const [adminAction, setAdminAction] = useState<'defer-staff' | 'cancel-item' | null>(null);
+  const [itemToCancel, setItemToCancel] = useState<number | null>(null);
+  const [cancelItemOpen, setCancelItemOpen] = useState(false);
+  const [cancelItemReason, setCancelItemReason] = useState('');
   const { toast } = useToast();
   const { user } = useAuth();
   const { settings: checkoutSettings } = useCheckoutSettings();
@@ -394,7 +401,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     });
   };
 
-  const handleDeferToStaff = async () => {
+  const executeDeferToStaff = async (authorizedWaiterId: string) => {
     if (!table || !currentOrder || !user?.id) return;
     if (!staffEmployeeName.trim()) {
       toast({
@@ -415,11 +422,12 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
     try {
       setLoading(true);
-      const { error } = await supabase.rpc('defer_table_account_to_staff', {
+      const { error } = await (supabase as any).rpc('defer_table_account_to_staff_authorized', {
         p_account_id: currentOrder.account_id || currentOrder.id,
         p_employee_name: staffEmployeeName.trim(),
         p_due_date: staffDueDate || null,
         p_notes: staffNotes.trim() || null,
+        p_authorized_waiter_id: authorizedWaiterId,
       });
       if (error) throw error;
 
@@ -443,6 +451,67 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const requestDeferToStaff = async () => {
+    if (!staffEmployeeName.trim()) {
+      toast({ title: 'Informe o funcionário', description: 'O nome é obrigatório.', variant: 'destructive' });
+      return;
+    }
+    const operator = getLocalOperatorSession();
+    if (operator?.id && isAdminOperator(operator)) {
+      await executeDeferToStaff(operator.id);
+      return;
+    }
+    setAdminAction('defer-staff');
+  };
+
+  const executeCancelItem = async (itemIndex: number, authorizedWaiterId: string) => {
+    if (!currentOrder || currentOrder.source !== 'table_accounts') return;
+    try {
+      setLoading(true);
+      const { data, error } = await (supabase as any).rpc('cancel_table_account_item_authorized', {
+        p_account_id: currentOrder.account_id || currentOrder.id,
+        p_item_index: itemIndex,
+        p_reason: cancelItemReason.trim(),
+        p_authorized_waiter_id: authorizedWaiterId,
+      });
+      if (error) throw error;
+      setCurrentOrder((previous) => previous ? {
+        ...previous,
+        items: Array.isArray(data?.items) ? data.items : previous.items.filter((_, index) => index !== itemIndex),
+        total: Number(data?.total ?? previous.total),
+      } : previous);
+      setCancelItemOpen(false);
+      setItemToCancel(null);
+      setCancelItemReason('');
+      toast({
+        title: 'Item cancelado',
+        description: 'O valor foi retirado da mesa e a operação ficou registrada na auditoria.',
+      });
+      onRefresh();
+    } catch (error) {
+      toast({
+        title: 'Não foi possível cancelar o item',
+        description: error instanceof Error ? error.message : 'Atualize a mesa e tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestCancelItem = async () => {
+    if (itemToCancel === null || !cancelItemReason.trim()) {
+      toast({ title: 'Informe o motivo', description: 'O motivo é obrigatório para a auditoria.', variant: 'destructive' });
+      return;
+    }
+    const operator = getLocalOperatorSession();
+    if (operator?.id && isAdminOperator(operator)) {
+      await executeCancelItem(itemToCancel, operator.id);
+      return;
+    }
+    setAdminAction('cancel-item');
   };
 
   const finalizeAccountRecord = async (accountRowId: string, nextAccountStatus: 'paid' | 'closed', paymentTimestamp: string) => {
@@ -1133,7 +1202,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                 <div className="space-y-3">
                   {currentOrder.items.map((item, index) => (
                     <div key={index} className="border-b pb-3 last:border-b-0">
-                      <div className="flex justify-between items-start">
+                      <div className="flex justify-between items-start gap-3">
                         <div className="flex-1">
                           <p className="font-medium">
                             {item.quantity}x {item.product_name}
@@ -1153,11 +1222,29 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                             </p>
                           )}
                         </div>
-                        <div className="text-right">
+                        <div className="flex shrink-0 items-start gap-2 text-right">
+                          <div>
                           <p className="font-medium">{formatCurrency(item.subtotal)}</p>
                           <p className="text-sm text-gray-600">
                             {formatCurrency(item.price)} cada
                           </p>
+                          </div>
+                          {currentOrder.source === 'table_accounts' && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700"
+                              title="Cancelar item com autorização"
+                              onClick={() => {
+                                setItemToCancel(index);
+                                setCancelItemReason('');
+                                setCancelItemOpen(true);
+                              }}
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1362,13 +1449,71 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
               <Button type="button" variant="outline" onClick={() => setStaffConsumptionOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="button" onClick={() => void handleDeferToStaff()} disabled={loading || !staffEmployeeName.trim()}>
+              <Button type="button" onClick={() => void requestDeferToStaff()} disabled={loading || !staffEmployeeName.trim()}>
                 Registrar e liberar mesa
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={cancelItemOpen} onOpenChange={(open) => {
+        setCancelItemOpen(open);
+        if (!open) {
+          setItemToCancel(null);
+          setCancelItemReason('');
+        }
+      }}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancelar item da mesa</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+              O item deixará de compor o total, mas continuará registrado no histórico de cancelamentos.
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cancel-item-reason">Motivo obrigatório</Label>
+              <Textarea
+                id="cancel-item-reason"
+                value={cancelItemReason}
+                onChange={(event) => setCancelItemReason(event.target.value)}
+                placeholder="Ex.: cliente desistiu antes do preparo"
+                rows={3}
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setCancelItemOpen(false)}>Voltar</Button>
+              <Button variant="destructive" disabled={loading || !cancelItemReason.trim()} onClick={() => void requestCancelItem()}>
+                Autorizar cancelamento
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AdminPinDialog
+        open={adminAction !== null}
+        title="Autorização do administrador"
+        description={adminAction === 'cancel-item'
+          ? 'Digite o PIN master para cancelar o item e registrar a auditoria.'
+          : 'Digite o PIN master para transferir a conta ao funcionário e liberar a mesa.'}
+        confirmLabel="Autorizar"
+        onCancel={() => setAdminAction(null)}
+        onConfirm={async (pin) => {
+          if (!user?.id) return;
+          const authorization = await verifyAdminPin({ restaurantUserId: user.id, pin });
+          if (!authorization.ok || !authorization.waiterId) {
+            toast({ title: 'Sem permissão', description: 'PIN inválido ou o operador não é administrador.', variant: 'destructive' });
+            return;
+          }
+          const action = adminAction;
+          setAdminAction(null);
+          if (action === 'defer-staff') await executeDeferToStaff(authorization.waiterId);
+          if (action === 'cancel-item' && itemToCancel !== null) await executeCancelItem(itemToCancel, authorization.waiterId);
+        }}
+      />
 
       <CheckoutModal
         open={checkoutOpen}

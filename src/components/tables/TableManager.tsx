@@ -15,6 +15,9 @@ import { ensureDefaultTables } from '@/utils/tableDefaults';
 import TableDetailsModal from './TableDetailsModal';
 import AddProductToTableModal from './AddProductToTableModal';
 import StaffConsumptionManager from './StaffConsumptionManager';
+import AdminPinDialog from '@/components/security/AdminPinDialog';
+import { verifyAdminPin } from '@/services/adminPin';
+import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
 
 interface Table {
   id: string;
@@ -34,6 +37,7 @@ const TableManager: React.FC = () => {
   const [showTableDetails, setShowTableDetails] = useState(false);
   const [showAddProducts, setShowAddProducts] = useState(false);
   const [tableForProducts, setTableForProducts] = useState<Table | null>(null);
+  const [tablePendingArchive, setTablePendingArchive] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     table_number: '',
     capacity: 4,
@@ -121,6 +125,24 @@ const TableManager: React.FC = () => {
     }
   };
 
+  const executeArchive = async (tableId: string, authorizedWaiterId: string) => {
+    try {
+      const { error } = await (supabase as any).rpc('archive_table_authorized', {
+        p_table_id: tableId,
+        p_authorized_waiter_id: authorizedWaiterId,
+      });
+      if (error) throw error;
+      toast({ title: 'Mesa arquivada', description: 'A mesa saiu da operação sem apagar o histórico.' });
+      void fetchTables();
+    } catch (error) {
+      toast({
+        title: 'Erro ao arquivar mesa',
+        description: error instanceof Error ? error.message : 'Não foi possível arquivar a mesa.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleDelete = async (tableId: string) => {
     const table = tables.find((item) => item.id === tableId);
     if (table?.status === 'occupied') {
@@ -141,33 +163,12 @@ const TableManager: React.FC = () => {
     });
     if (!ok) return;
 
-    try {
-      const { error } = await supabase
-        .from('tables')
-        .update({
-          archived_at: new Date().toISOString(),
-          archived_by: user?.id || null,
-          status: 'available',
-        })
-        .eq('id', tableId)
-        .eq('user_id', user?.id);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Sucesso',
-        description: 'Mesa arquivada sem apagar o histórico.',
-      });
-
-      void fetchTables();
-    } catch (error) {
-      console.error('Erro ao excluir mesa:', error);
-      toast({
-        title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao arquivar mesa.',
-        variant: 'destructive',
-      });
+    const operator = getLocalOperatorSession();
+    if (operator?.id && isAdminOperator(operator)) {
+      await executeArchive(tableId, operator.id);
+      return;
     }
+    setTablePendingArchive(tableId);
   };
 
   const handleTableClick = (table: Table) => {
@@ -422,6 +423,25 @@ const TableManager: React.FC = () => {
           </Card>
         ))}
       </div>
+
+      <AdminPinDialog
+        open={tablePendingArchive !== null}
+        title="Autorizar arquivamento"
+        description="A mesa sairá da operação. Digite o PIN master para confirmar."
+        confirmLabel="Arquivar mesa"
+        onCancel={() => setTablePendingArchive(null)}
+        onConfirm={async (pin) => {
+          if (!user?.id || !tablePendingArchive) return;
+          const authorization = await verifyAdminPin({ restaurantUserId: user.id, pin });
+          if (!authorization.ok || !authorization.waiterId) {
+            toast({ title: 'Sem permissão', description: 'PIN inválido ou o operador não é administrador.', variant: 'destructive' });
+            return;
+          }
+          const tableId = tablePendingArchive;
+          setTablePendingArchive(null);
+          await executeArchive(tableId, authorization.waiterId);
+        }}
+      />
 
       {tables.length === 0 && (
         <Card>

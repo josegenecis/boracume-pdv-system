@@ -73,13 +73,13 @@ export default function StoreInvitation() {
           {!token && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">O link não contém um convite válido.</p>}
           {error && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
           {accepted && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center"><CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" /><p className="mt-2 font-bold text-emerald-900">Unidade vinculada com sucesso</p><p className="mt-1 text-sm text-emerald-800">Agora você pode identificar seu operador e começar a configurar a loja.</p></div>}
-          {!accountUser && token && <><div className="flex items-start gap-3 rounded-2xl border bg-white p-4"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#087A55]" /><p className="text-sm text-muted-foreground">Entre usando exatamente o e-mail que recebeu o convite. Se ainda não possui conta, use o botão de criação recebido por e-mail.</p></div><Button className="w-full bg-[#087A55] hover:bg-[#056843]" onClick={() => navigate('/login', { state: { from: { pathname: '/lojas/convite' } } })}><LogIn className="mr-2 h-4 w-4" />Entrar para aceitar</Button></>}
+          {!accountUser && token && <><div className="flex items-start gap-3 rounded-2xl border bg-white p-4"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#087A55]" /><p className="text-sm text-muted-foreground">Entre usando exatamente o e-mail que recebeu o convite. Se ainda não possui conta, use o botão de criação recebido por e-mail.</p></div><Button className="w-full bg-[#087A55] hover:bg-[#056843]" onClick={() => navigate('/login', { state: { from: { pathname: '/lojas/convite', search: location.search } } })}><LogIn className="mr-2 h-4 w-4" />Entrar para aceitar</Button></>}
           {accepted && <Button className="w-full bg-[#FF6400] hover:bg-[#D95700]" onClick={() => navigate('/operator-login', { replace: true })}>Acessar minha unidade</Button>}
           {accountUser && errorCode === 'invitation_email_mismatch' && <Button
             className="w-full bg-[#087A55] hover:bg-[#056843]"
             onClick={async () => {
               await supabase.auth.signOut({ scope: 'local' });
-              navigate('/login', { state: { from: { pathname: '/lojas/convite' } }, replace: true });
+              navigate('/login', { state: { from: { pathname: '/lojas/convite', search: location.search } }, replace: true });
             }}
           >Entrar com o e-mail convidado</Button>}
           {accountUser && error && errorCode !== 'invitation_email_mismatch' && <Button variant="outline" className="w-full" onClick={() => navigate('/dashboard')}>Voltar ao painel</Button>}

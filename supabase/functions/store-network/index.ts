@@ -30,6 +30,54 @@ const getSiteUrl = (req: Request) => {
   return configured
 }
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  })[character] || character)
+
+const sendInvitationEmail = async (params: {
+  email: string
+  storeName: string
+  invitationUrl: string
+}) => {
+  const apiKey = String(Deno.env.get('RESEND_API_KEY') || '')
+  if (!apiKey) return { sent: false, reason: 'provider_not_configured' }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: Deno.env.get('RESEND_FROM_EMAIL') || 'PopSystem <relatorios@popsystem.com.br>',
+      to: [params.email],
+      subject: `Convite para administrar ${params.storeName} no PopSystem`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123d32">
+          <div style="height:8px;border-radius:8px;background:linear-gradient(90deg,#003223,#087A55,#FF6400)"></div>
+          <h1 style="font-size:24px;margin:28px 0 8px">Você foi convidado para uma unidade PopSystem</h1>
+          <p style="line-height:1.6">Use o e-mail <strong>${escapeHtml(params.email)}</strong> para acessar e administrar somente a unidade <strong>${escapeHtml(params.storeName)}</strong>.</p>
+          <p style="margin:28px 0">
+            <a href="${escapeHtml(params.invitationUrl)}" style="display:inline-block;background:#087A55;color:white;text-decoration:none;padding:14px 22px;border-radius:10px;font-weight:bold">Aceitar convite</a>
+          </p>
+          <p style="font-size:13px;color:#64748b;line-height:1.5">Se o botão não abrir, copie este endereço:<br>${escapeHtml(params.invitationUrl)}</p>
+        </div>
+      `,
+    }),
+  })
+
+  if (!response.ok) {
+    console.error('[store-network] invitation email failed', response.status, await response.text())
+    return { sent: false, reason: 'provider_error' }
+  }
+  return { sent: true }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -154,6 +202,7 @@ Deno.serve(async (req) => {
         .select('id', { count: 'exact', head: true })
         .eq('network_id', network.id)
         .eq('status', 'pending')
+        .neq('email', email)
         .gt('expires_at', new Date().toISOString())
       if (subscription?.status !== 'active' || Number(subscription?.plan_id || 0) < 3) {
         return json({ ok: false, error: 'multi_plan_required' }, 403)
@@ -186,8 +235,14 @@ Deno.serve(async (req) => {
       if (!inviteError) {
         emailSent = true
         emailNotice = 'O convite foi enviado por e-mail.'
-      } else if (!String(inviteError.message || '').toLowerCase().includes('already')) {
-        emailNotice = 'O e-mail automático não pôde ser enviado; compartilhe o link de convite.'
+      } else {
+        // O Auth não reenvia convites para usuários já cadastrados. Nesses
+        // casos usamos o provedor transacional e mantemos o mesmo link seguro.
+        const emailResult = await sendInvitationEmail({ email, storeName, invitationUrl })
+        emailSent = emailResult.sent
+        emailNotice = emailSent
+          ? 'O convite foi enviado por e-mail.'
+          : 'O e-mail automático não pôde ser enviado; compartilhe o link de convite.'
       }
 
       return json({ ok: true, invitationId: invitation.id, invitationUrl, expiresAt: invitation.expires_at, emailSent, emailNotice })
