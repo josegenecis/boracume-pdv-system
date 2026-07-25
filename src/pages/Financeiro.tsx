@@ -39,7 +39,13 @@ import {
   ReceiptText,
   ChevronRight,
   XCircle,
-  PackageCheck
+  PackageCheck,
+  CalendarDays,
+  ShoppingBag,
+  Ban,
+  WalletCards,
+  Sparkles,
+  TrendingUp,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -86,6 +92,8 @@ interface Transaction {
   type: 'entrada' | 'saida';
   category: string;
   paymentMethod?: PaymentMethod;
+  status?: string;
+  order?: Record<string, any>;
 }
 
 interface CashSession {
@@ -164,16 +172,16 @@ const Financeiro = () => {
       const ordersList = (orders as any[]) || [];
       setOrdersRaw(ordersList);
       
-      const incomeTx = ordersList
-        .filter((order) => String((order as any)?.status || '') !== 'cancelled')
-        .map(order => ({
+      const incomeTx = ordersList.map(order => ({
         id: order.id,
         date: new Date(order.created_at),
         description: `Pedido #${order.id.substring(0, 8)}`,
         amount: order.total,
         type: 'entrada' as 'entrada',
         category: 'Vendas',
-        paymentMethod: order.payment_method as PaymentMethod
+        paymentMethod: order.payment_method as PaymentMethod,
+        status: String(order.status || ''),
+        order,
       }));
 
       // 2. Fetch Expenses (Outcome)
@@ -257,6 +265,16 @@ const Financeiro = () => {
     }
     try {
       setLoadingSessionDetails(true);
+      const selected = cashSessions.find((session) => session.id === sessionId)
+        || (currentSession?.id === sessionId ? currentSession : null);
+      const sessionReq = selected
+        ? Promise.resolve({ data: selected, error: null })
+        : (supabase as any)
+          .from('cash_register_sessions')
+          .select('id, opened_at, closed_at, initial_amount, final_amount, status, notes')
+          .eq('user_id', user.id)
+          .eq('id', sessionId)
+          .maybeSingle();
       const movementsReq = (supabase as any)
         .from('cash_movements')
         .select('id, created_at, type, amount, description')
@@ -271,7 +289,8 @@ const Financeiro = () => {
         .eq('cash_register_session_id', sessionId)
         .order('created_at', { ascending: false });
 
-      const [{ data: orders, error: ordersError }, { data: movements, error: movementsError }] = await Promise.all([
+      const [{ data: session }, { data: orders, error: ordersError }, { data: movements, error: movementsError }] = await Promise.all([
+        sessionReq,
         ordersReq,
         movementsReq,
       ]);
@@ -284,7 +303,38 @@ const Financeiro = () => {
       } else if (ordersError) {
         throw ordersError;
       } else {
-        setSessionOrders((orders as any) || []);
+        const linkedOrders = Array.isArray(orders) ? orders : [];
+        let unlinkedOrders: any[] = [];
+
+        // Pedidos antigos ou criados por uma tela que ainda não recebeu a sessão
+        // podem ficar sem cash_register_session_id. Eles continuam pertencendo ao
+        // intervalo da sessão e precisam aparecer no histórico/cancelamento.
+        if (session?.opened_at) {
+          let unlinkedReq = (supabase as any)
+            .from('orders')
+            .select('id, order_number, created_at, total, payment_method, status')
+            .eq('user_id', user.id)
+            .is('cash_register_session_id', null)
+            .gte('created_at', session.opened_at);
+          if (session.closed_at) {
+            unlinkedReq = unlinkedReq.lte('created_at', session.closed_at);
+          }
+          const { data: fallbackOrders, error: fallbackError } = await unlinkedReq
+            .order('created_at', { ascending: false });
+          if (!fallbackError && Array.isArray(fallbackOrders)) {
+            unlinkedOrders = fallbackOrders;
+          }
+        }
+
+        const uniqueOrders = new Map<string, any>();
+        [...linkedOrders, ...unlinkedOrders].forEach((order) => {
+          if (order?.id) uniqueOrders.set(String(order.id), order);
+        });
+        setSessionOrders(
+          Array.from(uniqueOrders.values()).sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+        );
       }
     } catch (e: any) {
       console.error(e);
@@ -768,28 +818,42 @@ const Financeiro = () => {
     }
   };
   
-  // Calculate financial summaries
-  const totalIncome = filteredTransactions
+  const reportStart = filters.startDate
+    ? new Date(filters.startDate)
+    : new Date(new Date().setDate(new Date().getDate() - 30));
+  reportStart.setHours(0, 0, 0, 0);
+  const reportEnd = filters.endDate ? new Date(filters.endDate) : new Date();
+  reportEnd.setHours(23, 59, 59, 999);
+
+  // Calculate financial summaries using the same period displayed in the charts.
+  const financialTransactions = filteredTransactions.filter(
+    (transaction) =>
+      transaction.status !== 'cancelled'
+      && transaction.date >= reportStart
+      && transaction.date <= reportEnd
+  );
+
+  const totalIncome = financialTransactions
     .filter(t => t.type === 'entrada')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
     
-  const totalExpenses = filteredTransactions
+  const totalExpenses = financialTransactions
     .filter(t => t.type === 'saida')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
     
   const balance = totalIncome - totalExpenses;
   
   // Payment method breakdown
-  const pixTotal = filteredTransactions
-    .filter(t => t.paymentMethod === 'pix' && t.type === 'entrada')
+  const pixTotal = financialTransactions
+    .filter(t => getPaymentBucket(t.paymentMethod) === 'pix' && t.type === 'entrada')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
     
-  const cardTotal = filteredTransactions
-    .filter(t => t.paymentMethod === 'cartao' && t.type === 'entrada')
+  const cardTotal = financialTransactions
+    .filter(t => ['cartao', 'credito', 'debito', 'voucher'].includes(getPaymentBucket(t.paymentMethod)) && t.type === 'entrada')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
     
-  const cashTotal = filteredTransactions
-    .filter(t => t.paymentMethod === 'dinheiro' && t.type === 'entrada')
+  const cashTotal = financialTransactions
+    .filter(t => getPaymentBucket(t.paymentMethod) === 'dinheiro' && t.type === 'entrada')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
   
   // Apply filters
@@ -805,11 +869,15 @@ const Financeiro = () => {
     }
     
     if (filters.startDate) {
-      result = result.filter(t => t.date >= filters.startDate!);
+      const start = new Date(filters.startDate);
+      start.setHours(0, 0, 0, 0);
+      result = result.filter(t => t.date >= start);
     }
     
     if (filters.endDate) {
-      result = result.filter(t => t.date <= filters.endDate!);
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      result = result.filter(t => t.date <= end);
     }
     
     if (filters.searchTerm) {
@@ -824,7 +892,7 @@ const Financeiro = () => {
   
   const generateCSV = () => {
     const rows = [
-      ['Data', 'Hora', 'Descrição', 'Categoria', 'Método', 'Valor', 'Tipo'],
+      ['Data', 'Hora', 'Descrição', 'Categoria', 'Método', 'Valor', 'Tipo', 'Status'],
       ...filteredTransactions.map(t => [
         formatDate(t.date),
         formatTime(t.date),
@@ -832,7 +900,8 @@ const Financeiro = () => {
         t.category,
         getPaymentMethodLabel(t.paymentMethod),
         String(t.amount).replace('.', ','),
-        t.type
+        t.type,
+        t.category === 'Vendas' ? (t.status === 'cancelled' ? 'Cancelada' : 'Registrada') : '',
       ])
     ];
     const csvContent = rows.map(r => r.map(field => `"${String(field).replace(/"/g, '""')}"`).join(';')).join('\n');
@@ -863,6 +932,24 @@ const Financeiro = () => {
       ...filters,
       [field]: value
     });
+  };
+
+  const setPeriodPreset = (preset: 'today' | '7d' | '30d' | 'month') => {
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+
+    if (preset === 'today') {
+      start.setHours(0, 0, 0, 0);
+    } else if (preset === 'month') {
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+    } else {
+      start.setDate(start.getDate() - (preset === '7d' ? 6 : 29));
+      start.setHours(0, 0, 0, 0);
+    }
+
+    setFilters((current) => ({ ...current, startDate: start, endDate: end }));
   };
   
   useEffect(() => {
@@ -902,11 +989,6 @@ const Financeiro = () => {
     }
   };
 
-  const reportStart = filters.startDate ? new Date(filters.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
-  reportStart.setHours(0, 0, 0, 0);
-  const reportEnd = filters.endDate ? new Date(filters.endDate) : new Date();
-  reportEnd.setHours(23, 59, 59, 999);
-
   const enumerateDays = (from: Date, to: Date) => {
     const out: Date[] = [];
     const cur = new Date(from);
@@ -930,7 +1012,7 @@ const Financeiro = () => {
   const dailySeries = (() => {
     const days = enumerateDays(reportStart, reportEnd);
     const map: Record<string, { income: number; expenses: number }> = {};
-    for (const t of filteredTransactions) {
+    for (const t of financialTransactions) {
       if (!t?.date) continue;
       if (t.date < reportStart || t.date > reportEnd) continue;
       const k = dateKey(t.date);
@@ -949,7 +1031,7 @@ const Financeiro = () => {
 
   const expenseByCategory = (() => {
     const map: Record<string, number> = {};
-    for (const t of filteredTransactions) {
+    for (const t of financialTransactions) {
       if (t.type !== 'saida') continue;
       if (t.date < reportStart || t.date > reportEnd) continue;
       const key = String(t.category || 'Geral');
@@ -1007,8 +1089,24 @@ const Financeiro = () => {
     }
   };
 
+  const getOrderStatusLabel = (status?: string) => {
+    const labels: Record<string, string> = {
+      pending: 'Pendente',
+      preparing: 'Em preparo',
+      ready: 'Pronto',
+      in_delivery: 'Em entrega',
+      delivered: 'Entregue',
+      completed: 'Concluída',
+      open: 'Aberta',
+      cancelled: 'Cancelada',
+    };
+    const normalized = String(status || '').toLowerCase();
+    return labels[normalized] || (normalized ? normalized.replace(/_/g, ' ') : 'Registrada');
+  };
+
   const selectedSession = cashSessions.find(s => s.id === selectedSessionId) || currentSession || null;
   const sessionSales = sessionOrders.filter(o => o?.status !== 'cancelled');
+  const sessionCancelledSales = sessionOrders.filter(o => o?.status === 'cancelled');
   const sessionTotal = sessionSales.reduce((sum, o) => sum + Number(o.total || 0), 0);
   const sessionPaymentTotals = sessionSales.reduce<Record<string, number>>((acc, order) => {
     const splitLines = getOrderPaymentLines(order as any);
@@ -1026,16 +1124,57 @@ const Financeiro = () => {
   const sessionCash = Number(sessionPaymentTotals.dinheiro || 0);
   const sessionIn = sessionMovements.filter(m => m.type === 'in').reduce((sum, m) => sum + Number(m.amount || 0), 0);
   const sessionOut = sessionMovements.filter(m => m.type === 'out').reduce((sum, m) => sum + Number(m.amount || 0), 0);
+  const sessionExpectedCash = Number(selectedSession?.initial_amount || 0) + sessionCash + sessionIn - sessionOut;
+  const periodSales = filteredTransactions.filter(
+    (transaction) =>
+      transaction.category === 'Vendas'
+      && transaction.date >= reportStart
+      && transaction.date <= reportEnd
+  );
+  const validPeriodSales = periodSales.filter((transaction) => transaction.status !== 'cancelled');
+  const cancelledPeriodSales = periodSales.filter((transaction) => transaction.status === 'cancelled');
+  const averageTicket = validPeriodSales.length > 0
+    ? validPeriodSales.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0) / validPeriodSales.length
+    : 0;
+  const cancelledPeriodValue = cancelledPeriodSales.reduce(
+    (sum, transaction) => sum + Number(transaction.amount || 0),
+    0
+  );
   const paymentMix = [
-    { name: 'PIX', value: Math.max(pixTotal, 1), color: '#8CC850' },
-    { name: 'Cartão', value: Math.max(cardTotal, 1), color: '#FF6400' },
-    { name: 'Dinheiro', value: Math.max(cashTotal, 1), color: '#7C3AED' },
+    { name: 'PIX', value: pixTotal, color: '#8CC850' },
+    { name: 'Cartão', value: cardTotal, color: '#FF6400' },
+    { name: 'Dinheiro', value: cashTotal, color: '#7C3AED' },
   ];
-  const financePulse = [
-    { label: 'Margem', value: Math.max(10, Math.min(96, Math.round(margemOperacional))) },
-    { label: 'Liquidez', value: Math.max(14, Math.min(95, totalIncome > 0 ? Math.round((balance / totalIncome) * 100) + 62 : 22)) },
-    { label: 'Contas pagas', value: Math.max(12, Math.min(96, totalIncome > 0 ? 100 - Math.round((totalExpenses / totalIncome) * 100) : 18)) },
-    { label: 'Caixa', value: Math.max(16, Math.min(94, currentSession ? 74 : 48)) },
+  const hasPaymentMix = paymentMix.some((item) => item.value > 0);
+  const financeInsights = [
+    {
+      label: 'Vendas no período',
+      value: String(validPeriodSales.length),
+      helper: validPeriodSales.length === 1 ? 'venda confirmada' : 'vendas confirmadas',
+      icon: ShoppingBag,
+      tone: 'bg-[#F5FBED] text-[#245B2B] border-[#8CC850]/20',
+    },
+    {
+      label: 'Ticket médio',
+      value: formatCurrency(averageTicket),
+      helper: 'média por venda',
+      icon: TrendingUp,
+      tone: 'bg-[#EEF7FF] text-[#0369A1] border-sky-200',
+    },
+    {
+      label: 'Cancelamentos',
+      value: String(cancelledPeriodSales.length),
+      helper: cancelledPeriodSales.length > 0 ? formatCurrency(cancelledPeriodValue) : 'nenhum no período',
+      icon: Ban,
+      tone: 'bg-[#FFF1F1] text-[#B42318] border-red-200',
+    },
+    {
+      label: 'Dinheiro esperado',
+      value: formatCurrency(sessionExpectedCash),
+      helper: selectedSession ? 'na sessão selecionada' : 'selecione uma sessão',
+      icon: WalletCards,
+      tone: 'bg-[#FFF4EA] text-[#C45E00] border-orange-200',
+    },
   ];
   const topExpenseCards = expenseByCategory.slice(0, 4);
   const isCashRoute = location.pathname.startsWith('/caixa');
@@ -1288,6 +1427,59 @@ const Financeiro = () => {
                 </div>
               </div>
 
+              <div className="flex flex-col gap-3 rounded-[24px] border border-[#003223]/8 bg-gradient-to-r from-[#F8FAF8] via-white to-[#FFF5EC] p-3 dark:border-white/10 dark:from-[#0c1512] dark:via-[#101a16] dark:to-[#1e1510] lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#003223] text-white shadow-sm">
+                    <CalendarDays className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">Período analisado</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      {new Intl.DateTimeFormat('pt-BR').format(reportStart)} até {new Intl.DateTimeFormat('pt-BR').format(reportEnd)}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'today', label: 'Hoje' },
+                    { key: '7d', label: '7 dias' },
+                    { key: '30d', label: '30 dias' },
+                    { key: 'month', label: 'Este mês' },
+                  ].map((preset) => (
+                    <Button
+                      key={preset.key}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 rounded-xl border-[#003223]/10 bg-white px-3 text-xs text-[#003223] shadow-sm hover:bg-[#F5FBED] dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      onClick={() => setPeriodPreset(preset.key as 'today' | '7d' | '30d' | 'month')}
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {financeInsights.map((insight) => {
+                  const Icon = insight.icon;
+                  return (
+                    <div key={insight.label} className={`rounded-[22px] border p-4 ${insight.tone}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-70">{insight.label}</div>
+                          <div className="mt-2 text-xl font-bold tracking-tight">{insight.value}</div>
+                          <div className="mt-1 text-xs opacity-70">{insight.helper}</div>
+                        </div>
+                        <div className="rounded-xl bg-white/75 p-2 shadow-sm dark:bg-black/10">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_320px]">
                 <div className="rounded-[28px] border border-[#003223]/8 bg-[#F8FAF8] p-4 dark:border-white/10 dark:bg-[#0c1512]">
                   <div className="mb-3 flex items-center justify-between">
@@ -1322,16 +1514,23 @@ const Financeiro = () => {
                     <div className="text-sm font-semibold text-slate-900 dark:text-white">Mix de pagamentos</div>
                     <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Como as receitas estão distribuídas hoje</div>
                     <div className="mt-4 h-[180px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={paymentMix} dataKey="value" nameKey="name" innerRadius={42} outerRadius={72} paddingAngle={3}>
-                            {paymentMix.map((item) => (
-                              <Cell key={item.name} fill={item.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      {hasPaymentMix ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={paymentMix} dataKey="value" nameKey="name" innerRadius={42} outerRadius={72} paddingAngle={3}>
+                              {paymentMix.map((item) => (
+                                <Cell key={item.name} fill={item.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex h-full flex-col items-center justify-center text-center">
+                          <WalletCards className="h-7 w-7 text-slate-300" />
+                          <div className="mt-2 text-xs text-slate-500">Sem recebimentos no período</div>
+                        </div>
+                      )}
                     </div>
                     <div className="grid gap-2">
                       {paymentMix.map((item) => (
@@ -1346,26 +1545,17 @@ const Financeiro = () => {
                     </div>
                   </div>
 
-                  <div className="rounded-[28px] border border-[#003223]/8 bg-[#F8FAF8] p-4 dark:border-white/10 dark:bg-[#0c1512]">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">Pulso financeiro</div>
-                    <div className="mt-4 space-y-3">
-                      {financePulse.map((item, index) => (
-                        <div key={item.label}>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="text-slate-500 dark:text-slate-400">{item.label}</span>
-                            <span className="font-semibold text-slate-900 dark:text-white">{item.value}%</span>
-                          </div>
-                          <div className="h-2 rounded-full bg-slate-200/80 dark:bg-white/10">
-                            <div
-                              className="h-2 rounded-full"
-                              style={{
-                                width: `${item.value}%`,
-                                background: ['#8CC850', '#FF6400', '#7C3AED', '#0EA5E9'][index % 4],
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                  <div className="overflow-hidden rounded-[28px] border border-[#003223]/8 bg-gradient-to-br from-[#003223] via-[#07573d] to-[#FF6400] p-4 text-white shadow-[0_20px_40px_-28px_rgba(0,50,35,0.65)]">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <Sparkles className="h-4 w-4 text-[#C8F59A]" />
+                      Leitura rápida
+                    </div>
+                    <div className="mt-2 text-xs leading-relaxed text-white/75">
+                      {validPeriodSales.length === 0
+                        ? 'Assim que houver vendas no período, o PopSystem mostra ticket médio, margem e comportamento dos recebimentos.'
+                        : cancelledPeriodSales.length > 0
+                          ? `${cancelledPeriodSales.length} cancelamento(s) retirado(s) dos totais. A margem atual do período é de ${Number(margemOperacional.toFixed(1)).toString().replace('.', ',')}%.`
+                          : `Sem cancelamentos no período. O ticket médio está em ${formatCurrency(averageTicket)} e a margem em ${Number(margemOperacional.toFixed(1)).toString().replace('.', ',')}%.`}
                     </div>
                   </div>
                 </div>
@@ -1730,6 +1920,26 @@ const Financeiro = () => {
                         </div>
                       </div>
                     </div>
+                    {transaction.category === 'Vendas' && (
+                      <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                        <Badge variant={transaction.status === 'cancelled' ? 'destructive' : 'outline'}>
+                          {transaction.status === 'cancelled' ? 'Cancelada' : 'Venda registrada'}
+                        </Badge>
+                        {transaction.status !== 'cancelled' && transaction.order && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                            disabled={cancellingOrderIds.has(String(transaction.id))}
+                            onClick={() => { void handleCancelSessionOrder(transaction.order); }}
+                          >
+                            <XCircle className="mr-2 h-4 w-4" />
+                            {cancellingOrderIds.has(String(transaction.id)) ? 'Cancelando...' : 'Cancelar'}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -1903,21 +2113,32 @@ const Financeiro = () => {
       
       <div className="hidden md:block">
       <Tabs defaultValue="fluxo-caixa" className="w-full">
-        <TabsList className="bg-muted/60 dark:bg-white/5">
-          <TabsTrigger value="fluxo-caixa">Fluxo de Caixa</TabsTrigger>
-          <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
+        <TabsList className="h-11 rounded-2xl border border-[#003223]/8 bg-white/80 p-1 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <TabsTrigger className="rounded-xl px-5 data-[state=active]:bg-[#003223] data-[state=active]:text-white" value="fluxo-caixa">Fluxo de Caixa</TabsTrigger>
+          <TabsTrigger className="rounded-xl px-5 data-[state=active]:bg-[#003223] data-[state=active]:text-white" value="relatorios">Relatórios</TabsTrigger>
         </TabsList>
         
         <TabsContent value="fluxo-caixa" className="space-y-4">
-          <Card className="rounded-[30px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
-                {currentSession ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                Sessão de Caixa
-              </CardTitle>
-              <CardDescription className="dark:text-slate-400">Selecione uma sessão para ver o histórico de vendas e movimentações</CardDescription>
+          <Card className="overflow-hidden rounded-[30px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
+            <CardHeader className="border-b border-white/10 bg-gradient-to-r from-[#003223] via-[#07573d] to-[#0c6d49] text-white">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-white">
+                    {selectedSession?.status === 'open' ? <Unlock className="h-4 w-4 text-[#C8F59A]" /> : <Lock className="h-4 w-4 text-white/70" />}
+                    Sessão de Caixa
+                  </CardTitle>
+                  <CardDescription className="mt-1 text-white/70">Conferência de vendas, dinheiro esperado e movimentações da operação.</CardDescription>
+                </div>
+                <div className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] ${
+                  selectedSession?.status === 'open'
+                    ? 'border-[#C8F59A]/40 bg-[#C8F59A]/15 text-[#E8FFD0]'
+                    : 'border-white/20 bg-white/10 text-white/80'
+                }`}>
+                  {selectedSession?.status === 'open' ? 'Caixa aberto' : 'Caixa fechado'}
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5 bg-gradient-to-b from-[#F8FBF9] to-white p-5 dark:from-[#0c1512] dark:to-[#101a16]">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <Label>Sessão</Label>
@@ -1963,26 +2184,38 @@ const Financeiro = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <Card className="rounded-[22px] border border-[#8CC850]/15 bg-white dark:border-white/10 dark:bg-[#0c1512]">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">Total Vendas</CardTitle></CardHeader>
-                  <CardContent><div className="text-xl font-bold">{formatCurrency(sessionTotal)}</div></CardContent>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <Card className="rounded-[22px] border border-[#8CC850]/20 bg-gradient-to-br from-white to-[#F5FBED] dark:border-white/10 dark:from-[#0c1512] dark:to-[#112017]">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Total de vendas</span><ShoppingBag className="h-4 w-4 text-[#6FAE35]" /></div>
+                    <div className="mt-2 text-xl font-bold">{formatCurrency(sessionTotal)}</div>
+                    <div className="mt-1 text-xs text-slate-500">{sessionSales.length} venda(s) válida(s)</div>
+                  </CardContent>
                 </Card>
-                <Card className="rounded-[22px] border border-[#0ea5e9]/15 bg-white dark:border-white/10 dark:bg-[#0c1512]">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">PIX</CardTitle></CardHeader>
-                  <CardContent><div className="text-xl font-bold">{formatCurrency(sessionPix)}</div></CardContent>
+                <Card className="rounded-[22px] border border-sky-200 bg-gradient-to-br from-white to-[#EEF7FF] dark:border-white/10 dark:from-[#0c1512] dark:to-[#101b22]">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">PIX</span><Sparkles className="h-4 w-4 text-sky-600" /></div>
+                    <div className="mt-2 text-xl font-bold">{formatCurrency(sessionPix)}</div>
+                    <div className="mt-1 text-xs text-slate-500">recebimentos instantâneos</div>
+                  </CardContent>
                 </Card>
-                <Card className="rounded-[22px] border border-[#FF6400]/15 bg-white dark:border-white/10 dark:bg-[#0c1512]">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">Cartão</CardTitle></CardHeader>
-                  <CardContent><div className="text-xl font-bold">{formatCurrency(sessionCard)}</div></CardContent>
+                <Card className="rounded-[22px] border border-orange-200 bg-gradient-to-br from-white to-[#FFF4EA] dark:border-white/10 dark:from-[#0c1512] dark:to-[#1e1510]">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cartão</span><CreditCard className="h-4 w-4 text-[#FF6400]" /></div>
+                    <div className="mt-2 text-xl font-bold">{formatCurrency(sessionCard)}</div>
+                    <div className="mt-1 text-xs text-slate-500">crédito, débito e voucher</div>
+                  </CardContent>
                 </Card>
-                <Card className="rounded-[22px] border border-[#003223]/10 bg-white dark:border-white/10 dark:bg-[#0c1512]">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">Dinheiro</CardTitle></CardHeader>
-                  <CardContent><div className="text-xl font-bold">{formatCurrency(sessionCash)}</div></CardContent>
+                <Card className="rounded-[22px] border border-violet-200 bg-gradient-to-br from-white to-violet-50 dark:border-white/10 dark:from-[#0c1512] dark:to-[#171325]">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Dinheiro</span><WalletCards className="h-4 w-4 text-violet-600" /></div>
+                    <div className="mt-2 text-xl font-bold">{formatCurrency(sessionCash)}</div>
+                    <div className="mt-1 text-xs text-slate-500">vendas recebidas em espécie</div>
+                  </CardContent>
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
                 <Card className="rounded-[22px] border border-[#003223]/10 bg-white dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Abertura</CardTitle></CardHeader>
                   <CardContent><div className="text-lg font-semibold">{formatCurrency(Number(selectedSession?.initial_amount || 0))}</div></CardContent>
@@ -1994,6 +2227,14 @@ const Financeiro = () => {
                 <Card className="rounded-[22px] border border-[#FF6400]/15 bg-white dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Sangrias</CardTitle></CardHeader>
                   <CardContent><div className="text-lg font-semibold">{formatCurrency(sessionOut)}</div></CardContent>
+                </Card>
+                <Card className="rounded-[22px] border border-[#003223]/15 bg-[#003223] text-white shadow-[0_18px_30px_-22px_rgba(0,50,35,0.8)]">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm text-white/75">Dinheiro esperado</CardTitle></CardHeader>
+                  <CardContent><div className="text-lg font-bold text-white">{formatCurrency(sessionExpectedCash)}</div></CardContent>
+                </Card>
+                <Card className="rounded-[22px] border border-red-100 bg-red-50/70 dark:border-red-500/20 dark:bg-red-500/10">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm text-red-700 dark:text-red-300">Canceladas</CardTitle></CardHeader>
+                  <CardContent><div className="text-lg font-semibold text-red-700 dark:text-red-300">{sessionCancelledSales.length}</div></CardContent>
                 </Card>
               </div>
 
@@ -2027,7 +2268,7 @@ const Financeiro = () => {
                               <TableCell>{o.order_number ? `#${o.order_number}` : o.id?.slice(0, 8)}</TableCell>
                               <TableCell><Badge variant="outline">{getPaymentMethodLabel(o.payment_method)}</Badge></TableCell>
                               <TableCell className="font-medium">{formatCurrency(Number(o.total || 0))}</TableCell>
-                              <TableCell><Badge variant={o.status === 'cancelled' ? 'destructive' : 'outline'}>{String(o.status || '').toUpperCase()}</Badge></TableCell>
+                              <TableCell><Badge variant={o.status === 'cancelled' ? 'destructive' : 'outline'}>{getOrderStatusLabel(o.status)}</Badge></TableCell>
                               <TableCell className="text-right">
                                 {o.status === 'cancelled' ? (
                                   <span className="text-xs text-muted-foreground">Cancelada</span>
@@ -2099,12 +2340,24 @@ const Financeiro = () => {
             </CardContent>
           </Card>
 
-          <Card className="rounded-[30px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-900 dark:text-white">Transações</CardTitle>
-              <CardDescription>
-                Gerencie todas as transações financeiras
-              </CardDescription>
+          <Card className="overflow-hidden rounded-[30px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
+            <CardHeader className="border-b border-[#003223]/8 bg-gradient-to-r from-[#F5FBED] via-white to-[#FFF4EA] dark:border-white/10 dark:from-[#112017] dark:via-[#101a16] dark:to-[#1e1510]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-xl text-slate-900 dark:text-white">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#003223] text-white">
+                      <ReceiptText className="h-4 w-4" />
+                    </span>
+                    Histórico financeiro
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Consulte vendas e despesas, filtre o movimento e cancele vendas com rastreabilidade.
+                  </CardDescription>
+                </div>
+                <Badge className="border-0 bg-white px-3 py-1 text-[#003223] shadow-sm hover:bg-white dark:bg-white/10 dark:text-white">
+                  {filteredTransactions.length} registro(s)
+                </Badge>
+              </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 mt-4">
                 <div className="lg:col-span-2">
@@ -2160,7 +2413,7 @@ const Financeiro = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-5">
               <div className="rounded-lg border overflow-hidden">
               <Table>
                 <TableHeader className="bg-slate-50">
@@ -2171,12 +2424,14 @@ const Financeiro = () => {
                     <TableHead>Método</TableHead>
                     <TableHead>Valor</TableHead>
                     <TableHead>Tipo</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         Carregando transações...
                       </TableCell>
                     </TableRow>
@@ -2200,11 +2455,39 @@ const Financeiro = () => {
                             {transaction.type === 'entrada' ? 'Receita' : 'Despesa'}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          {transaction.category === 'Vendas' ? (
+                            <Badge variant={transaction.status === 'cancelled' ? 'destructive' : 'outline'}>
+                              {transaction.status === 'cancelled' ? 'Cancelada' : 'Registrada'}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {transaction.category !== 'Vendas' ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : transaction.status === 'cancelled' ? (
+                            <span className="text-xs font-medium text-red-600">Cancelada</span>
+                          ) : transaction.order ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                              disabled={cancellingOrderIds.has(String(transaction.id))}
+                              onClick={() => { void handleCancelSessionOrder(transaction.order); }}
+                            >
+                              <XCircle className="mr-2 h-4 w-4" />
+                              {cancellingOrderIds.has(String(transaction.id)) ? 'Cancelando...' : 'Cancelar venda'}
+                            </Button>
+                          ) : null}
+                        </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         Nenhuma transação encontrada
                       </TableCell>
                     </TableRow>
