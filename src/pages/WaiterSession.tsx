@@ -1610,7 +1610,7 @@ const WaiterSessionPage = () => {
       ) : null}
 
       <Dialog open={productDialogOpen} onOpenChange={(open) => (open ? setProductDialogOpen(true) : resetProductDialog())}>
-        <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-[100dvw] max-w-[100dvw] grid-rows-none flex-col overflow-hidden rounded-none border-0 p-0 sm:h-[92dvh] sm:max-h-[92dvh] sm:w-[calc(100dvw-2rem)] sm:max-w-5xl sm:rounded-[28px]">
+        <DialogContent className="left-0 top-0 flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 grid-rows-none flex-col overflow-x-hidden overflow-y-hidden rounded-none border-0 p-0 sm:left-[50%] sm:top-[50%] sm:h-[92dvh] sm:max-h-[92dvh] sm:w-[calc(100%-2rem)] sm:max-w-5xl sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-[28px]">
           <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[0.95fr,1.05fr]">
             <div className={`${showProductBrowsePane ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-col border-b border-slate-100 p-4 lg:flex lg:border-b-0 lg:border-r lg:p-5`}>
               <DialogTitle className="text-xl font-semibold text-[#082F23]">
@@ -1658,8 +1658,8 @@ const WaiterSessionPage = () => {
                   </div>
                 </ScrollArea>
 
-                <ScrollArea className="h-[calc(100dvh-12.5rem)] min-h-0 pr-2 sm:h-[calc(92dvh-12.5rem)] lg:h-[calc(92dvh-10rem)]">
-                  <div className="space-y-4">
+                <ScrollArea className="h-[calc(100dvh-12.5rem)] min-h-0 w-full max-w-full sm:h-[calc(92dvh-12.5rem)] lg:h-[calc(92dvh-10rem)]">
+                  <div className="space-y-4 pr-1.5">
                     {filteredCategories.map((category) => (
                       <div key={category.id}>
                         <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{category.name}</div>
@@ -1698,7 +1698,7 @@ const WaiterSessionPage = () => {
                                 <Button
                                   type="button"
                                   size="icon"
-                                  className="h-8 w-8 rounded-full bg-[#FF6400] text-white hover:bg-[#E25A00]"
+                                  className="h-8 w-8 flex-none rounded-full bg-[#FF6400] text-white hover:bg-[#E25A00]"
                                   onClick={() => selectProductForDialog(product)}
                                 >
                                   <PlusCircle className="h-3.5 w-3.5" />
