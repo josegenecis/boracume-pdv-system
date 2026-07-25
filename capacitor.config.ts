@@ -6,8 +6,8 @@ const config: CapacitorConfig = {
   appName: 'PopSystem Garcom',
   webDir: 'dist',
   server: {
-    url: 'https://411cc844-ef39-4277-a88e-574f3069317f.lovableproject.com?forceHideBadge=true',
-    cleartext: true
+    url: 'https://popsystem.com.br/garcom',
+    cleartext: false
   },
   plugins: {
     Serial: {
