@@ -39,11 +39,11 @@ async function getTableOrderFlowSettings(supabase: any, restaurantId: string) {
     console.warn('[waiter-web] table_order_flow_settings unavailable:', error?.message || error)
   }
 
-  const mode = String(data?.table_order_mode || 'marked_items') as TableOrderMode
+  const mode = String(data?.table_order_mode || 'all_items') as TableOrderMode
   return {
-    mode: ['marked_items', 'all_items', 'account_only'].includes(mode) ? mode : 'marked_items',
+    mode: ['marked_items', 'all_items', 'account_only'].includes(mode) ? mode : 'all_items',
     showInManager: data?.show_table_orders_in_manager !== false,
-    autoAccept: data?.auto_accept_table_orders === true,
+    autoAccept: data ? data.auto_accept_table_orders === true : true,
   }
 }
 
@@ -960,9 +960,15 @@ async function sendAccountDraftItemsToKitchen(
     (productRows ?? []).filter((row: any) => row.send_to_kds === true).map((row: any) => String(row.id)),
   )
   const shouldCreateManagerOrder = tableFlow.mode !== 'account_only' && tableFlow.showInManager
+  // Em bases antigas, nenhum produto possuía a marca send_to_kds. Nesse caso,
+  // "itens marcados" acabava descartando a comanda inteira sem criar pedido.
+  // O fallback mantém a intenção operacional: enviar a comanda completa.
+  const effectiveMode = tableFlow.mode === 'marked_items' && kdsProductIds.size === 0
+    ? 'all_items'
+    : tableFlow.mode
   const kitchenRows = !shouldCreateManagerOrder
     ? []
-    : tableFlow.mode === 'all_items'
+    : effectiveMode === 'all_items'
       ? draftRows.data
       : draftRows.data.filter((row: any) => kdsProductIds.has(String(row.product_id)))
 
@@ -1042,7 +1048,7 @@ async function sendAccountDraftItemsToKitchen(
     accountName: String(accountRow.name || ''),
     itemCount: draftRows.data.length,
     kitchenItemCount: kitchenRows.length,
-    tableOrderMode: tableFlow.mode,
+    tableOrderMode: effectiveMode,
   }
 }
 

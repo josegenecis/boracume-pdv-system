@@ -55,6 +55,7 @@ import { StoneIntegrationPanel } from '@/components/waiter-web/StoneIntegrationP
 import { stoneProvider } from '@/services/payments/stoneProvider';
 import { enqueueOfflinePayment, syncOfflinePayments } from '@/services/payments/offlinePaymentQueue';
 import { formatElapsedSince } from '@/utils/elapsedTime';
+import { useWaiterViewportLock } from '@/hooks/useWaiterViewportLock';
 import {
   ArrowLeft,
   Check,
@@ -126,6 +127,7 @@ const shouldAutoApplyServiceCharge = (settings?: TableSession['serviceChargeSett
 };
 
 const WaiterSessionPage = () => {
+  useWaiterViewportLock();
   const { sessionId = '' } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -168,6 +170,7 @@ const WaiterSessionPage = () => {
   const [activeTab, setActiveTab] = useState<'accounts' | 'timeline' | 'payments'>('accounts');
   const [sessionLoadIssue, setSessionLoadIssue] = useState('');
   const [catalogLoadIssue, setCatalogLoadIssue] = useState('');
+  const [productDescriptionExpanded, setProductDescriptionExpanded] = useState(false);
   const deferredProductSearch = useDeferredValue(productSearch);
 
   const applySession = (nextSession: TableSession) => {
@@ -423,6 +426,7 @@ const WaiterSessionPage = () => {
     setSelectedOptions({});
     setQuantity('1');
     setItemNotes('');
+    setProductDescriptionExpanded(false);
     setProductDialogStep('configure');
   };
 
@@ -437,6 +441,7 @@ const WaiterSessionPage = () => {
     setItemNotes('');
     setProductSearch('');
     setSelectedCategoryId('all');
+    setProductDescriptionExpanded(false);
   };
 
   const returnToProductBrowse = () => {
@@ -446,6 +451,7 @@ const WaiterSessionPage = () => {
     setQuantity('1');
     setItemNotes('');
     setProductDialogStep('browse');
+    setProductDescriptionExpanded(false);
   };
 
   const toggleOption = (group: Product['variations'][number], option: ProductOption) => {
@@ -1604,9 +1610,9 @@ const WaiterSessionPage = () => {
       ) : null}
 
       <Dialog open={productDialogOpen} onOpenChange={(open) => (open ? setProductDialogOpen(true) : resetProductDialog())}>
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden rounded-[28px] border-0 p-0">
-          <div className="grid h-full gap-0 lg:grid-cols-[0.95fr,1.05fr]">
-            <div className={`${showProductBrowsePane ? 'block' : 'hidden'} border-b border-slate-100 p-4 lg:block lg:border-b-0 lg:border-r lg:p-5`}>
+        <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-[100dvw] max-w-[100dvw] grid-rows-none flex-col overflow-hidden rounded-none border-0 p-0 sm:h-[92dvh] sm:max-h-[92dvh] sm:w-[calc(100dvw-2rem)] sm:max-w-5xl sm:rounded-[28px]">
+          <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[0.95fr,1.05fr]">
+            <div className={`${showProductBrowsePane ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-col border-b border-slate-100 p-4 lg:flex lg:border-b-0 lg:border-r lg:p-5`}>
               <DialogTitle className="text-xl font-semibold text-[#082F23]">
                 {editingItem ? 'Editar item' : 'Adicionar produto'}
               </DialogTitle>
@@ -1652,7 +1658,7 @@ const WaiterSessionPage = () => {
                   </div>
                 </ScrollArea>
 
-                <ScrollArea className="h-[54vh] pr-2 lg:h-[62vh]">
+                <ScrollArea className="h-[calc(100dvh-12.5rem)] min-h-0 pr-2 sm:h-[calc(92dvh-12.5rem)] lg:h-[calc(92dvh-10rem)]">
                   <div className="space-y-4">
                     {filteredCategories.map((category) => (
                       <div key={category.id}>
@@ -1665,7 +1671,7 @@ const WaiterSessionPage = () => {
                             return (
                               <div
                                 key={product.id}
-                                className={`flex items-center gap-2.5 rounded-[18px] border px-2.5 py-2 transition ${
+                                className={`flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden rounded-[18px] border px-2.5 py-2 transition ${
                                   isSelected ? 'border-[#082F23] bg-[#EEF4E9]' : 'border-[#DCE6D8] bg-white'
                                 }`}
                               >
@@ -1708,7 +1714,7 @@ const WaiterSessionPage = () => {
               </div>
             </div>
 
-            <div className={`${showProductConfigurePane ? 'block' : 'hidden'} bg-[#F4F8F2] p-4 lg:block lg:p-5`}>
+            <div className={`${showProductConfigurePane ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-col overflow-hidden bg-[#F4F8F2] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:flex lg:p-5`}>
               {selectedProduct ? (
                 <div className="flex h-full flex-col">
                   <div className="flex items-center justify-between gap-3 lg:hidden">
@@ -1720,18 +1726,31 @@ const WaiterSessionPage = () => {
                   </div>
 
                   <div className="mt-3 rounded-[24px] bg-white p-4 shadow-sm lg:mt-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-xl font-semibold text-[#082F23]">{selectedProduct.name}</div>
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="break-words text-xl font-semibold text-[#082F23]">{selectedProduct.name}</div>
                         {selectedProduct.description ? (
-                          <div className="mt-1 text-sm leading-5 text-slate-500">{selectedProduct.description}</div>
+                          <div className="mt-1">
+                            <div className={`${productDescriptionExpanded ? '' : 'line-clamp-2'} break-words text-sm leading-5 text-slate-500`}>
+                              {selectedProduct.description}
+                            </div>
+                            {selectedProduct.description.length > 90 ? (
+                              <button
+                                type="button"
+                                className="mt-1 text-xs font-semibold text-[#0B6B4B]"
+                                onClick={() => setProductDescriptionExpanded((current) => !current)}
+                              >
+                                {productDescriptionExpanded ? 'Recolher descrição' : 'Ver descrição completa'}
+                              </button>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
-                      <div className="text-lg font-semibold text-[#082F23]">{formatMoney(selectedProduct.price)}</div>
+                      <div className="flex-none whitespace-nowrap text-lg font-semibold text-[#082F23]">{formatMoney(selectedProduct.price)}</div>
                     </div>
                   </div>
 
-                  <ScrollArea className="mt-3 h-[52vh] pr-2 lg:h-[58vh]">
+                  <ScrollArea className="mt-3 min-h-0 flex-1 pr-2">
                     <div className="space-y-3">
                       {selectedProduct.variations.map((group) => (
                         <div key={group.id} className="rounded-[20px] bg-white p-3 shadow-sm">
@@ -1803,7 +1822,7 @@ const WaiterSessionPage = () => {
                     </div>
                   </ScrollArea>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="mt-3 grid flex-none grid-cols-2 gap-2 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
                     <Button variant="outline" className="h-11 rounded-2xl" onClick={() => resetProductDialog()} disabled={submitting}>
                       Cancelar
                     </Button>

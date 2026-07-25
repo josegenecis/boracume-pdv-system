@@ -6,14 +6,14 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}))
     const action = String(body?.action || '')
     if (action === 'login') {
-      const login = String(body?.login || '').trim().toLowerCase()
+      const cpf = String(body?.cpf || body?.login || '').replace(/\D/g, '')
       const password = String(body?.password || '')
-      if (login.length < 4 || !password) return fail('Informe usuário e senha válidos.')
+      if (cpf.length !== 11 || !password) return fail('Informe CPF e senha válidos.')
       const supabase = createServiceClient()
-      const { data, error } = await supabase.rpc('verify_delivery_personnel_login', { p_login: login, p_password: password })
+      const { data, error } = await supabase.rpc('verify_delivery_personnel_login', { p_login: cpf, p_password: password })
       if (error) return fail(error.message)
       const driver = Array.isArray(data) ? data[0] : data
-      if (!driver) return fail('Usuário ou senha inválidos.', 401)
+      if (!driver) return fail('CPF ou senha inválidos.', 401)
       const token = buildSessionToken()
       const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString()
       await supabase.from('delivery_driver_sessions').delete().eq('delivery_personnel_id', driver.id)
@@ -40,4 +40,3 @@ Deno.serve(async (req: Request) => {
     return fail(String(error?.message || 'Erro interno no login do motoboy.'), 500)
   }
 })
-

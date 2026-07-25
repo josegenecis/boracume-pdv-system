@@ -67,6 +67,32 @@ export type MotoboyBootstrap = {
 
 const SESSION_KEY = 'popsystem_motoboy_session';
 
+export const normalizeMotoboyCpf = (value: string) => String(value || '').replace(/\D/g, '').slice(0, 11);
+
+export const formatMotoboyCpf = (value: string) => {
+  const digits = normalizeMotoboyCpf(value);
+  return digits
+    .replace(/^(\d{3})(\d)/, '$1.$2')
+    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1-$2');
+};
+
+export const isValidMotoboyCpf = (value: string) => {
+  const cpf = normalizeMotoboyCpf(value);
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+
+  const calculateDigit = (length: number) => {
+    const sum = cpf
+      .slice(0, length)
+      .split('')
+      .reduce((total, digit, index) => total + Number(digit) * (length + 1 - index), 0);
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+
+  return calculateDigit(9) === Number(cpf[9]) && calculateDigit(10) === Number(cpf[10]);
+};
+
 async function invoke<T>(functionName: string, body: Record<string, unknown>, token?: string): Promise<T> {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
     method: 'POST',
@@ -99,8 +125,15 @@ const token = () => {
   return session.token;
 };
 
-export async function loginMotoboy(login: string, password: string) {
-  const result = await invoke<{ session: MotoboySession }>('motoboy-web-auth', { action: 'login', login, password });
+export async function loginMotoboy(cpf: string, password: string) {
+  const normalizedCpf = normalizeMotoboyCpf(cpf);
+  const result = await invoke<{ session: MotoboySession }>('motoboy-web-auth', {
+    action: 'login',
+    cpf: normalizedCpf,
+    // Mantido durante a transição para versões anteriores da Edge Function.
+    login: normalizedCpf,
+    password,
+  });
   motoboySessionStorage.save(result.session);
   return result.session;
 }

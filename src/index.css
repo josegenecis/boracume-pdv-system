@@ -11,6 +11,16 @@
 @tailwind components;
 @tailwind utilities;
 
+html.waiter-app-active,
+body.waiter-app-active {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
 @layer base {
   :root {
     --background: 40 50% 97%; /* FDF8F0 - Bege clarinho original */

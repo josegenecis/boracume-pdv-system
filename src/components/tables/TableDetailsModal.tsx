@@ -188,40 +188,107 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       setCheckoutOpen(false);
       await loadServiceChargeSettings();
 
-      const { data: accountData, error: accountError } = await supabase
-        .from('table_accounts')
-        .select('*')
+      const { data: activeSession, error: sessionError } = await (supabase
+        .from('table_sessions') as any)
+        .select('id, opened_at, status')
         .eq('table_id', table.id)
+        .eq('user_id', user.id)
+        .in('status', ['open', 'serving', 'payment_pending'])
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sessionError && sessionError.code !== 'PGRST116') throw sessionError;
+
+      let accountQuery = (supabase
+        .from('table_accounts') as any)
+        .select('*')
         .eq('user_id', user.id)
         .in('status', ['open', 'payment_pending'])
         .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+
+      accountQuery = activeSession?.id
+        ? accountQuery.eq('session_id', activeSession.id)
+        : accountQuery.eq('table_id', table.id);
+
+      const { data: accountData, error: accountError } = await accountQuery.maybeSingle();
 
       if (accountError && accountError.code !== 'PGRST116') throw accountError;
 
       if (accountData) {
         let parsedItems: OrderItem[] = [];
-        try {
-          if (typeof accountData.items === 'string') {
-            parsedItems = JSON.parse(accountData.items);
-          } else if (Array.isArray(accountData.items)) {
-            parsedItems = accountData.items as unknown as OrderItem[];
+        const sessionId = String(accountData.session_id || activeSession?.id || '');
+
+        if (sessionId) {
+          const { data: relationalItems, error: itemError } = await (supabase
+            .from('order_items') as any)
+            .select('id, product_id, product_name, quantity, unit_price, notes, status')
+            .eq('account_id', accountData.id)
+            .neq('status', 'cancelled')
+            .order('created_at', { ascending: true });
+
+          if (itemError) throw itemError;
+
+          const itemIds = (relationalItems || []).map((item: any) => item.id);
+          const { data: optionRows, error: optionError } = itemIds.length
+            ? await (supabase.from('order_item_options') as any)
+                .select('order_item_id, option_name, price, quantity')
+                .in('order_item_id', itemIds)
+            : { data: [], error: null };
+
+          if (optionError) throw optionError;
+
+          const optionsByItem = new Map<string, any[]>();
+          (optionRows || []).forEach((option: any) => {
+            const current = optionsByItem.get(option.order_item_id) || [];
+            current.push(option);
+            optionsByItem.set(option.order_item_id, current);
+          });
+
+          parsedItems = (relationalItems || []).map((item: any) => {
+            const options = optionsByItem.get(item.id) || [];
+            const quantity = Math.max(1, Number(item.quantity || 1));
+            const unitPrice = Number(item.unit_price || 0);
+            const optionTotal = options.reduce(
+              (sum: number, option: any) => sum + Number(option.price || 0) * Math.max(1, Number(option.quantity || 1)),
+              0,
+            );
+
+            return {
+              product_id: item.product_id,
+              product_name: item.product_name,
+              price: unitPrice,
+              quantity,
+              subtotal: Number(((unitPrice + optionTotal) * quantity).toFixed(2)),
+              options: options.map((option: any) => String(option.option_name || '')).filter(Boolean),
+              notes: item.notes || '',
+            };
+          });
+        } else {
+          try {
+            if (typeof accountData.items === 'string') {
+              parsedItems = JSON.parse(accountData.items);
+            } else if (Array.isArray(accountData.items)) {
+              parsedItems = accountData.items as unknown as OrderItem[];
+            }
+          } catch (e) {
+            console.error('Error parsing table account items:', e);
+            parsedItems = [];
           }
-        } catch (e) {
-          console.error('Error parsing table account items:', e);
-          parsedItems = [];
         }
 
         setCurrentOrder({
           id: accountData.id,
           account_id: accountData.id,
-          session_id: (accountData as any).session_id || null,
+          session_id: sessionId || null,
           order_number: `MESA-${table.table_number}`,
           customer_name: String((accountData as any).name || '').trim() || `Mesa ${table.table_number}`,
           customer_phone: '',
           items: parsedItems,
-          total: Number(accountData.total || 0),
+          total: parsedItems.length
+            ? parsedItems.reduce((sum, item) => sum + Number(item.subtotal || 0), 0)
+            : Number(accountData.total || 0),
           status: accountData.status || 'open',
           created_at: accountData.created_at,
           payment_method: 'pix_online',

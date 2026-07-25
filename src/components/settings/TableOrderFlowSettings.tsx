@@ -22,9 +22,9 @@ const TableOrderFlowSettings: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<TableOrderMode>('marked_items');
+  const [mode, setMode] = useState<TableOrderMode>('all_items');
   const [showInManager, setShowInManager] = useState(true);
-  const [autoAccept, setAutoAccept] = useState(false);
+  const [autoAccept, setAutoAccept] = useState(true);
   const [serviceChargeAutoApply, setServiceChargeAutoApply] = useState(false);
   const [serviceChargePercentage, setServiceChargePercentage] = useState(10);
   const [serviceChargeTaxWithhold, setServiceChargeTaxWithhold] = useState(0);
@@ -43,7 +43,7 @@ const TableOrderFlowSettings: React.FC = () => {
 
       if (error && error.code !== 'PGRST116') throw error;
       if (data) {
-        setMode((data.table_order_mode || 'marked_items') as TableOrderMode);
+        setMode((data.table_order_mode || 'all_items') as TableOrderMode);
         setShowInManager(data.show_table_orders_in_manager !== false);
         setAutoAccept(Boolean(data.auto_accept_table_orders));
       }

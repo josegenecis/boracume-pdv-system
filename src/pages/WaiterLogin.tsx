@@ -6,9 +6,11 @@ import { Label } from '@/components/ui/label';
 import Logo from '@/components/Logo';
 import { useToast } from '@/hooks/use-toast';
 import { formatCpf, loadWaiterWebSession, loginWaiterWeb } from '@/services/waiterWebClient';
+import { useWaiterViewportLock } from '@/hooks/useWaiterViewportLock';
 import { ArrowRight, Eye, EyeOff, Lock, UserRound } from 'lucide-react';
 
 const WaiterLogin = () => {
+  useWaiterViewportLock();
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

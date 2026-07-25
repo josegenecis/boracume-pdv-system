@@ -2238,13 +2238,23 @@ const Financeiro = () => {
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <Card className="rounded-[24px] border border-white/70 bg-white/95 dark:border-white/10 dark:bg-[#0c1512]">
-                  <CardHeader>
-                    <CardTitle className="text-base">Vendas da Sessão</CardTitle>
+              <div className="space-y-4">
+                <Card className="overflow-hidden rounded-[24px] border border-white/70 bg-white/95 dark:border-white/10 dark:bg-[#0c1512]">
+                  <CardHeader className="border-b border-[#003223]/8 bg-gradient-to-r from-[#F5FBED] to-white py-4 dark:border-white/10 dark:from-[#112017] dark:to-[#0c1512]">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <ShoppingBag className="h-4 w-4 text-[#6FAE35]" />
+                          Vendas da sessão
+                        </CardTitle>
+                        <CardDescription className="mt-1">Todas as vendas vinculadas ao caixa selecionado, incluindo cancelamentos.</CardDescription>
+                      </div>
+                      <Badge variant="outline" className="bg-white dark:bg-white/5">{sessionOrders.length} registro(s)</Badge>
+                    </div>
                   </CardHeader>
-                  <CardContent>
-                    <Table>
+                  <CardContent className="p-4">
+                    <div className="overflow-x-auto">
+                    <Table className="min-w-[860px]">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Data</TableHead>
@@ -2293,15 +2303,26 @@ const Financeiro = () => {
                         )}
                       </TableBody>
                     </Table>
+                    </div>
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-[24px] border border-white/70 bg-white/95 dark:border-white/10 dark:bg-[#0c1512]">
-                  <CardHeader>
-                    <CardTitle className="text-base">Movimentações (Suprimento/Sangria)</CardTitle>
+                <Card className="overflow-hidden rounded-[24px] border border-white/70 bg-white/95 dark:border-white/10 dark:bg-[#0c1512]">
+                  <CardHeader className="border-b border-[#003223]/8 bg-gradient-to-r from-[#FFF4EA] to-white py-4 dark:border-white/10 dark:from-[#1e1510] dark:to-[#0c1512]">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <ArrowUp className="h-4 w-4 text-[#C45E00]" />
+                          Suprimentos e sangrias
+                        </CardTitle>
+                        <CardDescription className="mt-1">Entradas e retiradas manuais realizadas durante esta sessão.</CardDescription>
+                      </div>
+                      <Badge variant="outline" className="bg-white dark:bg-white/5">{sessionMovements.length} registro(s)</Badge>
+                    </div>
                   </CardHeader>
-                  <CardContent>
-                    <Table>
+                  <CardContent className="p-4">
+                    <div className="overflow-x-auto">
+                    <Table className="min-w-[720px]">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Data</TableHead>
@@ -2334,6 +2355,7 @@ const Financeiro = () => {
                         )}
                       </TableBody>
                     </Table>
+                    </div>
                   </CardContent>
                 </Card>
               </div>

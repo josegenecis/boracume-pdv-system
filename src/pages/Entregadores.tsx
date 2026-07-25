@@ -46,6 +46,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { formatMotoboyCpf, isValidMotoboyCpf, normalizeMotoboyCpf } from "@/services/motoboyWebClient";
 
 // Define delivery personnel type
 interface DeliveryPerson {
@@ -57,6 +58,7 @@ interface DeliveryPerson {
   status: 'available' | 'busy' | 'offline';
   app_enabled?: boolean;
   app_login?: string | null;
+  cpf?: string | null;
   daily_allowance?: number;
 }
 
@@ -94,7 +96,7 @@ const deliveryPersonSchema = z.object({
   vehicle_plate: z.string().optional(),
   status: z.enum(['available', 'busy', 'offline']),
   app_enabled: z.boolean().default(false),
-  app_login: z.string().optional(),
+  cpf: z.string().optional(),
   app_password: z.string().optional(),
   daily_allowance: z.coerce.number().min(0, { message: 'A ajuda de custo não pode ser negativa' }).default(0),
 });
@@ -141,7 +143,7 @@ const Entregadores: React.FC = () => {
       vehicle_plate: '',
       status: 'available',
       app_enabled: false,
-      app_login: '',
+      cpf: '',
       app_password: '',
       daily_allowance: 0,
     },
@@ -444,10 +446,10 @@ const Entregadores: React.FC = () => {
   // Handle form submission
   const onSubmit = async (data: DeliveryPersonFormValues) => {
     if (!user) return;
-    const appLogin = String(data.app_login || '').trim().toLowerCase();
+    const cpf = normalizeMotoboyCpf(data.cpf || '');
     const appPassword = String(data.app_password || '').trim();
-    if (data.app_enabled && appLogin.length < 4) {
-      form.setError('app_login', { message: 'Informe um usuário com pelo menos 4 caracteres' });
+    if (data.app_enabled && !isValidMotoboyCpf(cpf)) {
+      form.setError('cpf', { message: 'Informe um CPF válido' });
       return;
     }
     if (data.app_enabled && (!currentDeliveryPerson || !currentDeliveryPerson.app_enabled) && appPassword.length < 6) {
@@ -469,7 +471,8 @@ const Entregadores: React.FC = () => {
             vehicle_plate: data.vehicle_plate || null,
             status: data.status,
             app_enabled: data.app_enabled,
-            app_login: data.app_enabled ? appLogin : null,
+            cpf: data.app_enabled ? cpf : null,
+            app_login: null,
             daily_allowance: Math.max(0, Number(data.daily_allowance || 0)),
             updated_at: new Date().toISOString(),
           })
@@ -501,7 +504,8 @@ const Entregadores: React.FC = () => {
             vehicle_plate: data.vehicle_plate || null,
             status: data.status,
             app_enabled: data.app_enabled,
-            app_login: data.app_enabled ? appLogin : null,
+            cpf: data.app_enabled ? cpf : null,
+            app_login: null,
             daily_allowance: Math.max(0, Number(data.daily_allowance || 0)),
           })
           .select('id')
@@ -529,7 +533,9 @@ const Entregadores: React.FC = () => {
     } catch (error: any) {
       toast({
         title: 'Erro ao salvar entregador',
-        description: error.message,
+        description: error?.code === '23505'
+          ? 'Este CPF já está vinculado a outro entregador.'
+          : error.message,
         variant: 'destructive',
       });
     } finally {
@@ -585,7 +591,7 @@ const Entregadores: React.FC = () => {
     form.setValue('vehicle_plate', deliveryPerson.vehicle_plate || '');
     form.setValue('status', deliveryPerson.status);
     form.setValue('app_enabled', Boolean(deliveryPerson.app_enabled));
-    form.setValue('app_login', deliveryPerson.app_login || '');
+    form.setValue('cpf', formatMotoboyCpf(deliveryPerson.cpf || ''));
     form.setValue('app_password', '');
     form.setValue('daily_allowance', Math.max(0, Number(deliveryPerson.daily_allowance || 0)));
     
@@ -608,7 +614,7 @@ const Entregadores: React.FC = () => {
       vehicle_plate: '',
       status: 'available',
       app_enabled: false,
-      app_login: '',
+      cpf: '',
       app_password: '',
       daily_allowance: 0,
     });
@@ -705,7 +711,7 @@ const Entregadores: React.FC = () => {
         <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15"><Smartphone /></div>
-            <div><h2 className="text-xl font-black">App Motoboy PopSystem</h2><p className="mt-1 max-w-xl text-sm text-white/75">Cadastre usuário e senha abaixo. O motoboy recebe ofertas, organiza a rota e compartilha o rastreamento com o cliente.</p></div>
+            <div><h2 className="text-xl font-black">App Motoboy PopSystem</h2><p className="mt-1 max-w-xl text-sm text-white/75">Cadastre CPF e senha abaixo. O motoboy recebe ofertas, organiza a rota e compartilha o rastreamento com o cliente.</p></div>
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/motoboy-login`); toast({ title: 'Link copiado' }); }}><Copy className="mr-2 h-4 w-4" /> Copiar acesso</Button>
@@ -1096,7 +1102,7 @@ const Entregadores: React.FC = () => {
                   )}
                 />
                 {form.watch('app_enabled') && <div className="mt-4 grid gap-4">
-                  <FormField control={form.control} name="app_login" render={({ field }) => <FormItem><FormLabel>Usuário do aplicativo</FormLabel><FormControl><Input autoCapitalize="none" placeholder="Ex.: joao.motoboy" {...field} /></FormControl><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="cpf" render={({ field }) => <FormItem><FormLabel>CPF para acesso</FormLabel><FormControl><Input inputMode="numeric" autoComplete="username" maxLength={14} placeholder="000.000.000-00" {...field} onChange={(event) => field.onChange(formatMotoboyCpf(event.target.value))} /></FormControl><p className="text-xs text-muted-foreground">Será usado junto com a senha para entrar no App Motoboy.</p><FormMessage /></FormItem>} />
                   <FormField control={form.control} name="app_password" render={({ field }) => <FormItem><FormLabel className="flex items-center gap-2"><KeyRound className="h-4 w-4" /> {currentDeliveryPerson ? 'Nova senha (opcional)' : 'Senha inicial'}</FormLabel><FormControl><Input type="password" autoComplete="new-password" placeholder={currentDeliveryPerson ? 'Deixe em branco para manter' : 'Mínimo de 6 caracteres'} {...field} /></FormControl><FormMessage /></FormItem>} />
                 </div>}
               </div>

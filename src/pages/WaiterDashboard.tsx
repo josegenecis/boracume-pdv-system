@@ -23,6 +23,7 @@ import { WaiterBottomNav } from '@/components/waiter-web/WaiterBottomNav';
 import { WaiterEmptyState } from '@/components/waiter-web/WaiterEmptyState';
 import { StoneIntegrationPanel } from '@/components/waiter-web/StoneIntegrationPanel';
 import { formatElapsedMinutes } from '@/utils/elapsedTime';
+import { useWaiterViewportLock } from '@/hooks/useWaiterViewportLock';
 import {
   Armchair,
   ChefHat,
@@ -47,6 +48,7 @@ const tableTileTone: Record<TableStatus, string> = {
 const tableOccupancyLabel = (status: TableStatus) => (status === 'free' ? 'Livre' : 'Ocupada');
 
 const WaiterDashboard = () => {
+  useWaiterViewportLock();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [waiterSession, setWaiterSession] = useState<WaiterWebStoredSession | null>(null);

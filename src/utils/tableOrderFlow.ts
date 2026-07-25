@@ -15,9 +15,9 @@ export interface TableOrderProductRef {
 }
 
 const DEFAULT_TABLE_ORDER_FLOW: TableOrderFlowSettings = {
-  mode: 'marked_items',
+  mode: 'all_items',
   showInManager: true,
-  autoAccept: false,
+  autoAccept: true,
 };
 
 export const fetchTableOrderFlowSettings = async (restaurantId?: string | null): Promise<TableOrderFlowSettings> => {
