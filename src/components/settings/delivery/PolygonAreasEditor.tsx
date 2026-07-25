@@ -82,6 +82,7 @@ export function GooglePolygonMap(props: {
   const radiusRef = useRef<google.maps.Circle | null>(null)
   const markersRef = useRef<google.maps.Marker[]>([])
   const enabledRef = useRef<boolean>(props.enabled)
+  const [mapInitializationError, setMapInitializationError] = useState('')
   enabledRef.current = props.enabled
 
   const [isDrawing, setIsDrawing] = useState(props.points.length < 3)
@@ -98,53 +99,55 @@ export function GooglePolygonMap(props: {
   useEffect(() => {
     if (!containerRef.current) return
     if (mapRef.current) return
-    if (!window.google?.maps) return
+    const maps = window.google?.maps
+    if (!maps?.Map || !maps?.Polygon || !maps?.Circle) return
 
-    mapRef.current = new window.google.maps.Map(containerRef.current, {
-      center: props.center,
-      zoom: 14,
-      mapTypeId: window.google.maps.MapTypeId.ROADMAP,
-      streetViewControl: false,
-      fullscreenControl: false
-    })
+    try {
+      mapRef.current = new maps.Map(containerRef.current, {
+        center: props.center,
+        zoom: 14,
+        mapTypeId: maps.MapTypeId?.ROADMAP || 'roadmap',
+        streetViewControl: false,
+        fullscreenControl: false
+      })
 
-    polygonRef.current = new window.google.maps.Polygon({
-      paths: [],
-      strokeColor: '#f97316',
-      strokeOpacity: 1,
-      strokeWeight: 2,
-      fillColor: '#f97316',
-      fillOpacity: 0.15,
-      clickable: false
-    })
-    polygonRef.current.setMap(mapRef.current)
-
-    // Setup radius circle if needed
-    if (props.radiusMeters !== undefined) {
-      radiusRef.current = new window.google.maps.Circle({
+      polygonRef.current = new maps.Polygon({
+        paths: [],
         strokeColor: '#f97316',
-        strokeOpacity: 0.8,
+        strokeOpacity: 1,
         strokeWeight: 2,
         fillColor: '#f97316',
         fillOpacity: 0.15,
-        map: mapRef.current,
-        center: props.center,
-        radius: props.radiusMeters,
         clickable: false
       })
+      polygonRef.current.setMap(mapRef.current)
+
+      if (props.radiusMeters !== undefined) {
+        radiusRef.current = new maps.Circle({
+          strokeColor: '#f97316',
+          strokeOpacity: 0.8,
+          strokeWeight: 2,
+          fillColor: '#f97316',
+          fillOpacity: 0.15,
+          map: mapRef.current,
+          center: props.center,
+          radius: props.radiusMeters,
+          clickable: false
+        })
+      }
+
+      mapRef.current.addListener('click', (e: google.maps.MapMouseEvent) => {
+        if (!enabledRef.current || !isDrawingRef.current) return
+        const lat = e.latLng?.lat()
+        const lng = e.latLng?.lng()
+        if (typeof lat !== 'number' || typeof lng !== 'number') return
+        onAddPointRef.current({ lat, lng })
+      })
+      setMapInitializationError('')
+    } catch (error) {
+      console.error('[GooglePolygonMap] Falha ao inicializar o mapa', error)
+      setMapInitializationError('Não foi possível abrir o mapa agora. Recarregue a página para tentar novamente.')
     }
-
-    // Using a ref for the latest onAddPoint function
-    const localOnAddPointRef = { current: props.onAddPoint }
-    localOnAddPointRef.current = props.onAddPoint
-
-    mapRef.current.addListener('click', (e: google.maps.MapMouseEvent) => {
-      if (!enabledRef.current || !isDrawingRef.current) return
-      const lat = e.latLng?.lat()
-      const lng = e.latLng?.lng()
-      if (typeof lat !== 'number' || typeof lng !== 'number') return
-      onAddPointRef.current({ lat, lng })
-    })
   }, [props.center])
 
   // Update refs when props change without recreating the map/listeners
@@ -302,7 +305,16 @@ export function GooglePolygonMap(props: {
     }
   }, [props.points, props.enabled])
 
-  return <div ref={containerRef} className="h-full w-full" />
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {mapInitializationError && (
+        <div className="absolute inset-x-4 bottom-4 rounded-xl border border-red-200 bg-white/95 p-3 text-sm font-medium text-red-700 shadow-lg">
+          {mapInitializationError}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function PolygonAreasEditor(props: {

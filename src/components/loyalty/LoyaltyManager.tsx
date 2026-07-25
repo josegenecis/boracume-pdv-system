@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Gift, Star, Users, Trophy, Plus, Trash2, Tag, Percent, Truck, MessageCircle } from 'lucide-react';
+import { Gift, Star, Plus, Trash2, Tag, MessageCircle, ShoppingBag } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,6 +37,22 @@ interface Coupon {
   active: boolean;
 }
 
+interface FirstOrderPromotion {
+  id?: string;
+  title: string;
+  reward_type: 'percent' | 'fixed' | 'free_product';
+  reward_value: number;
+  product_id: string | null;
+  min_purchase: number;
+  active: boolean;
+}
+
+interface PromotionProduct {
+  id: string;
+  name: string;
+  price: number;
+}
+
 const LoyaltyManager = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -46,6 +62,16 @@ const LoyaltyManager = () => {
   
   const [programs, setPrograms] = useState<LoyaltyProgram[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [products, setProducts] = useState<PromotionProduct[]>([]);
+  const [firstOrderPromotion, setFirstOrderPromotion] = useState<FirstOrderPromotion>({
+    title: 'Boas-vindas no primeiro pedido',
+    reward_type: 'percent',
+    reward_value: 10,
+    product_id: null,
+    min_purchase: 0,
+    active: true,
+  });
+  const [savingFirstOrderPromotion, setSavingFirstOrderPromotion] = useState(false);
   
   // New Program State
   const [newProgram, setNewProgram] = useState<Partial<LoyaltyProgram>>({
@@ -85,9 +111,11 @@ const LoyaltyManager = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [progRes, coupRes] = await Promise.all([
+      const [progRes, coupRes, firstOrderRes, productsRes] = await Promise.all([
         supabase.from('loyalty_programs').select('*').eq('user_id', user?.id),
-        supabase.from('coupons').select('*').eq('user_id', user?.id)
+        supabase.from('coupons').select('*').eq('user_id', user?.id),
+        (supabase.from('first_order_promotions' as any) as any).select('*').eq('user_id', user?.id).maybeSingle(),
+        supabase.from('products').select('id,name,price').eq('user_id', user?.id).eq('available', true).order('name')
       ]);
 
       // Don't throw error if tables don't exist yet, just empty list
@@ -96,10 +124,63 @@ const LoyaltyManager = () => {
 
       setPrograms(progRes.data as any || []);
       setCoupons(coupRes.data as any || []);
+      setProducts((productsRes.data as PromotionProduct[]) || []);
+      if (firstOrderRes.data) {
+        setFirstOrderPromotion({
+          id: String(firstOrderRes.data.id),
+          title: String(firstOrderRes.data.title || 'Boas-vindas no primeiro pedido'),
+          reward_type: firstOrderRes.data.reward_type,
+          reward_value: Number(firstOrderRes.data.reward_value || 0),
+          product_id: firstOrderRes.data.product_id ? String(firstOrderRes.data.product_id) : null,
+          min_purchase: Number(firstOrderRes.data.min_purchase || 0),
+          active: Boolean(firstOrderRes.data.active),
+        });
+      }
     } catch (error) {
       console.error('Error fetching promo data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveFirstOrderPromotion = async () => {
+    if (!user?.id) return;
+    if (firstOrderPromotion.reward_type === 'free_product' && !firstOrderPromotion.product_id) {
+      toast({ title: 'Escolha o produto grátis', variant: 'destructive' });
+      return;
+    }
+    if (firstOrderPromotion.reward_type !== 'free_product' && Number(firstOrderPromotion.reward_value || 0) <= 0) {
+      toast({ title: 'Informe um desconto maior que zero', variant: 'destructive' });
+      return;
+    }
+    if (firstOrderPromotion.reward_type === 'percent' && Number(firstOrderPromotion.reward_value || 0) > 100) {
+      toast({ title: 'O percentual não pode passar de 100%', variant: 'destructive' });
+      return;
+    }
+
+    setSavingFirstOrderPromotion(true);
+    try {
+      const payload = {
+        user_id: user.id,
+        title: String(firstOrderPromotion.title || 'Boas-vindas no primeiro pedido').trim(),
+        reward_type: firstOrderPromotion.reward_type,
+        reward_value: firstOrderPromotion.reward_type === 'free_product' ? 0 : Math.max(0, Number(firstOrderPromotion.reward_value || 0)),
+        product_id: firstOrderPromotion.reward_type === 'free_product' ? firstOrderPromotion.product_id : null,
+        min_purchase: Math.max(0, Number(firstOrderPromotion.min_purchase || 0)),
+        active: Boolean(firstOrderPromotion.active),
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await (supabase.from('first_order_promotions' as any) as any)
+        .upsert(payload, { onConflict: 'user_id' })
+        .select()
+        .single();
+      if (error) throw error;
+      setFirstOrderPromotion((current) => ({ ...current, id: String(data.id) }));
+      toast({ title: 'Promoção de primeiro pedido salva' });
+    } catch (error: any) {
+      toast({ title: 'Erro ao salvar promoção', description: error?.message || 'Tente novamente.', variant: 'destructive' });
+    } finally {
+      setSavingFirstOrderPromotion(false);
     }
   };
 
@@ -259,6 +340,7 @@ const LoyaltyManager = () => {
       <Tabs defaultValue="programs" className="space-y-4">
         <TabsList>
           <TabsTrigger value="programs" className="gap-2"><Star size={16} /> Regras de Fidelidade</TabsTrigger>
+          <TabsTrigger value="first-order" className="gap-2"><ShoppingBag size={16} /> Primeiro pedido</TabsTrigger>
           <TabsTrigger value="coupons" className="gap-2"><Tag size={16} /> Cupons de Desconto</TabsTrigger>
         </TabsList>
 
@@ -406,6 +488,133 @@ const LoyaltyManager = () => {
                 <div className="text-center text-gray-500 py-10">Nenhuma regra ativa.</div>
               )}
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="first-order" className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Promoção automática de primeiro pedido</CardTitle>
+                <CardDescription>
+                  O benefício aparece e é aplicado automaticamente quando o telefone ainda não possui pedidos no restaurante.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Nome da campanha</Label>
+                  <Input
+                    value={firstOrderPromotion.title}
+                    onChange={(event) => setFirstOrderPromotion((current) => ({ ...current, title: event.target.value }))}
+                    placeholder="Ex.: Boas-vindas"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Benefício</Label>
+                    <Select
+                      value={firstOrderPromotion.reward_type}
+                      onValueChange={(value: FirstOrderPromotion['reward_type']) =>
+                        setFirstOrderPromotion((current) => ({ ...current, reward_type: value }))
+                      }
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percent">Desconto percentual</SelectItem>
+                        <SelectItem value="fixed">Desconto em dinheiro</SelectItem>
+                        <SelectItem value="free_product">Produto grátis</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {firstOrderPromotion.reward_type === 'free_product' ? (
+                    <div className="space-y-2">
+                      <Label>Produto oferecido</Label>
+                      <Select
+                        value={firstOrderPromotion.product_id || ''}
+                        onValueChange={(value) => setFirstOrderPromotion((current) => ({ ...current, product_id: value }))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Selecione um produto" /></SelectTrigger>
+                        <SelectContent>
+                          {products.map((product) => (
+                            <SelectItem key={product.id} value={product.id}>
+                              {product.name} · {formatBRL(product.price)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>{firstOrderPromotion.reward_type === 'percent' ? 'Percentual (%)' : 'Valor do desconto'}</Label>
+                      {firstOrderPromotion.reward_type === 'fixed' ? (
+                        <CurrencyTextInput
+                          value={formatBRL(firstOrderPromotion.reward_value)}
+                          onValueChange={(value) => setFirstOrderPromotion((current) => ({ ...current, reward_value: parseBRL(value) }))}
+                        />
+                      ) : (
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={firstOrderPromotion.reward_value}
+                          onChange={(event) => setFirstOrderPromotion((current) => ({ ...current, reward_value: Number(event.target.value) }))}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Pedido mínimo</Label>
+                  <CurrencyTextInput
+                    value={formatBRL(firstOrderPromotion.min_purchase)}
+                    onValueChange={(value) => setFirstOrderPromotion((current) => ({ ...current, min_purchase: parseBRL(value) }))}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border bg-slate-50 p-4">
+                  <div>
+                    <Label htmlFor="first-order-active">Promoção ativa</Label>
+                    <p className="text-xs text-muted-foreground">Desative sem apagar a configuração.</p>
+                  </div>
+                  <Switch
+                    id="first-order-active"
+                    checked={firstOrderPromotion.active}
+                    onCheckedChange={(active) => setFirstOrderPromotion((current) => ({ ...current, active }))}
+                  />
+                </div>
+
+                <Button onClick={saveFirstOrderPromotion} disabled={savingFirstOrderPromotion} className="w-full bg-[#08704d] hover:bg-[#065b3f]">
+                  <Gift className="mr-2 h-4 w-4" />
+                  {savingFirstOrderPromotion ? 'Salvando...' : 'Salvar promoção'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-orange-50">
+              <CardHeader>
+                <CardTitle>Como o cliente verá</CardTitle>
+                <CardDescription>O checkout reconhece o telefone e aplica o benefício sem cupom.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                  <Badge className="bg-[#ff6418]">SEU PRIMEIRO PEDIDO</Badge>
+                  <h3 className="mt-4 text-xl font-black text-[#073e2e]">{firstOrderPromotion.title}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {firstOrderPromotion.reward_type === 'percent'
+                      ? `${firstOrderPromotion.reward_value}% de desconto aplicado automaticamente.`
+                      : firstOrderPromotion.reward_type === 'fixed'
+                        ? `${formatBRL(firstOrderPromotion.reward_value)} de desconto aplicado automaticamente.`
+                        : `${products.find((product) => product.id === firstOrderPromotion.product_id)?.name || 'Produto selecionado'} grátis no pedido.`}
+                  </p>
+                  {firstOrderPromotion.min_purchase > 0 && (
+                    <p className="mt-3 text-xs font-semibold text-[#08704d]">Válido em pedidos a partir de {formatBRL(firstOrderPromotion.min_purchase)}.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 

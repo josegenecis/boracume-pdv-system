@@ -57,6 +57,7 @@ interface DeliveryPerson {
   status: 'available' | 'busy' | 'offline';
   app_enabled?: boolean;
   app_login?: string | null;
+  daily_allowance?: number;
 }
 
 interface DeliveryHistoryRow {
@@ -95,6 +96,7 @@ const deliveryPersonSchema = z.object({
   app_enabled: z.boolean().default(false),
   app_login: z.string().optional(),
   app_password: z.string().optional(),
+  daily_allowance: z.coerce.number().min(0, { message: 'A ajuda de custo não pode ser negativa' }).default(0),
 });
 
 type DeliveryPersonFormValues = z.infer<typeof deliveryPersonSchema>;
@@ -110,7 +112,15 @@ const Entregadores: React.FC = () => {
   const [fixedPayoutRaw, setFixedPayoutRaw] = useState('0');
   const [reportDate, setReportDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [settlementLoading, setSettlementLoading] = useState(false);
-  const [settlementRows, setSettlementRows] = useState<Array<{ driverId: string; driverName: string; orderCount: number; total: number; orderIds: string[] }>>([]);
+  const [settlementRows, setSettlementRows] = useState<Array<{
+    driverId: string;
+    driverName: string;
+    orderCount: number;
+    deliveryTotal: number;
+    allowance: number;
+    total: number;
+    orderIds: string[];
+  }>>([]);
   const [historyStart, setHistoryStart] = useState(historyInitialStart);
   const [historyEnd, setHistoryEnd] = useState(() => toLocalDateInput(new Date()));
   const [historyDriverId, setHistoryDriverId] = useState('all');
@@ -133,6 +143,7 @@ const Entregadores: React.FC = () => {
       app_enabled: false,
       app_login: '',
       app_password: '',
+      daily_allowance: 0,
     },
   });
   
@@ -266,14 +277,23 @@ const Entregadores: React.FC = () => {
 
       if (error) throw error;
 
-      const nameById = new Map(deliveryPersonnel.map(p => [p.id, p.name]));
-      const rowsByDriver = new Map<string, { driverId: string; driverName: string; orderCount: number; total: number; orderIds: string[] }>();
+      const personnelById = new Map(deliveryPersonnel.map((person) => [person.id, person]));
+      const rowsByDriver = new Map<string, {
+        driverId: string;
+        driverName: string;
+        orderCount: number;
+        deliveryTotal: number;
+        allowance: number;
+        total: number;
+        orderIds: string[];
+      }>();
 
       ((data as any[]) || []).forEach(o => {
         if (o?.delivery_settled) return;
         const driverId = String(o?.delivery_personnel_id || '');
         if (!driverId) return;
-        const driverName = nameById.get(driverId) || 'Motoboy';
+        const driver = personnelById.get(driverId);
+        const driverName = driver?.name || 'Motoboy';
         const status = String(o?.status || '');
         const payout =
           o?.delivery_payout_amount !== null && o?.delivery_payout_amount !== undefined
@@ -282,16 +302,31 @@ const Entregadores: React.FC = () => {
               ? Math.max(0, Number(fixedPayoutRaw) || 0)
               : Math.max(0, Number(o?.delivery_fee) || 0);
 
-        const current = rowsByDriver.get(driverId) || { driverId, driverName, orderCount: 0, total: 0, orderIds: [] };
+        const current = rowsByDriver.get(driverId) || {
+          driverId,
+          driverName,
+          orderCount: 0,
+          deliveryTotal: 0,
+          allowance: 0,
+          total: 0,
+          orderIds: [],
+        };
         current.orderCount += 1;
-        current.total += payout;
+        current.deliveryTotal += payout;
         if (status === 'delivered' || status === 'completed') {
           current.orderIds.push(String(o.id));
         }
         rowsByDriver.set(driverId, current);
       });
 
-      const rows = Array.from(rowsByDriver.values()).sort((a, b) => b.total - a.total);
+      const rows = Array.from(rowsByDriver.values())
+        .map((row) => {
+          const allowance = row.orderIds.length > 0
+            ? Math.max(0, Number(personnelById.get(row.driverId)?.daily_allowance || 0))
+            : 0;
+          return { ...row, allowance, total: row.deliveryTotal + allowance };
+        })
+        .sort((a, b) => b.total - a.total);
       setSettlementRows(rows);
     } catch (e: any) {
       setSettlementRows([]);
@@ -435,6 +470,7 @@ const Entregadores: React.FC = () => {
             status: data.status,
             app_enabled: data.app_enabled,
             app_login: data.app_enabled ? appLogin : null,
+            daily_allowance: Math.max(0, Number(data.daily_allowance || 0)),
             updated_at: new Date().toISOString(),
           })
           .eq('id', currentDeliveryPerson.id);
@@ -466,6 +502,7 @@ const Entregadores: React.FC = () => {
             status: data.status,
             app_enabled: data.app_enabled,
             app_login: data.app_enabled ? appLogin : null,
+            daily_allowance: Math.max(0, Number(data.daily_allowance || 0)),
           })
           .select('id')
           .single();
@@ -550,6 +587,7 @@ const Entregadores: React.FC = () => {
     form.setValue('app_enabled', Boolean(deliveryPerson.app_enabled));
     form.setValue('app_login', deliveryPerson.app_login || '');
     form.setValue('app_password', '');
+    form.setValue('daily_allowance', Math.max(0, Number(deliveryPerson.daily_allowance || 0)));
     
     setIsDialogOpen(true);
   };
@@ -572,6 +610,7 @@ const Entregadores: React.FC = () => {
       app_enabled: false,
       app_login: '',
       app_password: '',
+      daily_allowance: 0,
     });
   };
   
@@ -607,13 +646,38 @@ const Entregadores: React.FC = () => {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
   const settlementByDriverId = new Map(settlementRows.map(r => [r.driverId, r]));
-  const historySummary = useMemo(() => historyRows.reduce((summary, row) => {
-    summary.total += row.payout;
-    if (row.settled) summary.paid += row.payout;
-    else if (row.status === 'delivered' || row.status === 'completed') summary.pending += row.payout;
-    if (row.status === 'delivered' || row.status === 'completed') summary.delivered += 1;
+  const historySummary = useMemo(() => {
+    const summary = { total: 0, deliveryTotal: 0, allowance: 0, paid: 0, pending: 0, delivered: 0 };
+    const completedByDriverDay = new Map<string, DeliveryHistoryRow[]>();
+
+    for (const row of historyRows) {
+      summary.deliveryTotal += row.payout;
+      summary.total += row.payout;
+      if (row.settled) summary.paid += row.payout;
+      else if (row.status === 'delivered' || row.status === 'completed') summary.pending += row.payout;
+      if (row.status !== 'delivered' && row.status !== 'completed') continue;
+
+      summary.delivered += 1;
+      const day = row.assignedAt ? toLocalDateInput(new Date(row.assignedAt)) : 'sem-data';
+      const groupKey = `${row.driverId}:${day}`;
+      completedByDriverDay.set(groupKey, [...(completedByDriverDay.get(groupKey) || []), row]);
+    }
+
+    const allowanceByDriver = new Map(deliveryPersonnel.map((person) => [
+      person.id,
+      Math.max(0, Number(person.daily_allowance || 0)),
+    ]));
+    for (const rows of completedByDriverDay.values()) {
+      const allowance = allowanceByDriver.get(rows[0]?.driverId || '') || 0;
+      if (!allowance) continue;
+      summary.allowance += allowance;
+      summary.total += allowance;
+      if (rows.every((row) => row.settled)) summary.paid += allowance;
+      else summary.pending += allowance;
+    }
+
     return summary;
-  }, { total: 0, paid: 0, pending: 0, delivered: 0 }), [historyRows]);
+  }, [historyRows, deliveryPersonnel]);
 
   const historyStatusLabel = (status: string) => {
     if (status === 'delivered' || status === 'completed') return 'Entregue';
@@ -745,7 +809,9 @@ const Entregadores: React.FC = () => {
                   <TableRow>
                     <TableHead>Motoboy</TableHead>
                     <TableHead>Entregas</TableHead>
-                    <TableHead>Total</TableHead>
+                    <TableHead>Corridas</TableHead>
+                    <TableHead>Ajuda de custo</TableHead>
+                    <TableHead>Total a pagar</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -754,6 +820,8 @@ const Entregadores: React.FC = () => {
                     <TableRow key={row.driverId}>
                       <TableCell className="font-medium">{row.driverName}</TableCell>
                       <TableCell>{row.orderCount}</TableCell>
+                      <TableCell>{formatBRL(row.deliveryTotal)}</TableCell>
+                      <TableCell>{formatBRL(row.allowance)}</TableCell>
                       <TableCell className="font-semibold">{formatBRL(row.total)}</TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -800,6 +868,7 @@ const Entregadores: React.FC = () => {
                   <TableHead>Placa</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>App</TableHead>
+                  <TableHead>Ajuda/dia</TableHead>
                   <TableHead>Entregas (dia)</TableHead>
                   <TableHead>Saldo (dia)</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -818,6 +887,7 @@ const Entregadores: React.FC = () => {
                       </Badge>
                     </TableCell>
                     <TableCell>{deliveryPerson.app_enabled ? <Badge className="bg-emerald-600">Liberado</Badge> : <Badge variant="secondary">Desativado</Badge>}</TableCell>
+                    <TableCell>{formatBRL(deliveryPerson.daily_allowance || 0)}</TableCell>
                     <TableCell>{settlementByDriverId.get(deliveryPerson.id)?.orderCount || 0}</TableCell>
                     <TableCell className="font-semibold">{formatBRL(settlementByDriverId.get(deliveryPerson.id)?.total || 0)}</TableCell>
                     <TableCell className="text-right">
@@ -871,7 +941,7 @@ const Entregadores: React.FC = () => {
           </div>
         </CardHeader>
         <CardContent className="space-y-5 p-5">
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
             <div className="rounded-2xl border bg-slate-50 p-4">
               <Truck className="h-5 w-5 text-emerald-700" />
               <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Entregas concluídas</p>
@@ -880,6 +950,16 @@ const Entregadores: React.FC = () => {
             <div className="rounded-2xl border bg-slate-50 p-4">
               <Banknote className="h-5 w-5 text-slate-700" />
               <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valor das corridas</p>
+              <p className="mt-1 text-xl font-black">{formatBRL(historySummary.deliveryTotal)}</p>
+            </div>
+            <div className="rounded-2xl border bg-orange-50 p-4">
+              <Banknote className="h-5 w-5 text-orange-700" />
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-orange-800/70">Ajuda de custo</p>
+              <p className="mt-1 text-xl font-black">{formatBRL(historySummary.allowance)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-300 bg-slate-100 p-4">
+              <Banknote className="h-5 w-5 text-slate-800" />
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-600">Total geral</p>
               <p className="mt-1 text-xl font-black">{formatBRL(historySummary.total)}</p>
             </div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -1030,6 +1110,30 @@ const Entregadores: React.FC = () => {
                     <FormControl>
                       <Input placeholder="(00) 00000-0000" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="daily_allowance"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ajuda de custo diária (R$)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        value={field.value ?? 0}
+                        onChange={(event) => field.onChange(Number(event.target.value || 0))}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Somada uma vez no fechamento do dia quando houver ao menos uma entrega concluída.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}

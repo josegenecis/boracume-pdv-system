@@ -214,6 +214,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [discount, setDiscount] = React.useState(0);
   const [appliedCoupon, setAppliedCoupon] = React.useState<{ code: string; type: string } | null>(null);
   const [autoLoyaltyReward, setAutoLoyaltyReward] = React.useState<{ id: string; code: string; type: string; discountAmount: number; message: string } | null>(null);
+  const [firstOrderPromotion, setFirstOrderPromotion] = React.useState<null | {
+    id: string;
+    title: string;
+    rewardType: 'percent' | 'fixed' | 'free_product';
+    discountAmount: number;
+    message: string;
+    product: null | { id: string; name: string; price: number; imageUrl?: string | null };
+  }>(null);
   const [loyaltyProgress, setLoyaltyProgress] = React.useState<string[]>([]);
   const [isValidatingCoupon, setIsValidatingCoupon] = React.useState(false);
   const [isCheckingLoyalty, setIsCheckingLoyalty] = React.useState(false);
@@ -571,6 +579,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     if (!isOpen || digits.length < 10 || appliedCoupon) {
       if (!appliedCoupon) {
         setAutoLoyaltyReward(null);
+        setFirstOrderPromotion(null);
         setLoyaltyProgress([]);
         if (!couponCode.trim()) {
           setDiscount(0);
@@ -596,9 +605,23 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         if (error) throw error;
 
         const reward = data?.reward || null;
+        const welcomePromotion = data?.firstOrderPromotion || null;
         setLoyaltyProgress(Array.isArray(data?.progress) ? data.progress : []);
 
-        if (reward) {
+        if (welcomePromotion) {
+          setFirstOrderPromotion({
+            id: String(welcomePromotion.id),
+            title: String(welcomePromotion.title || 'Oferta de primeiro pedido'),
+            rewardType: welcomePromotion.rewardType,
+            discountAmount: Number(welcomePromotion.discountAmount || 0),
+            message: String(welcomePromotion.message || 'Benefício de primeiro pedido aplicado.'),
+            product: welcomePromotion.product || null,
+          });
+          setAutoLoyaltyReward(null);
+          setDiscount(Number(welcomePromotion.discountAmount || 0));
+          setCouponError('');
+        } else if (reward) {
+          setFirstOrderPromotion(null);
           setAutoLoyaltyReward({
             id: String(reward.id),
             code: String(reward.code),
@@ -609,6 +632,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           setDiscount(Number(reward.discountAmount || 0));
           setCouponError('');
         } else {
+          setFirstOrderPromotion(null);
           setAutoLoyaltyReward(null);
           if (!couponCode.trim()) {
             setDiscount(0);
@@ -616,6 +640,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         }
       } catch {
         if (!active) return;
+        setFirstOrderPromotion(null);
         setAutoLoyaltyReward(null);
       } finally {
         if (active) setIsCheckingLoyalty(false);
@@ -635,6 +660,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     setDiscount(0);
     setAppliedCoupon(null);
     setAutoLoyaltyReward(null);
+    setFirstOrderPromotion(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('validate-coupon', {
@@ -1051,7 +1077,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         customer_longitude: isDeliveryMode ? location.longitude : null,
         customer_location_accuracy: isDeliveryMode && location.accuracy ? Math.round(location.accuracy) : null,
         google_maps_link: isDeliveryMode && location.latitude && location.longitude ? generateGoogleMapsLink(location.latitude, location.longitude) : null,
-        items: cart.map(item => ({
+        items: [
+          ...cart.map(item => ({
           product_id: item.product.id,
           product_name: item.product.name,
           quantity: item.quantity,
@@ -1060,10 +1087,27 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           variations: item.variations,
           notes: item.notes,
           total: item.totalPrice
-        })),
+          })),
+          ...(firstOrderPromotion?.rewardType === 'free_product' && firstOrderPromotion.product
+            ? [{
+                product_id: firstOrderPromotion.product.id,
+                product_name: firstOrderPromotion.product.name,
+                quantity: 1,
+                price: 0,
+                options: [],
+                variations: [],
+                notes: 'Brinde da promoção de primeiro pedido',
+                total: 0,
+                original_price: firstOrderPromotion.product.price,
+                promotion_type: 'first_order',
+              }]
+            : []),
+        ],
         delivery_fee: isDeliveryMode ? deliveryFee : 0,
         discount: discount,
-        coupon_code: appliedCoupon?.code || autoLoyaltyReward?.code || null,
+        coupon_code: firstOrderPromotion?.id
+          ? `PRIMEIRO:${firstOrderPromotion.id}`
+          : appliedCoupon?.code || autoLoyaltyReward?.code || null,
         loyalty_reward_id: autoLoyaltyReward?.id || null,
         total: finalTotal,
         status: 'pending',
@@ -1742,8 +1786,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
              </div>
              {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
              {appliedCoupon && <p className="text-xs text-green-600 mt-1">Cupom {appliedCoupon.code} aplicado!</p>}
+             {firstOrderPromotion && (
+               <div className="mt-2 rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-[#7a3510]">
+                 <p className="font-extrabold">{firstOrderPromotion.title}</p>
+                 <p className="mt-0.5 text-xs">{firstOrderPromotion.message}</p>
+               </div>
+             )}
              {autoLoyaltyReward && <p className="text-xs mt-1 text-[#245B2B]">{autoLoyaltyReward.message}</p>}
-             {isCheckingLoyalty && !appliedCoupon && !autoLoyaltyReward && <p className="text-xs mt-1 text-muted-foreground">Verificando fidelidade...</p>}
+             {isCheckingLoyalty && !appliedCoupon && !autoLoyaltyReward && !firstOrderPromotion && <p className="text-xs mt-1 text-muted-foreground">Verificando promoções...</p>}
             {!isStoreOpen && <p className="text-xs text-red-500 mt-1">{storeClosedMessage}</p>}
           </div>
 
@@ -1762,8 +1812,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               )}
               {discount > 0 && (
                 <div className="flex justify-between text-green-600">
-                  <span className="font-medium">{autoLoyaltyReward ? 'Desconto fidelidade:' : 'Desconto:'}</span>
+                  <span className="font-medium">{firstOrderPromotion ? 'Primeiro pedido:' : autoLoyaltyReward ? 'Desconto fidelidade:' : 'Desconto:'}</span>
                   <span className="font-bold">- {formatBRL(discount)}</span>
+                </div>
+              )}
+              {firstOrderPromotion?.rewardType === 'free_product' && firstOrderPromotion.product && (
+                <div className="flex justify-between gap-3 text-orange-700">
+                  <span className="font-medium">Brinde do primeiro pedido:</span>
+                  <span className="text-right font-bold">{firstOrderPromotion.product.name}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
