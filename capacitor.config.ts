@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   appName: 'PopSystem Garcom',
   webDir: 'dist',
   server: {
-    url: 'https://popsystem.com.br/garcom',
+    url: 'https://popsystem.com.br/waiter-login',
     cleartext: false
   },
   plugins: {

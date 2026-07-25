@@ -118,6 +118,7 @@ function AppContent() {
       <Route path="/admin-popsystem" element={<SystemAdminDashboard />} />
       
       {/* Rotas do Garçom */}
+      <Route path="/garcom" element={<Navigate to="/waiter-login" replace />} />
       <Route path="/waiter-login" element={<WaiterLogin />} />
       <Route path="/waiter-dashboard" element={<WaiterDashboard />} />
       <Route path="/waiter-session/:sessionId" element={<WaiterSession />} />
