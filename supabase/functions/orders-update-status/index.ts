@@ -7,6 +7,7 @@ import {
 } from '../_shared/ifood.ts'
 import { notifyOrderStatus } from '../_shared/restaurant-whatsapp.ts'
 import { processLoyaltyForOrder } from '../_shared/loyalty.ts'
+import { resolveStoreUserId } from '../_shared/multi-store.ts'
 
 export const config = { runtime: 'edge', verify_jwt: false }
 
@@ -374,8 +375,8 @@ Deno.serve(async (req: Request) => {
 
     if (!supabaseUrl || !serviceKey) return ok({ ok: false, error: 'missing_env' })
 
-    const userId = await getAuthUserId(req)
-    if (!userId) return ok({ ok: false, error: 'unauthorized' })
+    const authenticatedUserId = await getAuthUserId(req)
+    if (!authenticatedUserId) return ok({ ok: false, error: 'unauthorized' })
 
     const body = await req.json().catch(() => ({}))
     const orderId = String(body?.orderId || '')
@@ -389,6 +390,12 @@ Deno.serve(async (req: Request) => {
     const svc = await createServiceClient(supabaseUrl)
     if (svc.error) return ok({ ok: false, error: 'missing_env', details: svc.error })
     const supabase = svc.client
+    let userId = authenticatedUserId
+    try {
+      userId = await resolveStoreUserId(supabase, authenticatedUserId, body?._storeId)
+    } catch {
+      return ok({ ok: false, error: 'forbidden' })
+    }
 
     const { data: order, error: orderErr } = await supabase
       .from('orders')

@@ -138,6 +138,7 @@ const configureEvolutionWebhooks = async (baseUrl: string, globalApiKey: string,
 };
 
 const ensureWhatsAppSettingsEnabled = async (supabaseAdmin: any, restaurantId: string, baseUrl: string, globalApiKey: string) => {
+  const defaultMessage = 'Olá! Bem-vindo ao nosso restaurante. Como posso ajudar você hoje?';
   const payload = {
     enabled: true,
     ai_enabled: true,
@@ -167,16 +168,25 @@ const ensureWhatsAppSettingsEnabled = async (supabaseAdmin: any, restaurantId: s
 
   const inserted = await supabaseAdmin.from('whatsapp_settings').insert({
     user_id: restaurantId,
+    phone_number: '',
+    default_message: defaultMessage,
     ...payload
   });
   if (inserted.error && String(inserted.error.message || '').includes('ai_enabled')) {
-    await supabaseAdmin.from('whatsapp_settings').insert({
+    const fallbackInsert = await supabaseAdmin.from('whatsapp_settings').insert({
       user_id: restaurantId,
+      phone_number: '',
+      default_message: defaultMessage,
       enabled: true,
       evolution_url: baseUrl,
       evolution_api_key: globalApiKey,
       updated_at: new Date().toISOString()
     });
+    if (fallbackInsert.error) {
+      console.error('Failed to create WhatsApp settings:', fallbackInsert.error);
+    }
+  } else if (inserted.error) {
+    console.error('Failed to create WhatsApp settings:', inserted.error);
   }
 };
 
