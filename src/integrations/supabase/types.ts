@@ -1337,6 +1337,99 @@ export type Database = {
         }
         Relationships: []
       }
+      totem_banners: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          display_order: number
+          end_date: string | null
+          id: string
+          media_url: string
+          orientation: string
+          start_date: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          end_date?: string | null
+          id?: string
+          media_url: string
+          orientation?: string
+          start_date?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          end_date?: string | null
+          id?: string
+          media_url?: string
+          orientation?: string
+          start_date?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      totem_settings: {
+        Row: {
+          accent_color: string
+          background_color: string
+          banner_interval_seconds: number
+          button_text_color: string
+          created_at: string
+          cta_text: string
+          idle_overlay_color: string
+          primary_color: string
+          secondary_color: string
+          surface_color: string
+          text_color: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accent_color?: string
+          background_color?: string
+          banner_interval_seconds?: number
+          button_text_color?: string
+          created_at?: string
+          cta_text?: string
+          idle_overlay_color?: string
+          primary_color?: string
+          secondary_color?: string
+          surface_color?: string
+          text_color?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accent_color?: string
+          background_color?: string
+          banner_interval_seconds?: number
+          button_text_color?: string
+          created_at?: string
+          cta_text?: string
+          idle_overlay_color?: string
+          primary_color?: string
+          secondary_color?: string
+          surface_color?: string
+          text_color?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       scale_settings: {
         Row: {
           auto_tare: boolean | null

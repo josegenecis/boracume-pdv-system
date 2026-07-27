@@ -15,22 +15,22 @@ export default function TotemCheckoutBar({ itemCount, total, onCheckout, onCance
   const hasItems = itemCount > 0;
 
   return (
-    <div className="totem-checkout-shell fixed inset-x-0 bottom-0 z-50 border-t border-stone-200 bg-white/98 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 shadow-[0_-18px_45px_rgba(28,25,23,.16)] backdrop-blur-xl">
+    <div className="totem-checkout-shell fixed inset-x-0 bottom-0 z-50 border-t border-stone-200 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 shadow-[0_-18px_45px_rgba(28,25,23,.16)] backdrop-blur-xl" style={{ backgroundColor: 'color-mix(in srgb, var(--totem-surface) 98%, transparent)' }}>
       <div className="totem-checkout-inner mx-auto flex max-w-[1600px] items-center gap-3">
         <div className="totem-checkout-summary flex min-w-0 flex-1 items-center gap-3">
-          <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${hasItems ? 'bg-[#073a2d] text-white' : 'bg-stone-100 text-stone-400'}`}>
+          <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${hasItems ? '' : 'bg-stone-100 text-stone-400'}`} style={hasItems ? { backgroundColor: 'var(--totem-secondary)', color: 'var(--totem-button-text)' } : undefined}>
             <ShoppingBag className="h-7 w-7" />
-            {hasItems ? <span className="absolute -right-2 -top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-boracume-orange px-1 text-sm font-black text-white">{itemCount}</span> : null}
+            {hasItems ? <span className="absolute -right-2 -top-2 flex h-7 min-w-7 items-center justify-center rounded-full px-1 text-sm font-black" style={{ backgroundColor: 'var(--totem-primary)', color: 'var(--totem-button-text)' }}>{itemCount}</span> : null}
           </div>
           <div className="min-w-0">
             <div className="text-sm font-extrabold uppercase tracking-wide text-stone-400">Seu pedido</div>
-            <div className="totem-checkout-item-label truncate text-lg font-black text-stone-900">{hasItems ? `${itemCount} ${itemCount === 1 ? 'item' : 'itens'}` : 'Escolha seus produtos'}</div>
+            <div className="totem-checkout-item-label truncate text-lg font-black" style={{ color: 'var(--totem-text)' }}>{hasItems ? `${itemCount} ${itemCount === 1 ? 'item' : 'itens'}` : 'Escolha seus produtos'}</div>
           </div>
         </div>
 
         <div className="totem-checkout-total hidden min-w-[180px] text-right sm:block">
           <div className="text-sm font-bold text-stone-400">Total do pedido</div>
-          <div className="totem-checkout-total-value text-3xl font-black text-stone-950">{formatBRL(total)}</div>
+          <div className="totem-checkout-total-value text-3xl font-black" style={{ color: 'var(--totem-text)' }}>{formatBRL(total)}</div>
         </div>
 
         {hasItems ? (
@@ -44,7 +44,8 @@ export default function TotemCheckoutBar({ itemCount, total, onCheckout, onCance
           type="button"
           disabled={!hasItems}
           onClick={onCheckout}
-          className="totem-checkout-button h-16 min-w-[260px] rounded-2xl bg-boracume-orange px-7 text-lg font-black text-white hover:bg-boracume-orange/90 disabled:bg-stone-200 disabled:text-stone-400"
+          className="totem-checkout-button h-16 min-w-[260px] rounded-2xl px-7 text-lg font-black brightness-100 hover:brightness-95 disabled:bg-stone-200 disabled:text-stone-400"
+          style={hasItems ? { backgroundColor: 'var(--totem-primary)', color: 'var(--totem-button-text)' } : undefined}
         >
           <CreditCard className="mr-3 h-6 w-6" />
           {hasItems ? 'Revisar e pagar' : 'Aguardando pedido'}

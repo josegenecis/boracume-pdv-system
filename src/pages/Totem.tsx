@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import {
   Expand,
@@ -27,6 +27,7 @@ import { PrinterService } from '@/utils/printerService';
 import MarketingPixels from '@/components/marketing/MarketingPixels';
 import { getSavedTotemRestaurantId, useTotemPwa } from '@/hooks/useTotemPwa';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { useTotemTheme } from '@/hooks/useTotemTheme';
 
 interface Product {
   id: string;
@@ -75,6 +76,7 @@ export default function Totem() {
 
   const { products, categories, profile, isLoading: menuLoading, error: menuError } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 60 });
   const { canInstall, install, isInstalled, isOnline, isFullscreen, toggleFullscreen } = useTotemPwa(finalUserId);
+  const { settings: totemSettings, cssVariables } = useTotemTheme(finalUserId);
 
   const categoryIds = useMemo(() => categories.map((category) => `category-${category.id}`), [categories]);
   const { activeSection, registerSection } = useScrollSpy(categoryIds);
@@ -235,7 +237,14 @@ export default function Totem() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fbf7ef] text-stone-950">
+    <div
+      className="min-h-screen"
+      style={{
+        ...cssVariables,
+        backgroundColor: 'var(--totem-background)',
+        color: 'var(--totem-text)',
+      } as CSSProperties}
+    >
       <MarketingPixels userId={finalUserId} />
 
       {!started ? (
@@ -247,6 +256,7 @@ export default function Totem() {
           isFullscreen={isFullscreen}
           isInstalled={isInstalled}
           canInstall={canInstall}
+          settings={totemSettings}
           onStart={() => setStarted(true)}
           onInstall={() => void handleInstall()}
           onToggleFullscreen={() => void toggleFullscreen()}
@@ -254,13 +264,13 @@ export default function Totem() {
       ) : null}
 
       <div className={started ? 'block' : 'hidden'}>
-        <header className="sticky top-0 z-40 border-b border-stone-200 bg-white/95 shadow-sm backdrop-blur">
+        <header className="sticky top-0 z-40 border-b border-stone-200 shadow-sm backdrop-blur" style={{ backgroundColor: 'color-mix(in srgb, var(--totem-surface) 95%, transparent)' }}>
           <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 lg:px-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3">
                 {profile?.logo_url ? <img src={profile.logo_url} alt="" className="h-14 w-14 rounded-xl border border-stone-200 bg-white object-contain p-1" /> : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#073a2d] text-white"><ShoppingBag className="h-7 w-7" /></div>}
                 <div>
-                  <div className="text-2xl font-black leading-tight text-[#073a2d]">{profile?.restaurant_name || 'Autoatendimento'}</div>
+                  <div className="text-2xl font-black leading-tight" style={{ color: 'var(--totem-secondary)' }}>{profile?.restaurant_name || 'Autoatendimento'}</div>
                   <div className="text-sm font-semibold text-stone-500">Peça, pague e retire no balcão</div>
                 </div>
               </div>
@@ -305,12 +315,10 @@ export default function Totem() {
                     key={category.id}
                     type="button"
                     onClick={() => scrollToCategory(category.id)}
-                    className={[
-                      'h-12 shrink-0 rounded-lg border px-5 text-base font-extrabold transition',
-                      selected
-                        ? 'border-[#073a2d] bg-[#073a2d] text-white shadow'
-                        : 'border-stone-200 bg-white text-stone-700 hover:border-stone-300',
-                    ].join(' ')}
+                    className={`h-12 shrink-0 rounded-lg border px-5 text-base font-extrabold transition ${selected ? 'shadow' : 'border-stone-200 hover:border-stone-300'}`}
+                    style={selected
+                      ? { borderColor: 'var(--totem-secondary)', backgroundColor: 'var(--totem-secondary)', color: 'var(--totem-button-text)' }
+                      : { backgroundColor: 'var(--totem-surface)', color: 'var(--totem-text)' }}
                   >
                     {category.name}
                   </button>
@@ -323,13 +331,13 @@ export default function Totem() {
         <main className="totem-menu-main mx-auto max-w-[1600px] px-4 py-6 pb-44 lg:px-6">
           <section className="min-w-0 space-y-8">
             {menuLoading ? (
-              <div className="rounded-lg border border-stone-200 bg-white p-8 text-lg font-bold text-stone-500">
+              <div className="rounded-lg border border-stone-200 p-8 text-lg font-bold" style={{ backgroundColor: 'var(--totem-surface)', color: 'var(--totem-text)' }}>
                 Carregando cardapio...
               </div>
             ) : visibleCategoryCount === 0 ? (
-              <div className="rounded-lg border border-stone-200 bg-white p-8">
-                <div className="text-2xl font-black text-stone-950">Nenhum produto encontrado</div>
-                <div className="mt-2 text-stone-500">Tente buscar por outro nome.</div>
+              <div className="rounded-lg border border-stone-200 p-8" style={{ backgroundColor: 'var(--totem-surface)', color: 'var(--totem-text)' }}>
+                <div className="text-2xl font-black">Nenhum produto encontrado</div>
+                <div className="mt-2 opacity-60">Tente buscar por outro nome.</div>
               </div>
             ) : (
               <div className="space-y-12">
@@ -345,9 +353,9 @@ export default function Totem() {
                     >
                       <div className="mb-4 flex items-end justify-between gap-4">
                         <div>
-                          <h2 className="text-3xl font-black text-stone-950">{category.name}</h2>
+                          <h2 className="text-3xl font-black" style={{ color: 'var(--totem-text)' }}>{category.name}</h2>
                           {category.description ? (
-                            <p className="mt-1 max-w-2xl text-base font-medium text-stone-500">{category.description}</p>
+                            <p className="mt-1 max-w-2xl text-base font-medium opacity-60" style={{ color: 'var(--totem-text)' }}>{category.description}</p>
                           ) : null}
                         </div>
                         <div className="hidden rounded-full bg-white px-3 py-1 text-sm font-bold text-stone-500 shadow-sm lg:block">
@@ -386,6 +394,7 @@ export default function Totem() {
         product={selectedProduct}
         categoryConfig={(categories as Category[]).find((category) => category.id === selectedProduct?.category_id)}
         onAddToCart={handleAddToCartFromModal}
+        presentation="totem"
       />
 
       <TotemCheckoutModal

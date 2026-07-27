@@ -14,6 +14,7 @@ import {
 import { VariationGroup } from './variation/VariationGroup';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { getDisplayedPizzaFlavorPrice, isPizzaFlavorVariation, type PizzaCategoryConfig } from '@/lib/pizza-pricing';
+import { cn } from '@/lib/utils';
 
 interface Product {
   id: string;
@@ -37,6 +38,7 @@ interface SimpleVariationModalProps {
   ) => void;
   maxQuantity?: number | null;
   categoryConfig?: PizzaCategoryConfig | null;
+  presentation?: 'default' | 'totem';
 }
 
 export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
@@ -45,8 +47,10 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   product,
   onAddToCart,
   maxQuantity,
-  categoryConfig
+  categoryConfig,
+  presentation = 'default',
 }) => {
+  const isTotem = presentation === 'totem';
   const formatBRL = (value: number) =>
     `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -239,41 +243,57 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[100dvw] max-w-[100dvw] h-[100dvh] max-h-[100dvh] sm:h-[88dvh] sm:max-h-[88dvh] sm:max-w-md overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
-        <div className="flex flex-col h-full min-h-0">
-          <div className="relative">
+      <DialogContent className={cn(
+        'overflow-hidden bg-white shadow-2xl border border-gray-100 p-0',
+        isTotem
+          ? 'totem-variation-dialog h-[94dvh] max-h-[94dvh] w-[94dvw] max-w-[94dvw] rounded-[28px]'
+          : 'w-[100dvw] max-w-[100dvw] h-[100dvh] max-h-[100dvh] sm:h-[88dvh] sm:max-h-[88dvh] sm:max-w-md rounded-none sm:rounded-xl'
+      )} style={isTotem ? { backgroundColor: 'var(--totem-surface)', color: 'var(--totem-text)' } : undefined}>
+        <div className={cn('h-full min-h-0', isTotem ? 'totem-variation-layout grid grid-rows-[auto_minmax(0,1fr)_auto]' : 'flex flex-col')}>
+          <div className={cn('relative', isTotem && 'totem-variation-media')}>
             {product.image_url ? (
               <img
                 src={product.image_url}
                 alt={product.name}
-                className="w-full h-56 sm:h-44 object-cover"
+                className={cn('w-full object-cover', isTotem ? 'totem-variation-image h-[26dvh] min-h-56' : 'h-56 sm:h-44')}
               />
             ) : (
-              <div className="w-full h-56 sm:h-44 bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500" />
+              <div className={cn('w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500', isTotem ? 'totem-variation-image h-[26dvh] min-h-56' : 'h-56 sm:h-44')} />
             )}
 
             <button
               type="button"
               onClick={onClose}
-              className="absolute top-4 left-4 h-10 w-10 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-sm border border-gray-200"
+              className={cn('absolute top-4 left-4 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-sm border border-gray-200', isTotem ? 'h-14 w-14' : 'h-10 w-10')}
             >
-              <ChevronDown className="h-5 w-5 text-gray-900" />
+              <ChevronDown className={cn('text-gray-900', isTotem ? 'h-7 w-7' : 'h-5 w-5')} />
             </button>
           </div>
 
           <div
             ref={contentScrollRef}
             data-variation-scroll-container="true"
-            className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-4 py-4 space-y-6"
+            className={cn(
+              'flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] space-y-6',
+              isTotem ? 'totem-variation-content px-7 py-6 sm:px-9 sm:py-8' : 'px-4 py-4'
+            )}
           >
             <div className="space-y-2">
-              <DialogTitle className="text-2xl font-extrabold text-gray-900 leading-tight">
+              <DialogTitle
+                className={cn('font-extrabold leading-tight', isTotem ? 'text-3xl sm:text-4xl' : 'text-2xl text-gray-900')}
+                style={isTotem ? { color: 'var(--totem-text)' } : undefined}
+              >
                 {product.name}
               </DialogTitle>
               {product.description && (
-                <p className="text-sm text-gray-600 leading-relaxed">{product.description}</p>
+                <p
+                  className={cn('leading-relaxed', isTotem ? 'max-w-4xl text-base sm:text-lg' : 'text-sm text-gray-600')}
+                  style={isTotem ? { color: 'color-mix(in srgb, var(--totem-text) 72%, transparent)' } : undefined}
+                >
+                  {product.description}
+                </p>
               )}
-              <div className="text-2xl font-extrabold" style={{ color: 'var(--menu-price, #EF6C20)' }}>
+              <div className={cn('font-extrabold', isTotem ? 'text-3xl' : 'text-2xl')} style={{ color: 'var(--menu-price, #EF6C20)' }}>
                 {formatBRL(product.price)}
               </div>
             </div>
@@ -286,8 +306,13 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
             )}
 
             {!loadingVariations && !isLoading && variations.length > 0 ? (
-              <div className="space-y-4">
-                <h3 className="text-base font-semibold text-gray-900">Personalize seu pedido</h3>
+              <div className={cn('space-y-4', isTotem && 'totem-variation-groups')}>
+                <h3
+                  className={cn('font-semibold', isTotem ? 'text-xl' : 'text-base text-gray-900')}
+                  style={isTotem ? { color: 'var(--totem-text)' } : undefined}
+                >
+                  Personalize seu pedido
+                </h3>
                 {variations.map((variation) => (
                   <div
                     key={variation.id}
@@ -365,7 +390,10 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
             </div>
           </div>
 
-          <div className="border-t border-gray-100 bg-white p-3 sm:p-4">
+          <div
+            className={cn('border-t border-gray-100', isTotem ? 'totem-variation-footer p-5 sm:p-6' : 'bg-white p-3 sm:p-4')}
+            style={isTotem ? { backgroundColor: 'var(--totem-surface)' } : undefined}
+          >
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               {variations.length > 0 ? (
                 <div className="max-w-[9rem] shrink-0 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-center text-xs font-semibold leading-4 text-orange-900">
@@ -399,8 +427,8 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
               <Button
                 onClick={handleAddToCart}
                 disabled={!isValidSelection() || loadingVariations || submitting}
-                className="h-11 min-w-0 flex-1 rounded-xl px-3 text-sm font-extrabold sm:h-12 sm:px-4 sm:text-base"
-                style={{ backgroundColor: 'var(--menu-primary, #85C441)', color: '#ffffff' }}
+                className={cn('min-w-0 flex-1 rounded-xl px-3 font-extrabold sm:px-4', isTotem ? 'h-16 text-xl' : 'h-11 text-sm sm:h-12 sm:text-base')}
+                style={{ backgroundColor: 'var(--menu-primary, #85C441)', color: 'var(--totem-button-text, #ffffff)' }}
               >
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="truncate">Adicionar - {formatBRL(getTotalPrice())}</span>}
               </Button>

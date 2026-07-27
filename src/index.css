@@ -134,6 +134,16 @@ body.waiter-app-active {
 }
 
 @media (orientation: portrait) {
+  .totem-variation-dialog {
+    width: min(94dvw, 980px);
+    max-width: min(94dvw, 980px);
+  }
+
+  .totem-variation-content {
+    padding-right: clamp(1.75rem, 4vw, 3rem);
+    padding-left: clamp(1.75rem, 4vw, 3rem);
+  }
+
   .totem-idle-header {
     padding: 2rem;
   }
@@ -237,6 +247,50 @@ body.waiter-app-active {
 }
 
 @media (orientation: landscape) {
+  .totem-variation-dialog {
+    width: min(94dvw, 1500px);
+    max-width: min(94dvw, 1500px);
+    height: min(92dvh, 980px);
+    max-height: min(92dvh, 980px);
+  }
+
+  .totem-variation-layout {
+    grid-template-columns: minmax(320px, 0.8fr) minmax(520px, 1.2fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .totem-variation-media {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    min-height: 0;
+  }
+
+  .totem-variation-image {
+    height: 100%;
+    min-height: 100%;
+  }
+
+  .totem-variation-content {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .totem-variation-footer {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .totem-variation-groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 1rem;
+  }
+
+  .totem-variation-groups > h3 {
+    grid-column: 1 / -1;
+  }
+
   .totem-idle-header {
     padding: 1.75rem;
   }

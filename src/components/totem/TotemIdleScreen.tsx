@@ -5,15 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import AutoplayVideo from '@/components/media/AutoplayVideo';
 import { isVideoAsset } from '@/utils/videoAutoplay';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
-
-interface IdleBannerRow {
-  id: string;
-  title: string;
-  description: string | null;
-  image_url: string | null;
-  start_date: string | null;
-  end_date: string | null;
-}
+import { DEFAULT_TOTEM_THEME, type TotemBanner, type TotemThemeSettings } from '@/types/totem';
 
 interface IdleProduct {
   id: string;
@@ -38,6 +30,7 @@ interface TotemIdleScreenProps {
   isFullscreen: boolean;
   isInstalled: boolean;
   canInstall: boolean;
+  settings?: TotemThemeSettings;
   onStart: () => void;
   onInstall: () => void;
   onToggleFullscreen: () => void;
@@ -70,26 +63,38 @@ export default function TotemIdleScreen({
   isFullscreen,
   isInstalled,
   canInstall,
+  settings = DEFAULT_TOTEM_THEME,
   onStart,
   onInstall,
   onToggleFullscreen,
 }: TotemIdleScreenProps) {
-  const [banners, setBanners] = useState<IdleBannerRow[]>([]);
+  const [banners, setBanners] = useState<TotemBanner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(() =>
+    window.matchMedia('(orientation: portrait)').matches ? 'portrait' : 'landscape'
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia('(orientation: portrait)');
+    const updateOrientation = () => setOrientation(media.matches ? 'portrait' : 'landscape');
+    updateOrientation();
+    media.addEventListener?.('change', updateOrientation);
+    return () => media.removeEventListener?.('change', updateOrientation);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadBanners = async () => {
       const { data } = await supabase
-        .from('promotional_banners')
-        .select('id,title,description,image_url,start_date,end_date')
+        .from('totem_banners')
+        .select('id,user_id,title,description,media_url,orientation,active,display_order,start_date,end_date')
         .eq('user_id', restaurantId)
         .eq('active', true)
         .order('display_order', { ascending: true });
 
       if (!cancelled) {
-        setBanners(((data || []) as IdleBannerRow[]).filter((banner) => banner.image_url && isDateActive(banner.start_date, banner.end_date)));
+        setBanners(((data || []) as TotemBanner[]).filter((banner) => banner.media_url && isDateActive(banner.start_date, banner.end_date)));
       }
     };
 
@@ -100,13 +105,15 @@ export default function TotemIdleScreen({
   }, [restaurantId]);
 
   const slides = useMemo<IdleSlide[]>(() => {
-    const promotionalSlides = banners.map((banner) => ({
+    const promotionalSlides = banners
+      .filter((banner) => banner.orientation === 'both' || banner.orientation === orientation)
+      .map((banner) => ({
       id: `banner-${banner.id}`,
       title: banner.title || 'Uma experiência feita para você',
       description: banner.description || 'Toque na tela, escolha seus favoritos e faça seu pedido.',
-      imageUrl: normalizeImageUrlForDisplay(banner.image_url) || '',
+      imageUrl: normalizeImageUrlForDisplay(banner.media_url) || '',
       eyebrow: 'Oferta em destaque',
-    }));
+      }));
     if (promotionalSlides.length > 0) return promotionalSlides;
 
     const productSlides = featuredProducts
@@ -129,15 +136,15 @@ export default function TotemIdleScreen({
       imageUrl: normalizeImageUrlForDisplay(profile?.banner_url) || '',
       eyebrow: 'Autoatendimento',
     }];
-  }, [banners, featuredProducts, profile]);
+  }, [banners, featuredProducts, orientation, profile]);
 
   useEffect(() => {
     if (slides.length <= 1) return;
     const timer = window.setInterval(() => {
       setCurrentIndex((index) => (index + 1) % slides.length);
-    }, 7000);
+    }, settings.banner_interval_seconds * 1000);
     return () => window.clearInterval(timer);
-  }, [slides.length]);
+  }, [settings.banner_interval_seconds, slides.length]);
 
   useEffect(() => {
     setCurrentIndex(0);
@@ -146,7 +153,7 @@ export default function TotemIdleScreen({
   const slide = slides[currentIndex % slides.length];
 
   return (
-    <section className="fixed inset-0 z-50 overflow-hidden bg-[#073a2d] text-white">
+    <section className="fixed inset-0 z-50 overflow-hidden text-white" style={{ backgroundColor: settings.secondary_color }}>
       <button type="button" className="absolute inset-0 block h-full w-full text-left" onClick={onStart} aria-label="Tocar para iniciar pedido">
         {slide.imageUrl ? (
           isVideoAsset(slide.imageUrl) ? (
@@ -155,10 +162,13 @@ export default function TotemIdleScreen({
             <img key={slide.id} src={slide.imageUrl} alt="" className="h-full w-full animate-in fade-in duration-700 object-cover" />
           )
         ) : (
-          <div className="h-full w-full bg-[radial-gradient(circle_at_72%_22%,rgba(239,108,32,.75),transparent_30%),radial-gradient(circle_at_18%_76%,rgba(133,196,65,.52),transparent_34%),linear-gradient(145deg,#073a2d,#10261f)]" />
+          <div
+            className="h-full w-full"
+            style={{ background: `radial-gradient(circle at 72% 22%, ${settings.primary_color}BF, transparent 30%), radial-gradient(circle at 18% 76%, ${settings.accent_color}85, transparent 34%), linear-gradient(145deg, ${settings.secondary_color}, #10261f)` }}
+          />
         )}
         <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/5 to-black/85" />
-        <div className="totem-idle-shade absolute inset-x-0 bottom-0 h-[62%] bg-gradient-to-t from-[#05271f] via-[#05271f]/70 to-transparent" />
+        <div className="totem-idle-shade absolute inset-x-0 bottom-0 h-[62%]" style={{ background: `linear-gradient(to top, ${settings.idle_overlay_color}, ${settings.idle_overlay_color}B8, transparent)` }} />
       </button>
 
       <div className="totem-idle-header pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-4 p-5">
@@ -166,7 +176,7 @@ export default function TotemIdleScreen({
           {profile?.logo_url ? (
             <img src={profile.logo_url} alt="" className="totem-idle-logo h-14 w-14 rounded-xl bg-white object-contain p-1" />
           ) : (
-            <div className="totem-idle-logo flex h-14 w-14 items-center justify-center rounded-xl bg-white text-[#073a2d]"><ShoppingBag className="h-7 w-7" /></div>
+            <div className="totem-idle-logo flex h-14 w-14 items-center justify-center rounded-xl bg-white" style={{ color: settings.secondary_color }}><ShoppingBag className="h-7 w-7" /></div>
           )}
           <div className="totem-idle-brand truncate text-lg font-black">{profile?.restaurant_name || 'PopSystem Totem'}</div>
         </div>
@@ -185,15 +195,15 @@ export default function TotemIdleScreen({
       <div className="totem-idle-content pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col justify-end px-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <div className="totem-idle-layout mx-auto w-full max-w-[1500px]">
           <div className="max-w-4xl">
-            <div className="totem-idle-eyebrow mb-3 text-sm font-black uppercase tracking-[.22em] text-[#b8ef81]">{slide.eyebrow}</div>
+            <div className="totem-idle-eyebrow mb-3 text-sm font-black uppercase tracking-[.22em]" style={{ color: settings.accent_color }}>{slide.eyebrow}</div>
             <h1 className="totem-idle-title text-4xl font-black leading-[.98] drop-shadow-2xl">{slide.title}</h1>
             <p className="totem-idle-description mt-4 max-w-2xl text-base font-semibold leading-relaxed text-white/85">{slide.description}</p>
-            {slide.price !== undefined ? <div className="totem-idle-price mt-4 text-3xl font-black text-[#ff8a3d]">A partir de {formatBRL(slide.price)}</div> : null}
+            {slide.price !== undefined ? <div className="totem-idle-price mt-4 text-3xl font-black" style={{ color: settings.primary_color }}>A partir de {formatBRL(slide.price)}</div> : null}
           </div>
 
           <div className="totem-idle-action pointer-events-auto mt-8">
-            <Button type="button" onClick={onStart} className="totem-idle-start h-20 w-full rounded-2xl bg-boracume-orange px-8 text-xl font-black text-white shadow-[0_22px_55px_rgba(0,0,0,.35)] hover:bg-boracume-orange/90">
-              Toque para pedir
+            <Button type="button" onClick={onStart} className="totem-idle-start h-20 w-full rounded-2xl px-8 text-xl font-black shadow-[0_22px_55px_rgba(0,0,0,.35)] brightness-100 hover:brightness-95" style={{ backgroundColor: settings.primary_color, color: settings.button_text_color }}>
+              {settings.cta_text}
               <ArrowRight className="totem-idle-arrow ml-3 h-7 w-7" />
             </Button>
             {!isInstalled ? (

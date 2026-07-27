@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Copy, ExternalLink, Megaphone, Monitor, MonitorUp, QrCode, ShieldCheck, Smartphone } from 'lucide-react';
+import { CheckCircle2, Copy, ExternalLink, ImagePlus, Monitor, MonitorUp, Palette, QrCode, Settings2, ShieldCheck, Smartphone } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import TotemAppearanceSettings from '@/components/settings/TotemAppearanceSettings';
+import TotemBannerSettings from '@/components/settings/TotemBannerSettings';
 
 export default function TotemSettings() {
   const { user } = useAuth();
@@ -25,7 +28,23 @@ export default function TotemSettings() {
   };
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+    <Tabs defaultValue="general" className="space-y-5">
+      <div className="overflow-x-auto pb-1">
+        <TabsList className="h-auto min-w-max rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm">
+          <TabsTrigger value="general" className="h-11 rounded-xl px-5 font-black data-[state=active]:bg-[#073a2d] data-[state=active]:text-white">
+            <Settings2 className="mr-2 h-4 w-4" />Instalação
+          </TabsTrigger>
+          <TabsTrigger value="appearance" className="h-11 rounded-xl px-5 font-black data-[state=active]:bg-[#073a2d] data-[state=active]:text-white">
+            <Palette className="mr-2 h-4 w-4" />Cores e aparência
+          </TabsTrigger>
+          <TabsTrigger value="banners" className="h-11 rounded-xl px-5 font-black data-[state=active]:bg-[#073a2d] data-[state=active]:text-white">
+            <ImagePlus className="mr-2 h-4 w-4" />Banners do Totem
+          </TabsTrigger>
+        </TabsList>
+      </div>
+
+      <TabsContent value="general" className="mt-0">
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
       <Card className="overflow-hidden border-[#dce8df]">
         <CardHeader className="bg-gradient-to-br from-[#063d2e] to-[#0a654a] text-white">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15"><MonitorUp className="h-6 w-6" /></div>
@@ -45,18 +64,8 @@ export default function TotemSettings() {
               <ExternalLink className="mr-2 h-4 w-4" />Abrir módulo
             </Button>
           </div>
-          <div className="rounded-2xl border border-orange-100 bg-orange-50 p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-boracume-orange text-white"><Megaphone className="h-5 w-5" /></div>
-              <div className="min-w-0 flex-1">
-                <div className="font-black text-stone-900">Propagandas da tela de espera</div>
-                <p className="mt-1 text-sm font-semibold leading-6 text-stone-600">Os banners ativos da loja passam automaticamente em tela cheia enquanto o totem não está em uso.</p>
-                <Button type="button" variant="link" className="mt-1 h-auto p-0 font-black text-boracume-orange" onClick={() => window.location.assign('/marketing?tab=banners')}>
-                  Gerenciar artes e banners
-                  <ExternalLink className="ml-1.5 h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+          <div className="rounded-2xl border border-orange-100 bg-orange-50 p-4 text-sm font-semibold leading-6 text-stone-600">
+            A aparência e as campanhas do Totem agora são independentes do cardápio digital. Use as abas acima para personalizar sem alterar a experiência do celular.
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex items-center gap-3 rounded-2xl border border-[#dfe7e1] p-4"><Smartphone className="h-6 w-6 text-[#67a83f]" /><div><div className="font-black text-[#164b39]">Modo vertical</div><div className="text-xs font-semibold text-[#789087]">Layout touch para totens em pé</div></div></div>
@@ -85,6 +94,16 @@ export default function TotemSettings() {
           </CardContent>
         </Card>
       </div>
-    </div>
+      </div>
+      </TabsContent>
+
+      <TabsContent value="appearance" className="mt-0">
+        <TotemAppearanceSettings />
+      </TabsContent>
+
+      <TabsContent value="banners" className="mt-0">
+        <TotemBannerSettings />
+      </TabsContent>
+    </Tabs>
   );
 }

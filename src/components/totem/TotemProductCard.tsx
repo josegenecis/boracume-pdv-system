@@ -27,7 +27,7 @@ export default function TotemProductCard({ product, onSelect }: TotemProductCard
   }, [product.image_url]);
 
   return (
-    <article className="group overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-xl">
+    <article className="group overflow-hidden rounded-lg border border-stone-200 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-xl" style={{ backgroundColor: 'var(--totem-surface)' }}>
       <button type="button" onClick={() => onSelect(product)} className="block w-full text-left">
         <div className="relative aspect-[4/3] bg-stone-100">
           {imageUrl && !imageError ? (
@@ -46,13 +46,13 @@ export default function TotemProductCard({ product, onSelect }: TotemProductCard
 
           <div className="absolute left-3 top-3 flex flex-wrap gap-2">
             {Number(product.discount_percentage || 0) > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-boracume-orange px-2.5 py-1 text-xs font-extrabold text-white shadow">
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold shadow" style={{ backgroundColor: 'var(--totem-primary)', color: 'var(--totem-button-text)' }}>
                 <Flame className="h-3.5 w-3.5" />
                 -{Math.round(Number(product.discount_percentage))}%
               </span>
             ) : null}
             {Number(product.order_count || 0) >= 10 ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-extrabold text-white shadow">
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold shadow" style={{ backgroundColor: 'var(--totem-secondary)', color: 'var(--totem-button-text)' }}>
                 <Sparkles className="h-3.5 w-3.5" />
                 Favorito
               </span>
@@ -61,10 +61,13 @@ export default function TotemProductCard({ product, onSelect }: TotemProductCard
         </div>
 
         <div className="space-y-2 p-4">
-          <h3 className="min-h-[3.25rem] text-xl font-extrabold leading-tight text-stone-950 line-clamp-2">
+          <h3 className="min-h-[3.25rem] text-xl font-extrabold leading-tight line-clamp-2" style={{ color: 'var(--totem-text)' }}>
             {product.name}
           </h3>
-          <p className="min-h-[2.5rem] text-sm leading-relaxed text-stone-600 line-clamp-2">
+          <p
+            className="min-h-[2.5rem] text-sm leading-relaxed line-clamp-2"
+            style={{ color: 'color-mix(in srgb, var(--totem-text) 68%, transparent)' }}
+          >
             {product.description || 'Produto preparado na hora.'}
           </p>
         </div>
@@ -77,14 +80,15 @@ export default function TotemProductCard({ product, onSelect }: TotemProductCard
               R$ {Number(product.original_price).toFixed(2)}
             </div>
           ) : null}
-          <div className="text-2xl font-extrabold text-boracume-orange">
+          <div className="text-2xl font-extrabold" style={{ color: 'var(--totem-primary)' }}>
             R$ {Number(product.price || 0).toFixed(2)}
           </div>
         </div>
         <Button
           type="button"
           onClick={() => onSelect(product)}
-          className="h-12 rounded-lg bg-boracume-orange px-4 text-base font-extrabold text-white hover:bg-boracume-orange/90"
+          className="h-12 rounded-lg px-4 text-base font-extrabold brightness-100 hover:brightness-95"
+          style={{ backgroundColor: 'var(--totem-primary)', color: 'var(--totem-button-text)' }}
         >
           <Plus className="mr-2 h-5 w-5" />
           Adicionar
