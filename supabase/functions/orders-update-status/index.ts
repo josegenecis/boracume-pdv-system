@@ -381,6 +381,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}))
     const orderId = String(body?.orderId || '')
     const newStatus = String(body?.newStatus || '')
+    const operationId = String(body?.operationId || crypto.randomUUID())
 
     const validStatuses = ['pending', 'preparing', 'ready', 'in_delivery', 'delivered', 'completed', 'cancelled']
     if (!orderId || !validStatuses.includes(newStatus)) {
@@ -408,6 +409,26 @@ Deno.serve(async (req: Request) => {
 
     if (String(order.user_id) !== userId) {
       return ok({ ok: false, error: 'forbidden' })
+    }
+
+    const alreadyApplied =
+      String(order.status || '') === newStatus &&
+      (newStatus !== 'preparing' || String(order.acceptance_status || '') === 'accepted') &&
+      (newStatus !== 'cancelled' || String(order.acceptance_status || '') === 'rejected')
+
+    // Aceites repetidos (duplo clique, retry ou resposta perdida) não podem
+    // repetir confirmação no iFood, WhatsApp, impressão lógica ou estoque.
+    if (alreadyApplied) {
+      return ok({
+        ok: true,
+        order,
+        idempotent: true,
+        operationId,
+        stock: { skipped: true, reason: 'status_already_applied' },
+        whatsapp: { skipped: true, reason: 'status_already_applied' },
+        deliveryOffer: { skipped: true, reason: 'status_already_applied' },
+        loyalty: { skipped: true, reason: 'status_already_applied' },
+      })
     }
 
     try {
@@ -475,6 +496,8 @@ Deno.serve(async (req: Request) => {
       whatsapp: whatsappResult,
       deliveryOffer: deliveryOfferResult,
       loyalty: loyaltyResult,
+      idempotent: false,
+      operationId,
     })
   } catch (e: any) {
     return ok({ ok: false, error: 'internal_error', message: String(e?.message || e) })

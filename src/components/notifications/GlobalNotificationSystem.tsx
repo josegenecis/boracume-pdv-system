@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { X, Bell, Truck, Package, Clock } from 'lucide-react';
+import { X, Bell, Truck, Package, Clock, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -55,6 +55,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [volume, setVolume] = useState(0.8);
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+  const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null);
   const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('dismissedOrders');
@@ -403,10 +404,27 @@ const GlobalNotificationSystem: React.FC = () => {
 
   const handleAcceptFirst = async () => {
     const order = visibleOrders[0];
-    if (!order) return;
+    if (!order || acceptingOrderId) return;
 
+    setAcceptingOrderId(order.id);
     try {
-      await updateOrderStatusRemote(order.id, 'preparing');
+      let accepted = false;
+      try {
+        await updateOrderStatusRemote(order.id, 'preparing');
+        accepted = true;
+      } catch (requestError) {
+        // Se a resposta se perder depois da gravação, confirme diretamente no
+        // banco antes de dizer ao restaurante que o aceite falhou.
+        const { data: confirmedOrder } = await supabase
+          .from('orders')
+          .select('id, status, acceptance_status')
+          .eq('id', order.id)
+          .maybeSingle();
+        accepted =
+          confirmedOrder?.status === 'preparing' &&
+          confirmedOrder?.acceptance_status === 'accepted';
+        if (!accepted) throw requestError;
+      }
 
       try {
         const { data: fullOrder } = await supabase.from('orders').select('*').eq('id', order.id).maybeSingle();
@@ -438,12 +456,22 @@ const GlobalNotificationSystem: React.FC = () => {
         setIsAnimatingOut(false);
         setIsVisible(true);
       }
+
+      toast({
+        title: 'Pedido aceito',
+        description: `O pedido ${order.order_number} já está em preparação.`,
+      });
     } catch (error: any) {
       toast({
-        title: 'Erro',
-        description: error?.message || 'Falha ao aceitar pedido',
+        title: 'Pedido não foi aceito',
+        description:
+          error?.message === 'Sua sessão expirou. Entre novamente para continuar.'
+            ? error.message
+            : 'Não houve confirmação do servidor. O pedido continua pendente e pode ser tentado novamente.',
         variant: 'destructive',
       });
+    } finally {
+      setAcceptingOrderId(null);
     }
   };
 
@@ -540,10 +568,18 @@ const GlobalNotificationSystem: React.FC = () => {
             </Button>
             <Button
               onClick={handleAcceptFirst}
+              disabled={Boolean(acceptingOrderId)}
               className="h-8 rounded-xl bg-green-600 px-2 text-[11px] hover:bg-green-700 sm:h-9 sm:text-xs"
               size="sm"
             >
-              Aceitar
+              {acceptingOrderId ? (
+                <>
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  Aceitando
+                </>
+              ) : (
+                'Aceitar'
+              )}
             </Button>
             <Button
               variant="outline"

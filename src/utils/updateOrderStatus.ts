@@ -8,13 +8,34 @@ export const updateOrderStatus = async (
     ifoodCancellationReason?: string
   }
 ) => {
-  const { data, status } = await invokeEdgeFunction('orders-update-status', {
+  const operationId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+  let result = await invokeEdgeFunction('orders-update-status', {
     orderId,
     newStatus,
     id: orderId,
     status: newStatus,
+    operationId,
     ...options,
   })
+
+  // A atualização no servidor é idempotente. Uma nova tentativa cobre quedas
+  // momentâneas de rede sem executar o aceite duas vezes.
+  if (result.status >= 500) {
+    result = await invokeEdgeFunction('orders-update-status', {
+      orderId,
+      newStatus,
+      id: orderId,
+      status: newStatus,
+      operationId,
+      ...options,
+    })
+  }
+
+  const { data, status } = result
 
   if (status >= 400) {
     throw new Error(String(data?.error || `http_${status}`))
@@ -30,6 +51,8 @@ export const updateOrderStatus = async (
     __operation: {
       whatsapp: data.whatsapp || null,
       deliveryOffer: data.deliveryOffer || null,
+      idempotent: Boolean(data.idempotent),
+      operationId: data.operationId || operationId,
     },
   }
 }
