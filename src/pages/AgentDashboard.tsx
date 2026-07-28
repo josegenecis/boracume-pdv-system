@@ -165,7 +165,7 @@ export function AgentDashboard() {
       <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950 via-emerald-900 to-orange-600 p-6 text-white shadow-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <Badge className="mb-3 border-white/20 bg-white/10 text-lime-100 hover:bg-white/10">Assistente Pop</Badge>
+            <Badge className="mb-3 border-white/20 bg-white/10 text-lime-100 hover:bg-white/10">Pop Agente</Badge>
             <h1 className="text-3xl font-black tracking-tight md:text-4xl">Sua ajuda inteligente no PopSystem</h1>
             <p className="mt-2 max-w-3xl text-white/80">
               Tire dúvidas e execute tarefas por conversa: cardápio, despesas, produtos, imagens, relatórios e ajustes operacionais.
@@ -221,7 +221,7 @@ export function AgentDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status do POP AI</CardTitle>
+            <CardTitle className="text-sm font-medium">Status do Pop Agente</CardTitle>
             <Bot className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -304,7 +304,7 @@ export function AgentDashboard() {
                   variant="outline"
                   onClick={() => {
                     // This would trigger a command in the console
-                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Pergunte ou peça uma ação ao Pop Agente..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Mostrar ingredientes ativos';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -317,7 +317,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Pergunte ou peça uma ação ao Pop Agente..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Desativar carne de sol de todos os produtos';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -330,7 +330,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Pergunte ou peça uma ação ao Pop Agente..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Desativar queijo coalho de todos os produtos';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -354,7 +354,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Pergunte ou peça uma ação ao Pop Agente..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Lançar despesa de R$ 150,00 para alimentação';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -367,7 +367,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Pergunte ou peça uma ação ao Pop Agente..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Lançar despesa de R$ 50,00 para transporte';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -380,7 +380,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Pergunte ou peça uma ação ao Pop Agente..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Lançar despesa de R$ 200,00 para insumos';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));

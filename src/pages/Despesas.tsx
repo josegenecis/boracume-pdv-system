@@ -17,6 +17,7 @@ import { ptBR } from 'date-fns/locale';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { parseBRL } from '@/lib/currency';
 import { useLocation } from 'react-router-dom';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 
 interface Expense {
   id: string;
@@ -199,7 +200,7 @@ export default function Despesas() {
       if (error) {
         toast({
           title: 'Erro ao estornar',
-          description: error.message,
+          description: friendlyErrorMessage(error, 'Não foi possível estornar esta despesa.'),
           variant: 'destructive'
         });
         return;
@@ -212,8 +213,8 @@ export default function Despesas() {
       loadExpenses();
     } catch (err: any) {
       toast({
-        title: 'Erro',
-        description: err?.message || 'Não foi possível estornar a despesa.',
+        title: 'Erro ao estornar',
+        description: friendlyErrorMessage(err, 'Não foi possível estornar esta despesa.'),
         variant: 'destructive'
       });
     }

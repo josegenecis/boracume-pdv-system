@@ -231,7 +231,7 @@ const CollapsibleSidebar = () => {
 
   const standaloneLinks: SidebarLink[] = [
     { to: '/lojas', icon: Network, label: 'Minha Rede', detail: 'Multi', feature: 'multiStore', area: 'dashboard' },
-    { to: '/agente', icon: Bot, label: 'Assistente Pop', feature: 'agent', area: 'agent' },
+    { to: '/agente', icon: Bot, label: 'Pop Agente', feature: 'agent', area: 'agent' },
     { to: '/downloads', icon: Download, label: 'App Desktop', feature: 'desktop', area: 'desktop' },
     { to: '/subscription', icon: Crown, label: 'Planos', detail: currentPlanLabel, accent: true },
   ];

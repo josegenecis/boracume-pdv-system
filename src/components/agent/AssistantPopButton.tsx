@@ -42,11 +42,11 @@ export function AssistantPopButton({
           className={`relative z-[1] font-extrabold text-[#28164f] hover:bg-white/95 hover:text-[#28164f] ${
             compact ? 'h-8 w-8 rounded-[12px] p-0' : 'h-9 rounded-[12px] px-3'
           }`}
-          aria-label="Abrir Assistente Pop"
-          title="Assistente Pop: ajuda e ações no sistema"
+          aria-label="Abrir Pop Agente"
+          title="Pop Agente: ajuda e ações no sistema"
         >
           <Sparkles className={compact ? 'h-4 w-4' : 'mr-2 h-4 w-4'} />
-          {!compact && 'Assistente Pop'}
+          {!compact && 'Pop Agente'}
         </Button>
       </span>
 
@@ -56,7 +56,7 @@ export function AssistantPopButton({
           className="h-[min(92dvh,900px)] max-w-[min(96vw,1180px)] overflow-hidden border-0 bg-transparent p-0 shadow-2xl"
         >
           <DialogHeader className="sr-only">
-            <DialogTitle>Assistente Pop</DialogTitle>
+            <DialogTitle>Pop Agente</DialogTitle>
             <DialogDescription>
               Suporte inteligente e execução de tarefas permitidas dentro do PopSystem.
             </DialogDescription>

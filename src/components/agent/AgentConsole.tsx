@@ -367,7 +367,7 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
     if (!user?.id) {
       toast({
         title: 'Faça login',
-        description: 'Entre no sistema para usar o Assistente Pop.',
+        description: 'Entre no sistema para usar o Pop Agente.',
         variant: 'destructive'
       });
       return;
@@ -444,7 +444,7 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
       );
 
       toast({
-        title: result.success ? 'Assistente Pop executou' : 'Assistente Pop encontrou um problema',
+        title: result.success ? 'Pop Agente executou' : 'Pop Agente encontrou um problema',
         description: result.metadata?.background_job ? 'O job continuará no servidor mesmo se você sair da página.' : result.message,
         variant: result.success ? 'default' : 'destructive'
       });
@@ -458,7 +458,7 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
         )
       );
       toast({
-        title: 'Erro no Assistente Pop',
+        title: 'Erro no Pop Agente',
         description: 'Não foi possível processar o comando.',
         variant: 'destructive'
       });
@@ -490,7 +490,7 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-lime-200">
               <Sparkles className="h-3.5 w-3.5" />
-              Assistente Pop
+              Pop Agente
             </div>
             <div>
               <h2 className={`${compact ? 'text-xl md:text-2xl' : 'text-2xl md:text-3xl'} font-black leading-tight`}>
@@ -649,7 +649,7 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
                     submitCommand(input);
                   }
                 }}
-                placeholder="Pergunte ou peça uma ação ao Assistente Pop..."
+                placeholder="Pergunte ou peça uma ação ao Pop Agente..."
                 disabled={isProcessing}
                 className="max-h-40 min-h-[48px] flex-1 resize-none border-0 bg-transparent px-1 py-3 text-base shadow-none focus-visible:ring-0"
               />
