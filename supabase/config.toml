@@ -85,6 +85,11 @@ entrypoint = "./functions/whatsapp-order-created/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/whatsapp-order-created/*.html" ]
 
+[functions.send-push]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/send-push/index.ts"
+
 [functions.evolution-bot-ai]
 enabled = true
 verify_jwt = false

@@ -209,37 +209,20 @@ const Configuracoes: React.FC = () => {
                          return;
                       }
                       
-                      const { data: subs, error: subError } = await supabase
-                        .from('push_subscriptions' as any)
-                        .select('endpoint, keys')
-                        .eq('user_id', user.id)
+                      const { data, error } = await supabase.functions.invoke('send-push', {
+                        body: { test: true }
+                      });
                       
-                      if (subError) {
-                        alert('Erro ao buscar inscrições: ' + subError.message);
-                        return;
-                      }
-
-                      if (Array.isArray(subs) && subs.length > 0) {
-                        const { data, error } = await supabase.functions.invoke('send-push', {
-                          body: {
-                            subscriptions: subs,
-                            title: 'Teste de Push',
-                            body: 'Notificação de teste enviada com sucesso!',
-                            url: '/pedidos'
-                          }
-                        });
-                        
-                        if (error) {
-                          alert('Erro na função: ' + error.message);
-                        } else {
-                          console.log('Push result:', data);
-                          alert('Push enviado! Verifique se recebeu.');
-                        }
+                      if (error || !data?.ok) {
+                        alert('Não foi possível enviar o teste de notificação.');
+                      } else if (Number(data.delivered || 0) === 0) {
+                        alert('Nenhum dispositivo inscrito. Ative as notificações primeiro.');
                       } else {
-                        alert('Nenhuma inscrição encontrada. Clique em "Ativar Push" primeiro.');
+                        alert('Push enviado! Verifique as notificações.');
                       }
-                    } catch (e: any) {
-                      alert('Erro inesperado: ' + e.message);
+                    } catch (error) {
+                      console.error('Erro no teste de push:', error);
+                      alert('Erro inesperado no teste de push.');
                     }
                   }}
                 >Enviar teste</button>

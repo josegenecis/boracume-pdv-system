@@ -658,20 +658,9 @@ const MenuDigital = () => {
 
         void (async () => {
           try {
-            const { data: subs } = await supabase
-              .from('push_subscriptions')
-              .select('endpoint, keys')
-              .eq('user_id', orderData.user_id);
-            if (Array.isArray(subs) && subs.length > 0) {
-              await supabase.functions.invoke('send-push', {
-                body: {
-                  subscriptions: subs.map(s => ({ endpoint: s.endpoint, keys: s.keys })),
-                  title: 'Novo Pedido!',
-                  body: `Pedido ${orderData.order_number} recebido`,
-                  url: '/pedidos'
-                }
-              });
-            }
+            await supabase.functions.invoke('send-push', {
+              body: { orderId: data.id }
+            });
           } catch (pushErr) {
             console.warn('Falha ao enviar push (não crítico):', pushErr);
           }
