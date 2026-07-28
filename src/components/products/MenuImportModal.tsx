@@ -27,6 +27,7 @@ interface ImportedVariant {
 interface ImportedVariationGroup {
   name: string;
   required?: boolean;
+  min_selections?: number;
   max_selections?: number;
   options: ImportedVariant[];
 }
@@ -249,8 +250,9 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       })) : [],
       variations: Array.isArray(variations) ? variations.map((group: any) => ({
         name: String(group?.name || group?.nome || group?.title || 'Adicionais').trim(),
-        required: Boolean(group?.required ?? group?.obrigatorio ?? false),
-        max_selections: Number(group?.max_selections ?? group?.maximo ?? group?.max ?? 1) || 1,
+        required: Boolean(group?.required ?? group?.obrigatorio ?? Number(group?.min_selections ?? group?.minimo ?? group?.min ?? 0) > 0),
+        min_selections: Math.max(0, Number(group?.min_selections ?? group?.minimo ?? group?.min ?? 0) || 0),
+        max_selections: Math.max(1, Number(group?.max_selections ?? group?.maximo ?? group?.max ?? 1) || 1),
         options: Array.isArray(group?.options || group?.opcoes || group?.items || group?.itens)
           ? (group?.options || group?.opcoes || group?.items || group?.itens).map((option: any) => ({
               name: String(option?.name || option?.nome || option?.title || '').trim(),
@@ -351,10 +353,19 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             const options = Array.isArray(complement?.opcoes || complement?.options)
               ? (complement.opcoes || complement.options)
               : [];
+            const minSelections = Math.max(
+              0,
+              Number(complement?.min_escolhas ?? complement?.min_selections ?? complement?.min ?? 0) || 0,
+            );
             return {
               name: String(complement?.nome || complement?.name || 'Adicionais').trim() || 'Adicionais',
-              required: Boolean(complement?.obrigatorio ?? complement?.required ?? false),
-              max_selections: Number(complement?.max_escolhas ?? complement?.max_selections ?? complement?.max ?? 10) || 10,
+              required: Boolean(complement?.obrigatorio ?? complement?.required ?? minSelections > 0),
+              min_selections: minSelections,
+              max_selections: Math.max(
+                1,
+                minSelections,
+                Number(complement?.max_escolhas ?? complement?.max_selections ?? complement?.max ?? 10) || 10,
+              ),
               options: options.map((option: any) => ({
                 name: String(option?.titulo || option?.nome || option?.name || '').trim(),
                 price: centsToMoney(option?.preco_extra ?? option?.price ?? option?.preco ?? 0),
@@ -799,6 +810,9 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
           const key = `${normalizeKey(groupName)}|${optionsString}`;
           let globalId = globalVariationByKey.get(key);
+          const minSelections = Math.max(0, Number(v?.min_selections) || 0);
+          const maxSelections = Math.max(1, minSelections, Number(v?.max_selections) || 1);
+          const required = Boolean(v?.required) || minSelections > 0;
 
           if (!globalId) {
             try {
@@ -807,8 +821,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                 .insert({
                   user_id: user?.id,
                   name: groupName,
-                  required: Boolean(v?.required),
-                  max_selections: Math.max(1, Number(v?.max_selections) || 1),
+                  required,
+                  max_selections: maxSelections,
                   options: optionsString,
                   description: ''
                 })
@@ -830,8 +844,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
               await (supabase as any)
                 .from('product_global_variation_links')
                 .upsert(
-                  { product_id: productId, global_variation_id: globalId },
-                  { onConflict: 'product_id,global_variation_id', ignoreDuplicates: true }
+                  {
+                    product_id: productId,
+                    global_variation_id: globalId,
+                    required,
+                    min_selections: minSelections,
+                    max_selections: maxSelections,
+                  },
+                  { onConflict: 'product_id,global_variation_id' }
                 );
               totalAddonGroupsLinked++;
             } catch (e) {
@@ -1099,7 +1119,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
               />
               <div className="flex items-center gap-2 p-3 bg-purple-50 text-purple-800 rounded-md text-xs border border-purple-100">
                 <Wand2 className="w-4 h-4" />
-                <span>Links Brendi e Anota.ai são importados automaticamente com produtos, imagens e complementos.</span>
+                <span>Links MenuDino, Brendi, Anota.ai, OlaClick e CardapioWeb são importados automaticamente com produtos, imagens e complementos.</span>
               </div>
               {linkPreview && (
                 <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">

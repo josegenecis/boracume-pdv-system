@@ -11,7 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V11 (Skip Step & Image Rehosting) iniciada!");
+console.log("Edge Function scrape-menu V12 (MenuDino + limites de opcionais) iniciada!");
 
 const UUID_RE = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i;
 
@@ -123,9 +123,11 @@ function normalizeAnotaCategories(data: any) {
     if (!options.length) return null;
 
     const maxSelections = Number(step?.max);
+    const minSelections = Math.max(0, Number(step?.min) || 0);
     return {
       name: cleanText(aux.internal_title) || cleanText(aux.title) || 'Adicionais',
-      required: Number(step?.min || 0) > 0,
+      required: minSelections > 0,
+      min_selections: minSelections,
       max_selections: maxSelections > 0 ? maxSelections : 10,
       options,
     };
@@ -241,6 +243,7 @@ function normalizeOlaClickCategories(rawCategories: any[]) {
               return {
                 name: cleanText(group?.name) || 'Adicionais',
                 required,
+                min_selections: Math.max(0, minSelections),
                 max_selections: Math.max(1, maxSelections || 1),
                 options: (group?.modifiers || [])
                   .filter((modifier: any) => cleanText(modifier?.name) && modifier?.visible !== false)
@@ -402,6 +405,7 @@ function normalizeCardapioWebAddOns(addOns: any[]) {
       return {
         name: cleanText(group?.name) || 'Adicionais',
         required: Number(group?.minimum_quantity || group?.min || 0) > 0,
+        min_selections: Math.max(0, Number(group?.minimum_quantity || group?.min || 0)),
         max_selections: Math.max(1, Number(group?.maximum_quantity || group?.max || 10)),
         options,
       };
@@ -509,6 +513,387 @@ async function extractCardapioWebCategories(rawUrl: string) {
   throw lastError || new Error('Não consegui importar esse CardapioWeb.');
 }
 
+const MENUDINO_CATALOG_API = 'https://menudino-catalog.consumerapis.com/api/v1';
+
+const menuDinoImageUrl = (raw: unknown) => {
+  const value = cleanText(raw);
+  if (!value || value === 'null' || value === 'undefined') return '';
+  if (value.startsWith('//')) return `https:${value}`;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://${value.replace(/^\/+/, '')}`;
+};
+
+function extractMenuDinoMerchant(html: string) {
+  const decoded = String(html || '').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  const marker = decoded.indexOf('"merchantSummary":');
+  const summary = marker >= 0 ? decoded.slice(marker, marker + 8000) : decoded;
+  const read = (key: string) => cleanText(summary.match(new RegExp(`"${key}":"([^"]*)"`))?.[1]);
+
+  return {
+    id: summary.match(/"id":"([a-f0-9-]{36})"/i)?.[1] || extractUuidFromAny(summary) || '',
+    name: read('name'),
+    phone: read('phone') || read('whatsApp'),
+    logo: menuDinoImageUrl(read('logoUrl')),
+    banner: menuDinoImageUrl(read('coverUrl')),
+    address: [read('street'), read('number'), read('neighborhood'), read('city'), read('state')]
+      .filter(Boolean)
+      .join(', '),
+  };
+}
+
+async function fetchMenuDinoJson(path: string, token: string, rawUrl: string) {
+  const response = await fetch(`${MENUDINO_CATALOG_API}${path}`, {
+    headers: {
+      accept: 'application/json',
+      'accept-charset': 'utf-8',
+      authorization: `Bearer ${token}`,
+      origin: new URL(rawUrl).origin,
+      referer: rawUrl,
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+    },
+    redirect: 'follow',
+  });
+
+  if (!response.ok) {
+    const responseBody = await response.text().catch(() => '');
+    throw new Error(`MenuDino respondeu ${response.status}. ${responseBody.slice(0, 180)}`);
+  }
+
+  return response.json();
+}
+
+async function mapMenuDinoWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T, index: number) => Promise<R>,
+) {
+  const result = new Array<R>(values.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex++;
+      result[index] = await mapper(values[index], index);
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, () => worker()));
+  return result;
+}
+
+function normalizeMenuDinoGroup(group: any, groupIndex: number) {
+  const options = (group?.itemOptionsGroup || [])
+    .filter((option: any) => cleanText(option?.itemChild?.name || option?.name))
+    .sort((a: any, b: any) => Number(a?.sortIndex ?? 9999) - Number(b?.sortIndex ?? 9999))
+    .map((option: any) => ({
+      name: cleanText(option?.itemChild?.name || option?.name),
+      price: numberMoney(option?.price ?? option?.itemChild?.salePrice ?? 0),
+    }))
+    .filter((option: any) => option.name);
+
+  if (!options.length) return null;
+
+  const minSelections = Math.max(
+    0,
+    Number(group?.minQtyAnswer ?? group?.minQtyItems ?? group?.minQty ?? 0) || 0,
+  );
+  const declaredMax = Number(group?.maxQtyAnswer ?? group?.maxQtyItems ?? group?.maxQty ?? 0) || 0;
+  const maxSelections = Math.max(1, minSelections, declaredMax > 0 ? declaredMax : options.length);
+
+  return {
+    name: cleanText(group?.name || group?.description) || `Escolha ${groupIndex + 1}`,
+    required: group?.isRequired === true || minSelections > 0,
+    min_selections: minSelections,
+    max_selections: maxSelections,
+    options,
+  };
+}
+
+function normalizeMenuDinoProduct(summary: any, detailed: any) {
+  const source = detailed || summary || {};
+  const image = source?.images?.[0] || {};
+  const priceVariants = (source?.sizes || [])
+    .filter((size: any) => cleanText(size?.name || size?.description))
+    .sort((a: any, b: any) => Number(a?.sortIndex ?? 9999) - Number(b?.sortIndex ?? 9999))
+    .map((size: any) => ({
+      name: cleanText(size?.name || size?.description),
+      price: numberMoney(size?.price ?? size?.salePrice ?? 0),
+    }))
+    .filter((variant: any) => variant.name && variant.price > 0);
+
+  return {
+    name: cleanText(source?.name || summary?.name),
+    description: cleanText(source?.description || summary?.description),
+    price: numberMoney(source?.salePrice ?? summary?.salePrice ?? source?.minPrice ?? summary?.minPrice ?? 0),
+    image_url: menuDinoImageUrl(
+      image?.largeImageUrl ||
+      image?.smallImageUrl ||
+      source?.largeImageUrl ||
+      source?.smallImageUrl ||
+      summary?.largeImageUrl ||
+      summary?.smallImageUrl,
+    ),
+    available: source?.isPaused !== true && source?.active !== false,
+    price_variants: priceVariants,
+    variations: (source?.itemGroups || [])
+      .map((group: any, index: number) => normalizeMenuDinoGroup(group, index))
+      .filter(Boolean),
+  };
+}
+
+async function extractMenuDinoCategories(rawUrl: string) {
+  const pageResponse = await fetch(rawUrl, {
+    headers: {
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+    },
+    redirect: 'follow',
+  });
+
+  if (!pageResponse.ok) throw new Error(`Não consegui abrir o MenuDino (${pageResponse.status}).`);
+
+  const token = cleanText(pageResponse.headers.get('app-access-token'));
+  const html = await pageResponse.text();
+  const merchant = extractMenuDinoMerchant(html);
+  if (!token || !merchant.id) {
+    throw new Error('Não consegui identificar o acesso público e o estabelecimento nesse link MenuDino.');
+  }
+
+  const categoryData = await fetchMenuDinoJson(
+    `/categories/${encodeURIComponent(merchant.id)}?OnlyActive=true&Page=1&PageSize=200&Paged=false&SellOnline=true`,
+    token,
+    rawUrl,
+  );
+  const rawCategories = Array.isArray(categoryData?.items) ? categoryData.items : [];
+
+  const categories = await mapMenuDinoWithConcurrency(rawCategories, 5, async (category: any) => {
+    const summaryData = await fetchMenuDinoJson(
+      `/items/${encodeURIComponent(merchant.id)}/${encodeURIComponent(category.id)}/summary?SellOnline=true&SellLocal=false`,
+      token,
+      rawUrl,
+    );
+    const summaries = Array.isArray(summaryData?.items) ? summaryData.items : [];
+    const items = await mapMenuDinoWithConcurrency(summaries, 6, async (summary: any) => {
+      try {
+        const detailed = await fetchMenuDinoJson(
+          `/items/detailed?MerchantId=${encodeURIComponent(merchant.id)}&Id=${encodeURIComponent(summary.id)}&IncludeWizard=true&OnlyActive=true&SellOnline=true`,
+          token,
+          rawUrl,
+        );
+        return normalizeMenuDinoProduct(summary, detailed);
+      } catch (error) {
+        console.warn(`[MenuDino] Detalhes de ${summary?.id} indisponíveis, usando resumo:`, error);
+        return normalizeMenuDinoProduct(summary, null);
+      }
+    });
+
+    return {
+      name: cleanText(category?.name) || 'Geral',
+      items: items.filter((item: any) => item.name),
+    };
+  });
+
+  const populatedCategories = categories.filter((category: any) => category.items.length > 0);
+  const productCount = populatedCategories.reduce((sum: number, category: any) => sum + category.items.length, 0);
+  if (!populatedCategories.length || productCount <= 0) {
+    throw new Error('Não encontrei categorias ou produtos públicos nesse cardápio MenuDino.');
+  }
+
+  console.log('[MenuDino] categorias encontradas:', populatedCategories.length);
+  console.log('[MenuDino] produtos encontrados:', productCount);
+  console.log('[MenuDino] produtos com opcionais:', populatedCategories.reduce(
+    (sum: number, category: any) => sum + category.items.filter((item: any) => item.variations?.length).length,
+    0,
+  ));
+
+  return {
+    restaurant: {
+      name: merchant.name,
+      phone: merchant.phone,
+      address: merchant.address,
+      logo: merchant.logo,
+      banner: merchant.banner,
+    },
+    categories: populatedCategories,
+  };
+}
+
+async function startMenuDinoBrowserImport(rawUrl: string, apifyToken: string) {
+  const runUrl = `https://api.apify.com/v2/acts/apify~playwright-scraper/runs?token=${apifyToken}&waitForFinish=0`;
+  const pageFunction = String.raw`
+    async function pageFunction(context) {
+      const { page, response, request, log } = context;
+      const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+      const money = (value) => {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : 0;
+      };
+      const imageUrl = (value) => {
+        const text = clean(value);
+        if (!text || text === 'null' || text === 'undefined') return '';
+        if (text.startsWith('//')) return 'https:' + text;
+        return /^https?:\/\//i.test(text) ? text : 'https://' + text.replace(/^\/+/, '');
+      };
+
+      await page.waitForTimeout(5000);
+
+      const responseHeaders = response && typeof response.allHeaders === 'function'
+        ? await response.allHeaders()
+        : {};
+      const cookies = await page.context().cookies();
+      const tokenCookie = cookies.find((cookie) => cookie.name === 'app-access-token');
+      const token = clean(responseHeaders['app-access-token'] || tokenCookie?.value);
+      const html = await page.content();
+      const decoded = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      const marker = decoded.indexOf('"merchantSummary":');
+      const summary = marker >= 0 ? decoded.slice(marker, marker + 8000) : decoded;
+      const merchantId = summary.match(/"id":"([a-f0-9-]{36})"/i)?.[1]
+        || summary.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i)?.[0];
+      const read = (key) => clean(summary.match(new RegExp('"' + key + '":"([^"]*)"'))?.[1]);
+
+      if (!token || !merchantId) {
+        throw new Error('O navegador não conseguiu liberar o acesso público ao MenuDino.');
+      }
+
+      const api = async (path) => {
+        const result = await page.evaluate(async ({ path, token, origin }) => {
+          const response = await fetch('https://menudino-catalog.consumerapis.com/api/v1' + path, {
+            headers: {
+              accept: 'application/json',
+              authorization: 'Bearer ' + token,
+            },
+            cache: 'no-store',
+          });
+          const body = await response.text();
+          if (!response.ok) throw new Error('MenuDino respondeu ' + response.status + ': ' + body.slice(0, 180));
+          return JSON.parse(body);
+        }, { path, token, origin: new URL(request.url).origin });
+        return result;
+      };
+
+      const normalizeGroup = (group, groupIndex) => {
+        const options = (group?.itemOptionsGroup || [])
+          .filter((option) => clean(option?.itemChild?.name || option?.name))
+          .sort((a, b) => Number(a?.sortIndex ?? 9999) - Number(b?.sortIndex ?? 9999))
+          .map((option) => ({
+            name: clean(option?.itemChild?.name || option?.name),
+            price: money(option?.price ?? option?.itemChild?.salePrice ?? 0),
+          }));
+        if (!options.length) return null;
+        const minimum = Math.max(0, Number(group?.minQtyAnswer ?? group?.minQtyItems ?? group?.minQty ?? 0) || 0);
+        const declaredMaximum = Number(group?.maxQtyAnswer ?? group?.maxQtyItems ?? group?.maxQty ?? 0) || 0;
+        return {
+          name: clean(group?.name || group?.description) || 'Escolha ' + (groupIndex + 1),
+          required: group?.isRequired === true || minimum > 0,
+          min_selections: minimum,
+          max_selections: Math.max(1, minimum, declaredMaximum > 0 ? declaredMaximum : options.length),
+          options,
+        };
+      };
+
+      const normalizeProduct = (summaryProduct, detailedProduct) => {
+        const source = detailedProduct || summaryProduct || {};
+        const image = source?.images?.[0] || {};
+        return {
+          name: clean(source?.name || summaryProduct?.name),
+          description: clean(source?.description || summaryProduct?.description),
+          price: money(source?.salePrice ?? summaryProduct?.salePrice ?? source?.minPrice ?? summaryProduct?.minPrice ?? 0),
+          image_url: imageUrl(
+            image?.largeImageUrl || image?.smallImageUrl || source?.largeImageUrl
+            || source?.smallImageUrl || summaryProduct?.largeImageUrl || summaryProduct?.smallImageUrl
+          ),
+          available: source?.isPaused !== true && source?.active !== false,
+          price_variants: (source?.sizes || [])
+            .filter((size) => clean(size?.name || size?.description))
+            .sort((a, b) => Number(a?.sortIndex ?? 9999) - Number(b?.sortIndex ?? 9999))
+            .map((size) => ({
+              name: clean(size?.name || size?.description),
+              price: money(size?.price ?? size?.salePrice ?? 0),
+            }))
+            .filter((variant) => variant.name && variant.price > 0),
+          variations: (source?.itemGroups || [])
+            .map(normalizeGroup)
+            .filter(Boolean),
+        };
+      };
+
+      const categoryData = await api(
+        '/categories/' + encodeURIComponent(merchantId)
+        + '?OnlyActive=true&Page=1&PageSize=200&Paged=false&SellOnline=true'
+      );
+      const categories = [];
+
+      for (const category of Array.isArray(categoryData?.items) ? categoryData.items : []) {
+        const summaryData = await api(
+          '/items/' + encodeURIComponent(merchantId) + '/' + encodeURIComponent(category.id)
+          + '/summary?SellOnline=true&SellLocal=false'
+        );
+        const summaries = Array.isArray(summaryData?.items) ? summaryData.items : [];
+        const items = await Promise.all(summaries.map(async (summaryProduct) => {
+          try {
+            const detailed = await api(
+              '/items/detailed?MerchantId=' + encodeURIComponent(merchantId)
+              + '&Id=' + encodeURIComponent(summaryProduct.id)
+              + '&IncludeWizard=true&OnlyActive=true&SellOnline=true'
+            );
+            return normalizeProduct(summaryProduct, detailed);
+          } catch (error) {
+            log.warning('Detalhes indisponíveis para ' + summaryProduct?.id + ': ' + error.message);
+            return normalizeProduct(summaryProduct, null);
+          }
+        }));
+        const validItems = items.filter((item) => item.name);
+        if (validItems.length) categories.push({ name: clean(category?.name) || 'Geral', items: validItems });
+      }
+
+      if (!categories.length) throw new Error('O MenuDino abriu, mas não retornou produtos públicos.');
+
+      return {
+        platform: 'menudino',
+        restaurant: {
+          name: read('name'),
+          phone: read('phone') || read('whatsApp'),
+          logo: imageUrl(read('logoUrl')),
+          banner: imageUrl(read('coverUrl')),
+        },
+        categories,
+      };
+    }
+  `;
+
+  const startResponse = await fetch(runUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      startUrls: [{ url: rawUrl }],
+      pageFunction,
+      useChrome: true,
+      maxRequestsPerCrawl: 1,
+      maxRequestRetries: 2,
+      pageLoadTimeoutSecs: 90,
+      pageFunctionTimeoutSecs: 180,
+      proxyConfiguration: {
+        useApifyProxy: true,
+        apifyProxyGroups: ['RESIDENTIAL'],
+        apifyProxyCountry: 'BR',
+      },
+    }),
+  });
+
+  if (!startResponse.ok) {
+    const errorBody = await startResponse.text().catch(() => '');
+    console.error(`[MenuDino] Falha ao iniciar navegador: ${startResponse.status} - ${errorBody}`);
+    throw new Error(`Não foi possível iniciar a leitura protegida do MenuDino (${startResponse.status}).`);
+  }
+
+  const startData = await startResponse.json();
+  return {
+    runId: startData?.data?.id,
+    status: startData?.data?.status === 'SUCCEEDED' ? 'completed' : 'started',
+    datasetId: startData?.data?.defaultDatasetId,
+  };
+}
+
 function decodeBrendiNuxtPayload(html: string) {
   const match = html.match(/<script[^>]*id=["']__NUXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
   if (!match?.[1]) throw new Error('Não encontrei os dados estruturados desse cardápio Brendi.');
@@ -593,6 +978,7 @@ async function extractBrendiCategories(rawUrl: string) {
             .map((group: any) => ({
               name: cleanText(group?.title) || 'Adicionais',
               required: Number(group?.minChoices || 0) > 0,
+              min_selections: Math.max(0, Number(group?.minChoices || 0)),
               max_selections: Math.max(1, Number(group?.maxChoices || 1)),
               options: (group?.choices || [])
                 .filter((choice: any) => choice?.active !== false && choice?.missing !== true)
@@ -749,6 +1135,43 @@ Deno.serve(async (req: Request) => {
                 }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
               );
+            }
+
+            if (
+              parsedUrl.hostname.toLowerCase() === 'menudino.com' ||
+              parsedUrl.hostname.toLowerCase().endsWith('.menudino.com') ||
+              parsedUrl.hostname.toLowerCase() === 'menudino.com.br' ||
+              parsedUrl.hostname.toLowerCase().endsWith('.menudino.com.br')
+            ) {
+              console.log('[Start] Importação MenuDino direta no scrape-menu.');
+              try {
+                const result = await extractMenuDinoCategories(rawUrl);
+                return new Response(
+                  JSON.stringify({
+                    success: true,
+                    status: 'completed',
+                    platform: 'menudino',
+                    restaurant: result.restaurant,
+                    categories: result.categories,
+                  }),
+                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                );
+              } catch (directError) {
+                console.warn('[MenuDino] Acesso direto indisponível, iniciando navegador protegido:', directError);
+                if (!APIFY_TOKEN) {
+                  throw new Error('O MenuDino bloqueou a leitura direta e o navegador protegido não está configurado.');
+                }
+                const browserRun = await startMenuDinoBrowserImport(rawUrl, APIFY_TOKEN);
+                return new Response(
+                  JSON.stringify({
+                    success: true,
+                    status: browserRun.status,
+                    platform: 'menudino',
+                    runId: browserRun.runId,
+                  }),
+                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                );
+              }
             }
 
              // 1. iFood Logic
@@ -1073,6 +1496,59 @@ Deno.serve(async (req: Request) => {
                     }),
                     { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                 );
+            }
+
+            const actorError = Array.isArray(items)
+              ? items.find((item: any) => item?.['#error'] || item?.error || item?.errorMessage)
+              : null;
+            if (actorError) {
+              const technicalMessage = cleanText(
+                actorError?.errorMessage ||
+                actorError?.error ||
+                actorError?.['#debug']?.errorMessages?.join?.(' | ') ||
+                actorError?.['#debug']?.errorMessage,
+              );
+              console.error('[Check] O navegador protegido não conseguiu ler a página:', technicalMessage, actorError);
+              return new Response(
+                JSON.stringify({
+                  success: false,
+                  status: 'failed',
+                  error: 'O site de origem bloqueou temporariamente a leitura automática. Tente novamente em alguns minutos.',
+                  debug: {
+                    runId: String(runId || ''),
+                    actId,
+                    datasetId: String(datasetId || ''),
+                    technicalMessage: technicalMessage.slice(0, 1200),
+                  },
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+              );
+            }
+
+            const menuDinoBrowserResult = Array.isArray(items)
+              ? items.find((item: any) =>
+                  item?.platform === 'menudino' &&
+                  Array.isArray(item?.categories) &&
+                  item.categories.length > 0
+                )
+              : null;
+            if (menuDinoBrowserResult) {
+              const categories = consolidateVariantsAndCategories(menuDinoBrowserResult.categories);
+              const productCount = categories.reduce(
+                (sum: number, category: any) => sum + (Array.isArray(category?.items) ? category.items.length : 0),
+                0,
+              );
+              console.log(`[MenuDino] Navegador retornou ${categories.length} categorias e ${productCount} produtos.`);
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  status: 'completed',
+                  platform: 'menudino',
+                  restaurant: menuDinoBrowserResult.restaurant || null,
+                  categories,
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+              );
             }
 
             // Lógica de extração (suporta Web Scraper com pageFunctionResult + crawlers de conteúdo)
@@ -1540,7 +2016,8 @@ function mapApifyItemsToCategories(items: any[]): any[] {
 
     const mapOptionGroup = (group: any) => {
       const name = String(group?.name || group?.title || group?.groupName || group?.label || '').trim() || 'Opções';
-      const required = Boolean(group?.required) || Number(group?.min || group?.min_selections || group?.minSelections || 0) > 0;
+      const minSelections = Math.max(0, Number(group?.min || group?.min_selections || group?.minSelections || 0) || 0);
+      const required = Boolean(group?.required) || minSelections > 0;
       const maxSelRaw = group?.max_selections ?? group?.maxSelections ?? group?.max ?? group?.maxQuantity ?? group?.max_quantity;
       const maxSelections = Math.max(1, Number(maxSelRaw || 1));
 
@@ -1577,7 +2054,7 @@ function mapApifyItemsToCategories(items: any[]): any[] {
         })
         .filter(Boolean);
 
-      return { name, required, max_selections: maxSelections, options };
+      return { name, required, min_selections: minSelections, max_selections: Math.max(minSelections, maxSelections), options };
     };
 
     for (const item of items) {
@@ -1686,6 +2163,7 @@ Saída json:
             {
               "name": "Adicionais",
               "required": false,
+              "min_selections": 0,
               "max_selections": 1,
               "options": [ { "name": "Bacon", "price": 5.00 } ]
             }
@@ -1771,8 +2249,9 @@ function validateAndSanitizeThirdParty(html: string, categories: any[]): any[] {
           if (Array.isArray(it?.variations) && it.variations.length > 0) {
             item.variations = it.variations.map((g: any) => ({
               name: String(g?.name || '').trim(),
-              required: !!g?.required,
-              max_selections: Math.max(1, Number(g?.max_selections || 1)),
+              required: !!g?.required || Number(g?.min_selections || 0) > 0,
+              min_selections: Math.max(0, Number(g?.min_selections || 0)),
+              max_selections: Math.max(1, Number(g?.min_selections || 0), Number(g?.max_selections || 1)),
               options: Array.isArray(g?.options) ? g.options.map((o: any) => ({ name: String(o?.name || '').trim(), price: Math.max(0, Number(o?.price || 0)) })).filter((o: any) => o.name) : []
             })).filter((g: any) => g.name && g.options && g.options.length > 0);
           }
