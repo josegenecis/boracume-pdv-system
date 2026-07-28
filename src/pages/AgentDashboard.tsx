@@ -165,10 +165,10 @@ export function AgentDashboard() {
       <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950 via-emerald-900 to-orange-600 p-6 text-white shadow-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <Badge className="mb-3 border-white/20 bg-white/10 text-lime-100 hover:bg-white/10">POP AI</Badge>
-            <h1 className="text-3xl font-black tracking-tight md:text-4xl">Agente operacional inteligente</h1>
+            <Badge className="mb-3 border-white/20 bg-white/10 text-lime-100 hover:bg-white/10">Assistente Pop</Badge>
+            <h1 className="text-3xl font-black tracking-tight md:text-4xl">Sua ajuda inteligente no PopSystem</h1>
             <p className="mt-2 max-w-3xl text-white/80">
-              Execute tarefas do sistema por conversa: cardápio, despesas, produtos, imagens, relatórios e ajustes operacionais.
+              Tire dúvidas e execute tarefas por conversa: cardápio, despesas, produtos, imagens, relatórios e ajustes operacionais.
             </p>
           </div>
           <Button onClick={loadDashboardData} variant="secondary" size="sm" className="w-fit bg-white text-emerald-950 hover:bg-white/90">

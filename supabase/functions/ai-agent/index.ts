@@ -169,6 +169,7 @@ Deno.serve(async (req) => {
     const botTokenHeader = req.headers.get('x-bot-token') || '';
     // @ts-ignore
     const BOT_WEBHOOK_SECRET = Deno.env.get('BOT_WEBHOOK_SECRET') || '';
+    const isBotRequest = !authHeader && Boolean(BOT_WEBHOOK_SECRET) && botTokenHeader === BOT_WEBHOOK_SECRET;
     if (!authHeader) {
       if (!BOT_WEBHOOK_SECRET) {
         return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
@@ -185,7 +186,15 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { command, userId, conversationHistory = [], supportMode = false, imageBase64, cancelJobId } = body;
+    const {
+      command,
+      userId,
+      conversationHistory = [],
+      supportMode = false,
+      imageBase64,
+      cancelJobId,
+      operatorId,
+    } = body;
 
     if (!command && !imageBase64 && !cancelJobId) {
         throw new Error('Comando ou imagem são obrigatórios.');
@@ -220,6 +229,44 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+    if (!isBotRequest) {
+        const accessToken = authHeader.replace(/^Bearer\s+/i, '').trim();
+        const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
+        if (authError || !authData?.user) {
+            return new Response(JSON.stringify({ success: false, error: 'Sessão inválida ou expirada.' }), {
+                status: 401,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+        if (authData.user.id !== userId) {
+            return new Response(JSON.stringify({ success: false, error: 'Acesso negado para este restaurante.' }), {
+                status: 403,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+    }
+
+    let operatorIsAdmin = true;
+    let operatorPermissions: Record<string, boolean> = {};
+    if (operatorId) {
+        const { data: operator, error: operatorError } = await supabase
+            .from('waiters')
+            .select('id, role, permissions, active')
+            .eq('id', operatorId)
+            .eq('user_id', userId)
+            .eq('active', true)
+            .maybeSingle();
+        if (operatorError) throw operatorError;
+        if (!operator) {
+            return new Response(JSON.stringify({ success: false, error: 'Operador inválido ou sem acesso.' }), {
+                status: 403,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+        operatorPermissions = operator.permissions || {};
+        operatorIsAdmin = operator.role === 'admin' || operatorPermissions.admin === true;
+    }
 
     if (cancelJobId) {
         const { data: existingJob, error: readError } = await supabase
@@ -1063,6 +1110,40 @@ Deno.serve(async (req) => {
         }
     ];
 
+    const productMutationTools = new Set([
+        'create_product',
+        'create_product_full',
+        'create_products',
+        'update_product_price',
+        'update_product',
+        'disable_product',
+        'create_variation_group',
+        'adjust_variation_group_prices',
+        'generate_product_image',
+        'set_product_image_from_pexels',
+        'set_missing_product_images_from_pexels',
+        'generate_missing_product_images',
+    ]);
+    const deliveryMutationTools = new Set(['add_delivery_zone', 'add_courier']);
+    const financialMutationTools = new Set(['create_expense', 'reverse_expense', 'delete_expense']);
+
+    const canManageProducts = operatorIsAdmin || operatorPermissions.menu_manage === true;
+    const canManageDelivery =
+      operatorIsAdmin ||
+      operatorPermissions.delivery_manage === true ||
+      operatorPermissions.settings_manage === true;
+    const canManageFinancial = operatorIsAdmin || operatorPermissions.financial_view === true;
+    const canViewFinancial = canManageFinancial;
+
+    const scopedTools = tools.filter((tool: any) => {
+        const name = String(tool?.function?.name || '');
+        if (productMutationTools.has(name)) return canManageProducts;
+        if (deliveryMutationTools.has(name)) return canManageDelivery;
+        if (financialMutationTools.has(name)) return canManageFinancial;
+        if (name === 'list_expenses') return canViewFinancial;
+        return true;
+    });
+
     // =================================================================================
     // 2. Chamada à OpenAI (Function Calling)
     // =================================================================================
@@ -1089,6 +1170,7 @@ Regras:
 - Se o usuário disser "pode fazer", "sim", "isso", "continue", "pode aplicar" ou algo parecido, entenda como autorização para executar a última solicitação acionável do histórico. Não pergunte "o que você quer que eu faça?" se existir uma ação pendente no histórico.
 - Quando o pedido for acionável, execute. Evite apenas sugerir passos.
 - Mantenha respostas curtas e diretas.
+- Só execute alterações disponibilizadas pelas ferramentas desta sessão; elas já refletem as permissões do operador.
 - O ID do usuário (restaurante) é: ${userId}`
       : `Você é um assistente administrativo inteligente para um sistema de PDV de restaurante.
 Seu objetivo é ser tão útil quanto um bom copiloto operacional: entender pedidos em linguagem natural, consultar dados reais do PopSystem, executar ações com segurança e explicar o resultado de forma curta.
@@ -1112,9 +1194,10 @@ Regras:
 - Se o usuário pedir informações, use a função de listar para buscar dados reais antes de responder.
 - Se faltar algum dado indispensável, faça 1 pergunta objetiva para destravar a execução.
 - Seja direto e confirme a ação realizada.
+- Só execute alterações disponibilizadas pelas ferramentas desta sessão; elas já refletem as permissões do operador.
 - O ID do usuário (restaurante) é: ${userId}${requestedCount >= 3 ? `\n- O usuário solicitou ${requestedCount} produtos. Gere exatamente ${requestedCount} produtos.` : ''}`;
 
-    const functionDeclarations = (tools || [])
+    const functionDeclarations = (scopedTools || [])
       .map((t: any) => t?.function)
       .filter(Boolean)
       .map((fn: any) => ({

@@ -97,7 +97,8 @@ export async function processAgentCommand(
   command: string,
   userId: string,
   imageBase64?: string,
-  conversationHistory: SupportChatHistoryMessage[] = []
+  conversationHistory: SupportChatHistoryMessage[] = [],
+  operatorId?: string,
 ): Promise<AgentCommandResult> {
   try {
     if (!String(userId || '').trim()) {
@@ -114,7 +115,8 @@ export async function processAgentCommand(
         const payload: any = {
             command: command,
             userId: userId,
-            conversationHistory
+            conversationHistory,
+            operatorId: operatorId || undefined,
         };
         
         if (imageBase64) {
@@ -143,7 +145,18 @@ export async function processAgentCommand(
         edgeFailureMsg = String((edgeError as any)?.message || 'Falha ao executar no agente.');
     }
 
-    // 2. Fallback: Processamento Local (Regex Legacy)
+    // 2. Fallback local apenas para o proprietário sem sessão de operador.
+    // Operadores devem passar pelo servidor, onde suas permissões são verificadas.
+    if (operatorId) {
+      return {
+        success: false,
+        message: edgeFailureMsg
+          ? `Não consegui concluir agora: ${edgeFailureMsg}`
+          : 'Não consegui concluir agora. Tente novamente em instantes.',
+      };
+    }
+
+    // 3. Fallback: Processamento Local (Regex Legacy)
     console.log('[AgentService] Usando fallback local...');
     const normalizedCommand = command.toLowerCase().trim();
 

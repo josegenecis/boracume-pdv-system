@@ -30,6 +30,7 @@ import {
 import { FeatureKey } from '@/lib/featureAccess';
 import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
 import StoreSwitcher from '@/components/multistore/StoreSwitcher';
+import { AssistantPopButton } from '@/components/agent/AssistantPopButton';
 
 const FixedHeader = () => {
   const { user } = useAuth();
@@ -201,6 +202,11 @@ const FixedHeader = () => {
               );
             })}
           </div>
+          <AssistantPopButton
+            compact={isMobile}
+            canOpen={canAccessFeature('agent')}
+            onBlocked={() => openFeatureDialog('agent')}
+          />
         </div>
       </div>
     </header>

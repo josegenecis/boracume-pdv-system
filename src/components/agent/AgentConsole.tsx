@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { cancelAgentBackgroundJob, processAgentCommand, type SupportChatHistoryMessage } from '@/services/agentService';
 import { supabase } from '@/integrations/supabase/client';
+import { getLocalOperatorSession } from '@/services/operatorAuth';
 
 interface ConsoleMessage {
   id: string;
@@ -22,14 +23,15 @@ interface ConsoleMessage {
 
 interface AgentConsoleProps {
   className?: string;
+  compact?: boolean;
 }
 
 const quickCommands = [
+  'Me explique onde encontro uma função do sistema',
   'Gere imagens para produtos sem imagem',
   'Crie uma promoção para hoje com os produtos mais vendidos',
   'Liste produtos sem imagem e sem descrição',
-  'Ajuste o cardápio para destacar os produtos ativos',
-  'Lance esta nota fiscal como despesa e organize por categoria'
+  'Lance esta nota fiscal como despesa e organize por categoria',
 ];
 
 const thinkingMessages = [
@@ -128,7 +130,7 @@ const formatJobProgressMessage = (metadata: any) => {
   ].filter(Boolean).join('\n');
 };
 
-export function AgentConsole({ className }: AgentConsoleProps) {
+export function AgentConsole({ className, compact = false }: AgentConsoleProps) {
   const [messages, setMessages] = useState<ConsoleMessage[]>([]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -365,7 +367,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
     if (!user?.id) {
       toast({
         title: 'Faça login',
-        description: 'Entre no sistema para usar o POP AI.',
+        description: 'Entre no sistema para usar o Assistente Pop.',
         variant: 'destructive'
       });
       return;
@@ -418,7 +420,14 @@ export function AgentConsole({ className }: AgentConsoleProps) {
     }, 1800);
 
     try {
-      const result = await processAgentCommand(text, user.id, uploadedImage || undefined, history);
+      const operator = getLocalOperatorSession();
+      const result = await processAgentCommand(
+        text,
+        user.id,
+        uploadedImage || undefined,
+        history,
+        operator?.id,
+      );
       window.clearInterval(interval);
 
       setMessages((prev) =>
@@ -435,7 +444,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
       );
 
       toast({
-        title: result.success ? 'POP AI executou' : 'POP AI encontrou um problema',
+        title: result.success ? 'Assistente Pop executou' : 'Assistente Pop encontrou um problema',
         description: result.metadata?.background_job ? 'O job continuará no servidor mesmo se você sair da página.' : result.message,
         variant: result.success ? 'default' : 'destructive'
       });
@@ -449,7 +458,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
         )
       );
       toast({
-        title: 'Erro no POP AI',
+        title: 'Erro no Assistente Pop',
         description: 'Não foi possível processar o comando.',
         variant: 'destructive'
       });
@@ -471,23 +480,29 @@ export function AgentConsole({ className }: AgentConsoleProps) {
     });
 
   return (
-    <Card className={`overflow-hidden border-0 bg-[#f7f8f3] shadow-xl ${className || ''}`}>
-      <div className="border-b bg-gradient-to-br from-emerald-950 via-emerald-900 to-[#ff5b05] p-5 text-white">
+    <Card className={`flex min-h-0 flex-col overflow-hidden border-0 bg-[#f7f8f3] shadow-xl ${className || ''}`}>
+      <div
+        className={`shrink-0 border-b bg-gradient-to-br from-emerald-950 via-emerald-900 to-[#ff5b05] text-white ${
+          compact ? 'p-4' : 'p-5'
+        }`}
+      >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-lime-200">
               <Sparkles className="h-3.5 w-3.5" />
-              POP AI
+              Assistente Pop
             </div>
             <div>
-              <h2 className="text-2xl font-black leading-tight md:text-3xl">Agente inteligente do sistema</h2>
+              <h2 className={`${compact ? 'text-xl md:text-2xl' : 'text-2xl md:text-3xl'} font-black leading-tight`}>
+                Sua ajuda inteligente no PopSystem
+              </h2>
               <p className="max-w-3xl text-sm text-white/80 md:text-base">
-                Peça em linguagem natural. Ele consulta dados reais, executa ações, gera imagens de produto e continua o contexto da conversa.
+                Tire dúvidas ou peça uma alteração. O assistente consulta os dados reais e respeita as permissões do operador.
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
-            {['Cardápio', 'Financeiro', 'Imagens', 'Operação'].map((label) => (
+          <div className={`${compact ? 'hidden xl:grid' : 'grid'} grid-cols-2 gap-2 text-xs md:grid-cols-4`}>
+            {['Suporte', 'Cardápio', 'Financeiro', 'Operação'].map((label) => (
               <Badge key={label} className="justify-center border-white/20 bg-white/10 px-3 py-2 text-white hover:bg-white/15">
                 {label}
               </Badge>
@@ -496,17 +511,20 @@ export function AgentConsole({ className }: AgentConsoleProps) {
         </div>
       </div>
 
-      <div className="grid min-h-[620px] grid-rows-[1fr_auto]">
-        <ScrollArea ref={scrollRef} className="h-[520px] px-4 py-5 md:h-[600px] md:px-6">
+      <div className={`${compact ? 'min-h-0 flex-1' : 'min-h-[620px]'} grid grid-rows-[minmax(0,1fr)_auto]`}>
+        <ScrollArea
+          ref={scrollRef}
+          className={compact ? 'h-full min-h-0 px-4 py-4 md:px-6' : 'h-[520px] px-4 py-5 md:h-[600px] md:px-6'}
+        >
           {messages.length === 0 ? (
             <div className="mx-auto flex h-full max-w-4xl flex-col justify-center gap-6 py-10">
               <div className="rounded-2xl border bg-white p-6 shadow-sm">
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-950 text-white">
                   <Bot className="h-6 w-6" />
                 </div>
-                <h3 className="text-2xl font-black text-emerald-950">O que vamos resolver agora?</h3>
+                <h3 className="text-2xl font-black text-emerald-950">Como posso facilitar seu trabalho?</h3>
                 <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                  Diga o resultado que você quer. Exemplo: “gere imagens para produtos sem imagem”, “suba o preço dos adicionais em 10%” ou “crie um combo novo com bebida”.
+                  Pergunte como usar o sistema ou diga o resultado que deseja. Quando a ação estiver dentro da sua permissão, eu também posso executá-la.
                 </p>
               </div>
 
@@ -631,7 +649,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
                     submitCommand(input);
                   }
                 }}
-                placeholder="Peça uma ação para o POP AI..."
+                placeholder="Pergunte ou peça uma ação ao Assistente Pop..."
                 disabled={isProcessing}
                 className="max-h-40 min-h-[48px] flex-1 resize-none border-0 bg-transparent px-1 py-3 text-base shadow-none focus-visible:ring-0"
               />

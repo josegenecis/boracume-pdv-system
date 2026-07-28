@@ -9,15 +9,12 @@ import { Plus, Edit, Trash2, Users, MousePointer, PackagePlus } from 'lucide-rea
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { ensureDefaultTables } from '@/utils/tableDefaults';
 import TableDetailsModal from './TableDetailsModal';
 import AddProductToTableModal from './AddProductToTableModal';
 import StaffConsumptionManager from './StaffConsumptionManager';
-import AdminPinDialog from '@/components/security/AdminPinDialog';
-import { verifyAdminPin } from '@/services/adminPin';
-import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
+import { CancelTableAccountDialog } from './CancelTableAccountDialog';
 
 interface Table {
   id: string;
@@ -37,7 +34,7 @@ const TableManager: React.FC = () => {
   const [showTableDetails, setShowTableDetails] = useState(false);
   const [showAddProducts, setShowAddProducts] = useState(false);
   const [tableForProducts, setTableForProducts] = useState<Table | null>(null);
-  const [tablePendingArchive, setTablePendingArchive] = useState<string | null>(null);
+  const [tablePendingCancellation, setTablePendingCancellation] = useState<Table | null>(null);
   const [formData, setFormData] = useState({
     table_number: '',
     capacity: 4,
@@ -45,7 +42,6 @@ const TableManager: React.FC = () => {
   });
   const { toast } = useToast();
   const { user } = useAuth();
-  const confirm = useConfirmDialog();
   const { isMobile } = useSidebar();
 
   useEffect(() => {
@@ -125,50 +121,55 @@ const TableManager: React.FC = () => {
     }
   };
 
-  const executeArchive = async (tableId: string, authorizedWaiterId: string) => {
+  const executeAccountCancellation = async (
+    table: Table,
+    adminPin: string,
+    reason: string,
+  ): Promise<boolean> => {
     try {
-      const { error } = await (supabase as any).rpc('archive_table_authorized', {
-        p_table_id: tableId,
-        p_authorized_waiter_id: authorizedWaiterId,
+      const { data, error } = await (supabase as any).rpc('cancel_table_account_authorized', {
+        p_table_id: table.id,
+        p_reason: reason,
+        p_admin_pin: adminPin,
       });
       if (error) throw error;
-      toast({ title: 'Mesa arquivada', description: 'A mesa saiu da operação sem apagar o histórico.' });
-      void fetchTables();
+      const cancelledAmount = Number(data?.cancelled_amount || 0);
+      toast({
+        title: `Mesa ${table.table_number} liberada`,
+        description:
+          cancelledAmount > 0
+            ? `Conta de ${cancelledAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} cancelada com auditoria.`
+            : 'A ocupação foi encerrada e registrada na auditoria.',
+      });
+      window.dispatchEvent(
+        new CustomEvent('table-account-cancelled', {
+          detail: { tableId: table.id, auditId: data?.audit_id },
+        }),
+      );
+      await fetchTables();
+      return true;
     } catch (error) {
       toast({
-        title: 'Erro ao arquivar mesa',
-        description: error instanceof Error ? error.message : 'Não foi possível arquivar a mesa.',
+        title: 'Não foi possível liberar a mesa',
+        description:
+          error instanceof Error
+            ? error.message
+            : String((error as any)?.message || 'Verifique a conta e tente novamente.'),
         variant: 'destructive',
       });
+      return false;
     }
   };
 
-  const handleDelete = async (tableId: string) => {
-    const table = tables.find((item) => item.id === tableId);
-    if (table?.status === 'occupied') {
+  const handleDelete = (table: Table) => {
+    if (table.status === 'available') {
       toast({
-        title: 'Mesa com conta aberta',
-        description: 'Feche, transfira ou lance a conta como consumo de funcionário antes de arquivar a mesa.',
-        variant: 'destructive',
+        title: 'Mesa já está livre',
+        description: 'A lixeira cancela uma conta em atendimento; esta mesa não possui conta aberta.',
       });
       return;
     }
-
-    const ok = await confirm({
-      title: 'Arquivar mesa',
-      description: 'A mesa sairá da operação, mas todo o histórico será preservado para auditoria.',
-      confirmText: 'Arquivar',
-      cancelText: 'Cancelar',
-      variant: 'destructive',
-    });
-    if (!ok) return;
-
-    const operator = getLocalOperatorSession();
-    if (operator?.id && isAdminOperator(operator)) {
-      await executeArchive(tableId, operator.id);
-      return;
-    }
-    setTablePendingArchive(tableId);
+    setTablePendingCancellation(table);
   };
 
   const handleTableClick = (table: Table) => {
@@ -411,10 +412,18 @@ const TableManager: React.FC = () => {
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    void handleDelete(table.id);
+                    handleDelete(table);
                   }}
-                  className={`${isMobile ? 'h-7 rounded-xl px-1.5' : 'h-8 px-2'} hover:border-red-200 hover:bg-red-50 hover:text-red-600`}
-                  title="Arquivar mesa sem apagar o histórico"
+                  className={`${isMobile ? 'h-7 rounded-xl px-1.5' : 'h-8 px-2'} ${
+                    table.status === 'available'
+                      ? 'cursor-not-allowed opacity-40'
+                      : 'hover:border-red-200 hover:bg-red-50 hover:text-red-600'
+                  }`}
+                  title={
+                    table.status === 'available'
+                      ? 'Mesa sem conta aberta'
+                      : 'Cancelar a conta com senha do administrador e liberar a mesa'
+                  }
                 >
                   <Trash2 size={isMobile ? 12 : 14} />
                 </Button>
@@ -424,22 +433,19 @@ const TableManager: React.FC = () => {
         ))}
       </div>
 
-      <AdminPinDialog
-        open={tablePendingArchive !== null}
-        title="Autorizar arquivamento"
-        description="A mesa sairá da operação. Digite o PIN master para confirmar."
-        confirmLabel="Arquivar mesa"
-        onCancel={() => setTablePendingArchive(null)}
-        onConfirm={async (pin) => {
-          if (!user?.id || !tablePendingArchive) return;
-          const authorization = await verifyAdminPin({ restaurantUserId: user.id, pin });
-          if (!authorization.ok || !authorization.waiterId) {
-            toast({ title: 'Sem permissão', description: 'PIN inválido ou o operador não é administrador.', variant: 'destructive' });
-            return;
-          }
-          const tableId = tablePendingArchive;
-          setTablePendingArchive(null);
-          await executeArchive(tableId, authorization.waiterId);
+      <CancelTableAccountDialog
+        open={tablePendingCancellation !== null}
+        tableNumber={tablePendingCancellation?.table_number}
+        onCancel={() => setTablePendingCancellation(null)}
+        onConfirm={async (pin, reason) => {
+          if (!user?.id || !tablePendingCancellation) return false;
+          const completed = await executeAccountCancellation(
+            tablePendingCancellation,
+            pin,
+            reason,
+          );
+          if (completed) setTablePendingCancellation(null);
+          return completed;
         }}
       />
 

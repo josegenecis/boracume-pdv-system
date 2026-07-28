@@ -38,7 +38,7 @@ const SidebarLinks = () => {
     { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
     { to: '/financeiro', icon: CreditCard, label: 'Financeiro' },
     { to: '/pix', icon: CreditCard, label: 'PIX / Mercado Pago' },
-    { to: '/agente', icon: Bot, label: 'Ajuda Inteligente' },
+    { to: '/agente', icon: Bot, label: 'Assistente Pop' },
     { to: '/downloads', icon: Download, label: 'App Desktop' },
     { to: '/configuracoes', icon: Settings, label: 'Configurações' },
     { to: '/subscription', icon: Crown, label: 'Planos' },
