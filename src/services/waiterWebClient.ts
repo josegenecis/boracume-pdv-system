@@ -212,6 +212,8 @@ export type TableAccount = {
   name: string;
   notes: string;
   accountNumber: number;
+  commandCode?: string | null;
+  commandLabel?: string | null;
   total: number;
   paidTotal: number;
   dueAmount: number;
@@ -830,7 +832,7 @@ export async function transferWaiterTable(sessionId: string, targetTableId: stri
   return response;
 }
 
-export async function createWaiterAccount(sessionId: string, name: string, notes = '') {
+export async function createWaiterAccount(sessionId: string, name: string, notes = '', commandCode = '') {
   const session = requireSession();
   const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
@@ -839,6 +841,7 @@ export async function createWaiterAccount(sessionId: string, name: string, notes
       sessionId,
       name,
       notes,
+      commandCode,
     },
     session.token,
   );
@@ -847,7 +850,7 @@ export async function createWaiterAccount(sessionId: string, name: string, notes
   return response;
 }
 
-export async function renameWaiterAccount(accountId: string, name: string, notes = '') {
+export async function renameWaiterAccount(accountId: string, name: string, notes = '', commandCode = '') {
   const session = requireSession();
   const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
@@ -856,6 +859,7 @@ export async function renameWaiterAccount(accountId: string, name: string, notes
       accountId,
       name,
       notes,
+      commandCode,
     },
     session.token,
   );

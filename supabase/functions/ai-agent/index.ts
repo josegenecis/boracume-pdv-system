@@ -1088,9 +1088,10 @@ Deno.serve(async (req) => {
                     type: "object",
                     properties: {
                         id: { type: "string", description: "ID da despesa" },
-                        reason: { type: "string", description: "Motivo do estorno (opcional)" }
+                        reason: { type: "string", description: "Motivo obrigatório do estorno" },
+                        admin_pin: { type: "string", description: "Senha/PIN do administrador que autoriza o estorno" }
                     },
-                    required: ["id"]
+                    required: ["id", "reason", "admin_pin"]
                 }
             }
         },
@@ -2351,6 +2352,7 @@ Regras:
                         .from('expenses')
                         .select('id, description, amount, category, expense_date, receipt_url')
                         .eq('user_id', userId)
+                        .eq('is_active', true)
                         .order('expense_date', { ascending: false })
                         .limit(limit);
 
@@ -2364,38 +2366,50 @@ Regras:
                 }
 
                 else if (fnName === "delete_expense") {
-                    const id = String(args.id || '').trim();
-                    if (!id) {
-                        result = { success: false, error: 'ID é obrigatório.' };
-                    } else {
-                        const { error } = await supabase
-                            .from('expenses')
-                            .delete()
-                            .eq('user_id', userId)
-                            .eq('id', id);
-                        if (error) throw error;
-                        result = { success: true, deleted_id: id };
-                    }
+                    result = {
+                        success: false,
+                        error: 'Despesas não podem ser apagadas. Use o estorno para preservar o histórico financeiro.'
+                    };
                 }
 
                 else if (fnName === "reverse_expense") {
                     const id = String(args.id || '').trim();
-                    const reason = args.reason ? String(args.reason) : '';
-                    if (!id) {
-                        result = { success: false, error: 'ID é obrigatório.' };
+                    const reason = String(args.reason || '').trim();
+                    const adminPin = String(args.admin_pin || '').trim();
+                    if (!id || !reason || !adminPin) {
+                        result = { success: false, error: 'ID, motivo e senha/PIN do administrador são obrigatórios.' };
                     } else {
-                        const { error } = await supabase
-                            .from('expenses')
-                            .update({
-                                is_active: false,
-                                reversed_at: new Date().toISOString(),
-                                reversal_reason: reason.trim() || null,
-                                reversed_by: userId
-                            })
+                        const { data: authorizedWaiters, error: waiterError } = await supabase
+                            .from('waiters')
+                            .select('id, name, role, permissions')
                             .eq('user_id', userId)
-                            .eq('id', id);
-                        if (error) throw error;
-                        result = { success: true, reversed_id: id };
+                            .eq('active', true)
+                            .eq('pin', adminPin)
+                            .limit(10);
+                        if (waiterError) throw waiterError;
+                        const administrator = (authorizedWaiters || []).find((waiter: any) =>
+                            String(waiter?.role || '').toLowerCase() === 'admin' ||
+                            waiter?.permissions?.admin === true
+                        );
+                        if (!administrator?.id) {
+                            result = { success: false, error: 'Senha/PIN inválido ou operador sem permissão de administrador.' };
+                        } else {
+                            const { error } = await supabase
+                                .from('expenses')
+                                .update({
+                                    is_active: false,
+                                    reversed_at: new Date().toISOString(),
+                                    reversal_reason: reason,
+                                    reversed_by: userId,
+                                    reversed_by_waiter_id: administrator.id,
+                                    reversed_by_name: administrator.name
+                                })
+                                .eq('user_id', userId)
+                                .eq('is_active', true)
+                                .eq('id', id);
+                            if (error) throw error;
+                            result = { success: true, reversed_id: id };
+                        }
                     }
                 }
 

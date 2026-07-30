@@ -69,8 +69,10 @@ import {
 } from "@/components/ui/dialog";
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { parseBRL } from '@/lib/currency';
+import { CancelSaleDialog } from '@/components/finance/CancelSaleDialog';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 
-type PaymentMethod = 'pix' | 'pix_online' | 'pix_entrega' | 'dinheiro' | 'cartao';
+type PaymentMethod = 'pix' | 'pix_online' | 'pix_entrega' | 'dinheiro' | 'cartao' | 'cartao_online';
 type PaymentMethodFilter = '' | 'all' | PaymentMethod;
 type TxTypeFilter = '' | 'all' | 'entrada' | 'saida';
 type SupabaseQuery = {
@@ -124,6 +126,7 @@ const Financeiro = () => {
   const [loadingSessionDetails, setLoadingSessionDetails] = useState(false);
   const [reprintingCashReport, setReprintingCashReport] = useState(false);
   const [cancellingOrderIds, setCancellingOrderIds] = useState<Set<string>>(new Set());
+  const [orderToCancel, setOrderToCancel] = useState<any | null>(null);
   
   // States for new expense
   const [newExpense, setNewExpense] = useState({ description: '', amount: '', category: 'Geral' });
@@ -171,6 +174,17 @@ const Financeiro = () => {
 
       const ordersList = (orders as any[]) || [];
       setOrdersRaw(ordersList);
+
+      const { data: cancellationAudits } = await (supabase as any)
+        .from('finance_sale_cancellations')
+        .select('order_id, reason, authorized_waiter_name, created_at, refund_requested, refund_status')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      const cancellationByOrder = new Map<string, any>();
+      ((cancellationAudits as any[]) || []).forEach((audit) => {
+        const orderId = String(audit?.order_id || '');
+        if (orderId && !cancellationByOrder.has(orderId)) cancellationByOrder.set(orderId, audit);
+      });
       
       const incomeTx = ordersList.map(order => ({
         id: order.id,
@@ -181,14 +195,18 @@ const Financeiro = () => {
         category: 'Vendas',
         paymentMethod: order.payment_method as PaymentMethod,
         status: String(order.status || ''),
-        order,
+        order: {
+          ...order,
+          financial_cancellation: cancellationByOrder.get(String(order.id)) || null,
+        },
       }));
 
       // 2. Fetch Expenses (Outcome)
       const { data: expenses } = await (supabase as any)
         .from('expenses')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('is_active', true);
 
       const expensesList = (expenses as any[]) || [];
       setExpensesRaw(expensesList);
@@ -284,7 +302,7 @@ const Financeiro = () => {
 
       const ordersReq = (supabase as any)
         .from('orders')
-        .select('id, order_number, created_at, total, payment_method, status')
+        .select('id, order_number, created_at, total, payment_method, status, cash_register_session_id')
         .eq('user_id', user.id)
         .eq('cash_register_session_id', sessionId)
         .order('created_at', { ascending: false });
@@ -312,7 +330,7 @@ const Financeiro = () => {
         if (session?.opened_at) {
           let unlinkedReq = (supabase as any)
             .from('orders')
-            .select('id, order_number, created_at, total, payment_method, status')
+            .select('id, order_number, created_at, total, payment_method, status, cash_register_session_id')
             .eq('user_id', user.id)
             .is('cash_register_session_id', null)
             .gte('created_at', session.opened_at);
@@ -346,9 +364,8 @@ const Financeiro = () => {
     }
   };
 
-  const handleCancelSessionOrder = async (order: any) => {
+  const requestFinancialCancellation = (order: any) => {
     if (!order?.id || String(order?.status || '') === 'cancelled') return;
-
     const operatorSession = getLocalOperatorSession();
     if (operatorSession && !canCancelOrder(operatorSession)) {
       toast({
@@ -359,42 +376,69 @@ const Financeiro = () => {
       return;
     }
 
-    const orderLabel = order.order_number ? `#${order.order_number}` : String(order.id).slice(0, 8);
-    const confirmed = window.confirm(
-      `Cancelar a venda ${orderLabel}?\n\nEla sairá dos totais do caixa/financeiro. Se houve baixa de estoque registrada, o estoque será devolvido.`
-    );
-    if (!confirmed) return;
+    if (!canCancelFinancialSale(order)) {
+      toast({
+        title: 'Cancelamento indisponível',
+        description: 'Somente vendas do caixa aberto atual podem ser canceladas pela operação diária.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
+    setOrderToCancel(order);
+  };
+
+  const handleCancelSessionOrder = async ({
+    pin,
+    reason,
+    refundRequested,
+  }: {
+    pin: string;
+    reason: string;
+    refundRequested: boolean;
+  }) => {
+    const order = orderToCancel;
+    if (!order?.id || String(order?.status || '') === 'cancelled') return false;
+    const orderLabel = order.order_number ? `#${order.order_number}` : String(order.id).slice(0, 8);
     setCancellingOrderIds((prev) => new Set(prev).add(String(order.id)));
     try {
-      const isPaidPixOnline = String(order.payment_method || '').toLowerCase() === 'pix_online';
-      if (isPaidPixOnline) {
-        const refundPix = window.confirm(
-          `Esta venda foi paga via PIX online. Deseja devolver ${Number(order.total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para o cliente?\n\nOK: cancelar e devolver o PIX\nCancelar: cancelar somente a venda`
-        );
-        if (refundPix) {
-          const { data, status } = await invokeEdgeFunction('poppay-refund', {
-            orderId: String(order.id),
-            reason: 'Venda cancelada pelo financeiro',
-          }, { timeoutMs: 60000 });
-          if (status >= 400 || !data?.ok) throw new Error(String(data?.message || data?.error || 'O Mercado Pago não confirmou a devolução.'));
+      await updateOrderStatus(String(order.id), 'cancelled', {
+        financialCancellation: {
+          reason,
+          adminPin: pin,
+          refundRequested,
+        },
+      });
+
+      let refundWarning = '';
+      if (refundRequested && String(order.payment_method || '').toLowerCase() === 'pix_online') {
+        const { data, status } = await invokeEdgeFunction('poppay-refund', {
+          orderId: String(order.id),
+          reason: `Venda ${orderLabel} cancelada: ${reason}`,
+        }, { timeoutMs: 60000 });
+        if (status >= 400 || !data?.ok) {
+          refundWarning = String(data?.message || 'A venda foi cancelada, mas a devolução do PIX precisa ser conferida.');
         }
       }
-      await updateOrderStatus(String(order.id), 'cancelled');
+
       setSessionOrders((prev) => prev.map((item) => (
         item.id === order.id ? { ...item, status: 'cancelled' } : item
       )));
       await refreshFinanceData();
+      setOrderToCancel(null);
       toast({
-        title: 'Venda cancelada',
-        description: `A venda ${orderLabel} foi marcada como cancelada.`,
+        title: refundWarning ? 'Venda cancelada — confira a devolução' : 'Venda cancelada',
+        description: refundWarning || `A venda ${orderLabel} foi cancelada e preservada no histórico de auditoria.`,
+        variant: refundWarning ? 'destructive' : 'default',
       });
+      return true;
     } catch (error: any) {
       toast({
         title: 'Não foi possível cancelar',
-        description: error?.message || 'Tente novamente em alguns instantes.',
+        description: friendlyErrorMessage(error, 'Não foi possível cancelar esta venda. Tente novamente.'),
         variant: 'destructive',
       });
+      return false;
     } finally {
       setCancellingOrderIds((prev) => {
         const next = new Set(prev);
@@ -402,6 +446,18 @@ const Financeiro = () => {
         return next;
       });
     }
+  };
+
+  const canCancelFinancialSale = (order: any) => {
+    if (!order?.id || String(order?.status || '') === 'cancelled') return false;
+    if (!currentSession?.id || currentSession.status !== 'open') return false;
+
+    const linkedSessionId = String(order.cash_register_session_id || '');
+    if (linkedSessionId) return linkedSessionId === String(currentSession.id);
+
+    const orderTime = new Date(order.created_at || 0).getTime();
+    const openedAt = new Date(currentSession.opened_at || 0).getTime();
+    return Number.isFinite(orderTime) && Number.isFinite(openedAt) && orderTime >= openedAt;
   };
 
   const getPaymentBucket = (paymentMethod: unknown) => {
@@ -1925,21 +1981,32 @@ const Financeiro = () => {
                         <Badge variant={transaction.status === 'cancelled' ? 'destructive' : 'outline'}>
                           {transaction.status === 'cancelled' ? 'Cancelada' : 'Venda registrada'}
                         </Badge>
-                        {transaction.status !== 'cancelled' && transaction.order && (
+                        {transaction.status !== 'cancelled' && transaction.order && canCancelFinancialSale(transaction.order) ? (
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
                             disabled={cancellingOrderIds.has(String(transaction.id))}
-                            onClick={() => { void handleCancelSessionOrder(transaction.order); }}
+                            onClick={() => requestFinancialCancellation(transaction.order)}
                           >
                             <XCircle className="mr-2 h-4 w-4" />
                             {cancellingOrderIds.has(String(transaction.id)) ? 'Cancelando...' : 'Cancelar'}
                           </Button>
-                        )}
+                        ) : transaction.status !== 'cancelled' ? (
+                          <span className="text-xs font-medium text-slate-500">Histórico protegido</span>
+                        ) : null}
                       </div>
                     )}
+                    {transaction.status === 'cancelled' && transaction.order?.financial_cancellation ? (
+                      <div className="mt-3 rounded-2xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-800">
+                        <strong>Motivo:</strong> {transaction.order.financial_cancellation.reason}
+                        <br />
+                        <span className="text-red-700/80">
+                          Por {transaction.order.financial_cancellation.authorized_waiter_name || 'Administrador'}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 ))
               )}
@@ -2282,6 +2349,10 @@ const Financeiro = () => {
                               <TableCell className="text-right">
                                 {o.status === 'cancelled' ? (
                                   <span className="text-xs text-muted-foreground">Cancelada</span>
+                                ) : !canCancelFinancialSale(o) ? (
+                                  <span className="text-xs font-medium text-muted-foreground">
+                                    Caixa encerrado
+                                  </span>
                                 ) : (
                                   <Button
                                     type="button"
@@ -2289,7 +2360,7 @@ const Financeiro = () => {
                                     size="sm"
                                     className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
                                     disabled={cancellingOrderIds.has(String(o.id))}
-                                    onClick={() => { void handleCancelSessionOrder(o); }}
+                                    onClick={() => requestFinancialCancellation(o)}
                                   >
                                     <XCircle className="mr-2 h-4 w-4" />
                                     {cancellingOrderIds.has(String(o.id)) ? 'Cancelando...' : 'Cancelar venda'}
@@ -2479,9 +2550,16 @@ const Financeiro = () => {
                         </TableCell>
                         <TableCell>
                           {transaction.category === 'Vendas' ? (
-                            <Badge variant={transaction.status === 'cancelled' ? 'destructive' : 'outline'}>
-                              {transaction.status === 'cancelled' ? 'Cancelada' : 'Registrada'}
-                            </Badge>
+                            <div className="space-y-1">
+                              <Badge variant={transaction.status === 'cancelled' ? 'destructive' : 'outline'}>
+                                {transaction.status === 'cancelled' ? 'Cancelada' : 'Registrada'}
+                              </Badge>
+                              {transaction.status === 'cancelled' && transaction.order?.financial_cancellation ? (
+                                <div className="max-w-[220px] text-xs text-muted-foreground">
+                                  {transaction.order.financial_cancellation.reason}
+                                </div>
+                              ) : null}
+                            </div>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -2491,19 +2569,21 @@ const Financeiro = () => {
                             <span className="text-muted-foreground">—</span>
                           ) : transaction.status === 'cancelled' ? (
                             <span className="text-xs font-medium text-red-600">Cancelada</span>
-                          ) : transaction.order ? (
+                          ) : transaction.order && canCancelFinancialSale(transaction.order) ? (
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
                               className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
                               disabled={cancellingOrderIds.has(String(transaction.id))}
-                              onClick={() => { void handleCancelSessionOrder(transaction.order); }}
+                              onClick={() => requestFinancialCancellation(transaction.order)}
                             >
                               <XCircle className="mr-2 h-4 w-4" />
                               {cancellingOrderIds.has(String(transaction.id)) ? 'Cancelando...' : 'Cancelar venda'}
                             </Button>
-                          ) : null}
+                          ) : (
+                            <span className="text-xs font-medium text-muted-foreground">Histórico protegido</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -2708,6 +2788,20 @@ const Financeiro = () => {
         </TabsContent>
       </Tabs>
       </div>
+
+      <CancelSaleDialog
+        open={Boolean(orderToCancel)}
+        orderLabel={
+          orderToCancel
+            ? (orderToCancel.order_number ? `#${orderToCancel.order_number}` : `#${String(orderToCancel.id).slice(0, 8)}`)
+            : undefined
+        }
+        amountLabel={orderToCancel ? formatCurrency(Number(orderToCancel.total || 0)) : undefined}
+        supportsAutomaticRefund={String(orderToCancel?.payment_method || '').toLowerCase() === 'pix_online'}
+        paymentLabel={getPaymentMethodLabel(orderToCancel?.payment_method)}
+        onCancel={() => setOrderToCancel(null)}
+        onConfirm={handleCancelSessionOrder}
+      />
     </div>
   );
 };

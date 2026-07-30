@@ -141,6 +141,7 @@ const WaiterSessionPage = () => {
   const [accountDialogMode, setAccountDialogMode] = useState<'create' | 'edit'>('create');
   const [editingAccountId, setEditingAccountId] = useState('');
   const [accountName, setAccountName] = useState('');
+  const [accountCommandCode, setAccountCommandCode] = useState('');
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [productDialogStep, setProductDialogStep] = useState<'browse' | 'configure'>('browse');
   const [catalogAccountId, setCatalogAccountId] = useState('');
@@ -376,6 +377,7 @@ const WaiterSessionPage = () => {
     setAccountDialogMode(mode);
     setEditingAccountId(account?.id || '');
     setAccountName(account?.name || '');
+    setAccountCommandCode(account?.commandCode || '');
     setAccountDialogOpen(true);
   };
 
@@ -492,13 +494,14 @@ const WaiterSessionPage = () => {
     try {
       const response =
         accountDialogMode === 'create'
-          ? await createWaiterAccount(session.id, accountName.trim())
-          : await renameWaiterAccount(editingAccountId, accountName.trim());
+          ? await createWaiterAccount(session.id, accountName.trim(), '', accountCommandCode.trim())
+          : await renameWaiterAccount(editingAccountId, accountName.trim(), '', accountCommandCode.trim());
 
       applySession(response.session);
       setAccountDialogOpen(false);
       setEditingAccountId('');
       setAccountName('');
+      setAccountCommandCode('');
       toast({
         title: accountDialogMode === 'create' ? 'Comanda criada' : 'Comanda atualizada',
         description: 'A configuracao da comanda foi salva com sucesso.',
@@ -1061,7 +1064,10 @@ const WaiterSessionPage = () => {
   const showProductConfigurePane = Boolean(selectedProduct) && productDialogStep === 'configure';
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_42%,#072C1F_100%)] pb-24 text-slate-900">
+    <div
+      data-testid="waiter-session-scroll"
+      className="h-[100dvh] w-full touch-pan-y overflow-x-hidden overflow-y-auto overscroll-y-contain bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_42%,#072C1F_100%)] pb-24 text-slate-900 [-webkit-overflow-scrolling:touch]"
+    >
       <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 lg:px-8">
         <div className="rounded-[24px] border border-white/10 bg-white/[0.08] p-2.5 text-white shadow-[0_24px_60px_-34px_rgba(0,0,0,0.75)] backdrop-blur-sm sm:p-4">
           <div className="flex items-center justify-between gap-2">
@@ -1230,6 +1236,11 @@ const WaiterSessionPage = () => {
                               <div className="space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <h3 className="text-[15px] font-semibold text-[#082F23] sm:text-base">{account.name}</h3>
+                                  {account.commandCode ? (
+                                    <Badge variant="outline" className="font-mono text-[10px]">
+                                      Comanda {account.commandCode}
+                                    </Badge>
+                                  ) : null}
                                   <WaiterStatusBadge status={account.status} />
                                   {account.kitchenStatus !== 'idle' ? <WaiterStatusBadge status={account.kitchenStatus} /> : null}
                                 </div>
@@ -1581,6 +1592,20 @@ const WaiterSessionPage = () => {
                 className="h-12 rounded-2xl"
                 placeholder="Ex: Joao, Familia, Criancas"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="accountCommandCode">Comanda eletrônica (código de barras)</Label>
+              <Input
+                id="accountCommandCode"
+                value={accountCommandCode}
+                onChange={(event) => setAccountCommandCode(event.target.value.toUpperCase())}
+                className="h-12 rounded-2xl font-mono"
+                placeholder="Leia ou digite o código"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Opcional. A mesma comanda física poderá ser reutilizada após o fechamento desta conta.
+              </p>
             </div>
           </div>
           <DialogFooter className="gap-3 sm:justify-between">

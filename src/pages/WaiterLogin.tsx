@@ -74,8 +74,11 @@ const WaiterLogin = () => {
   }
 
   return (
-    <div className="h-[100svh] overflow-hidden bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_38%,#072D20_100%)] px-4 py-4 text-white">
-      <div className="mx-auto flex h-full max-w-[390px] flex-col items-center justify-center gap-3">
+    <div
+      data-testid="waiter-login-scroll"
+      className="h-[100dvh] w-full touch-pan-y overflow-x-hidden overflow-y-auto overscroll-y-contain bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_38%,#072D20_100%)] px-4 py-4 text-white [-webkit-overflow-scrolling:touch]"
+    >
+      <div className="mx-auto flex min-h-full max-w-[390px] flex-col items-center justify-center gap-3">
         <div className="w-full text-center">
           <Logo size="md" theme="dark" className="mx-auto justify-center" />
           <div className="mt-2.5 inline-flex rounded-full bg-white/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/80">

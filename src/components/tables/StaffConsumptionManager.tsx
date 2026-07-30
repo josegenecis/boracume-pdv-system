@@ -21,6 +21,18 @@ interface StaffConsumption {
   payment_method?: string | null;
   paid_at?: string | null;
   created_at: string;
+  debtor_type?: 'employee' | 'customer' | 'supplier' | 'other';
+  source_type?: 'table' | 'pdv' | 'manual';
+  items?: Array<{
+    id?: string;
+    name?: string;
+    product_name?: string;
+    quantity?: number;
+    price?: number;
+    unit_price?: number;
+    subtotal?: number;
+    total?: number;
+  }> | null;
 }
 
 const currency = new Intl.NumberFormat('pt-BR', {
@@ -33,6 +45,31 @@ const paymentLabels: Record<string, string> = {
   dinheiro: 'Dinheiro',
   cartao: 'Cartão',
   desconto_folha: 'Desconto em folha',
+};
+
+const debtorLabels: Record<string, string> = {
+  employee: 'Funcionário',
+  customer: 'Cliente',
+  supplier: 'Fornecedor',
+  other: 'Outro',
+};
+
+const sourceLabels: Record<string, string> = {
+  table: 'Mesa',
+  pdv: 'PDV',
+  manual: 'Manual',
+};
+
+const getDefaultPaymentMethod = (row: StaffConsumption) =>
+  row.debtor_type === 'employee' ? 'desconto_folha' : 'dinheiro';
+
+const getItemName = (item: NonNullable<StaffConsumption['items']>[number]) =>
+  item.product_name || item.name || 'Item';
+
+const getItemTotal = (item: NonNullable<StaffConsumption['items']>[number]) => {
+  const explicitTotal = Number(item.subtotal ?? item.total);
+  if (Number.isFinite(explicitTotal)) return explicitTotal;
+  return Number(item.quantity || 0) * Number(item.price ?? item.unit_price ?? 0);
 };
 
 const StaffConsumptionManager: React.FC = () => {
@@ -49,7 +86,7 @@ const StaffConsumptionManager: React.FC = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('staff_consumptions')
-      .select('id,employee_name,amount,due_date,notes,status,payment_method,paid_at,created_at')
+      .select('id,employee_name,amount,due_date,notes,status,payment_method,paid_at,created_at,debtor_type,source_type,items')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -57,8 +94,8 @@ const StaffConsumptionManager: React.FC = () => {
 
     if (error) {
       toast({
-        title: 'Não foi possível carregar os consumos',
-        description: error.message,
+        title: 'Não foi possível carregar as contas',
+        description: 'Atualize a página e tente novamente.',
         variant: 'destructive',
       });
       return;
@@ -77,7 +114,7 @@ const StaffConsumptionManager: React.FC = () => {
   );
 
   const executeSettlement = async (row: StaffConsumption, authorizedWaiterId: string) => {
-    const paymentMethod = paymentMethods[row.id] || 'desconto_folha';
+    const paymentMethod = paymentMethods[row.id] || getDefaultPaymentMethod(row);
     const { error } = await (supabase as any).rpc('settle_staff_consumption_authorized', {
       p_receivable_id: row.id,
       p_payment_method: paymentMethod,
@@ -92,7 +129,7 @@ const StaffConsumptionManager: React.FC = () => {
       return;
     }
     toast({
-      title: 'Consumo baixado',
+      title: 'Conta recebida',
       description: `Pagamento de ${row.employee_name} registrado com sucesso.`,
     });
     await loadRows();
@@ -113,7 +150,7 @@ const StaffConsumptionManager: React.FC = () => {
       <DialogTrigger asChild>
         <Button variant="outline" className="gap-2">
           <ReceiptText size={16} />
-          <span className="hidden sm:inline">Consumo de funcionários</span>
+          <span className="hidden sm:inline">Contas a receber</span>
           {pendingCount > 0 && <Badge className="ml-1 bg-amber-500 text-white">{pendingCount}</Badge>}
         </Button>
       </DialogTrigger>
@@ -121,7 +158,7 @@ const StaffConsumptionManager: React.FC = () => {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserRoundCheck size={20} />
-            Consumos de funcionários
+            Contas a receber
           </DialogTitle>
         </DialogHeader>
 
@@ -129,15 +166,15 @@ const StaffConsumptionManager: React.FC = () => {
           <div className="text-sm text-amber-800">Total pendente</div>
           <div className="mt-1 text-2xl font-black text-amber-950">{currency.format(pendingTotal)}</div>
           <p className="mt-1 text-xs text-amber-700">
-            A conta permanece registrada e a mesa é liberada sem apagar o histórico.
+            Vendas de mesa e do PDV permanecem registradas até o pagamento, sem apagar o histórico.
           </p>
         </div>
 
         {loading ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">Carregando consumos...</div>
+          <div className="py-8 text-center text-sm text-muted-foreground">Carregando contas...</div>
         ) : rows.length === 0 ? (
           <div className="rounded-xl border border-dashed py-8 text-center text-sm text-muted-foreground">
-            Nenhum consumo de funcionário registrado.
+            Nenhuma conta a receber registrada.
           </div>
         ) : (
           <div className="space-y-3">
@@ -146,11 +183,33 @@ const StaffConsumptionManager: React.FC = () => {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-bold text-[#082F23]">{row.employee_name}</div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      <Badge variant="outline">{debtorLabels[row.debtor_type || 'employee'] || 'Pessoa'}</Badge>
+                      <Badge variant="outline">Origem: {sourceLabels[row.source_type || 'table'] || 'Sistema'}</Badge>
+                    </div>
                     <div className="mt-1 text-xs text-slate-500">
                       Lançado em {new Date(row.created_at).toLocaleString('pt-BR')}
                       {row.due_date ? ` • vence ${new Date(`${row.due_date}T12:00:00`).toLocaleDateString('pt-BR')}` : ''}
                     </div>
                     {row.notes && <p className="mt-2 break-words text-sm text-slate-600">{row.notes}</p>}
+                    {Array.isArray(row.items) && row.items.length > 0 && (
+                      <details className="mt-3 rounded-lg border bg-slate-50 px-3 py-2">
+                        <summary className="cursor-pointer text-xs font-bold text-[#082F23]">
+                          Ver itens da conta ({row.items.length})
+                        </summary>
+                        <div className="mt-2 space-y-1.5">
+                          {row.items.map((item, index) => (
+                            <div
+                              key={item.id || `${row.id}-${index}`}
+                              className="flex items-start justify-between gap-3 text-xs text-slate-600"
+                            >
+                              <span>{Number(item.quantity || 1)}x {getItemName(item)}</span>
+                              <strong className="shrink-0 text-[#082F23]">{currency.format(getItemTotal(item))}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="text-lg font-black text-[#082F23]">{currency.format(Number(row.amount || 0))}</div>
@@ -163,16 +222,18 @@ const StaffConsumptionManager: React.FC = () => {
                 {row.status === 'open' ? (
                   <div className="mt-4 flex flex-col gap-2 border-t pt-3 sm:flex-row">
                     <Select
-                      value={paymentMethods[row.id] || 'desconto_folha'}
+                      value={paymentMethods[row.id] || getDefaultPaymentMethod(row)}
                       onValueChange={(value) => setPaymentMethods((current) => ({ ...current, [row.id]: value }))}
                     >
                       <SelectTrigger className="sm:w-56">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(paymentLabels).map(([value, label]) => (
+                        {Object.entries(paymentLabels)
+                          .filter(([value]) => value !== 'desconto_folha' || row.debtor_type === 'employee')
+                          .map(([value, label]) => (
                           <SelectItem key={value} value={value}>{label}</SelectItem>
-                        ))}
+                          ))}
                       </SelectContent>
                     </Select>
                     <Button onClick={() => void settle(row)} className="sm:flex-1">
@@ -193,8 +254,8 @@ const StaffConsumptionManager: React.FC = () => {
     </Dialog>
     <AdminPinDialog
       open={pendingSettlement !== null}
-      title="Autorizar baixa do consumo"
-      description="A baixa altera o saldo do funcionário e exige o PIN de um administrador."
+      title="Autorizar baixa da conta"
+      description="A baixa altera o saldo pendente e exige o PIN de um administrador."
       confirmLabel="Registrar pagamento"
       onCancel={() => setPendingSettlement(null)}
       onConfirm={async (pin) => {

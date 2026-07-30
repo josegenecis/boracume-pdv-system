@@ -103,6 +103,9 @@ function WaiterWebApp() {
         domStorageEnabled
         javaScriptEnabled
         cacheEnabled
+        scrollEnabled
+        nestedScrollEnabled
+        overScrollMode="content"
         allowsBackForwardNavigationGestures
         onNavigationStateChange={handleNavigationChange}
         onLoadStart={() => setLoadError('')}

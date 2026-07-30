@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw, Wallet, ChevronLeft, ChevronRight, Scale } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw, Wallet, ChevronLeft, ChevronRight, Scale, Barcode } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -17,6 +17,9 @@ import ProductVariationModal from '@/components/pdv/ProductVariationModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import CheckoutModal, { CheckoutPaymentMethod } from '@/components/checkout/CheckoutModal';
 import TableManager from '@/components/tables/TableManager';
+import StaffConsumptionManager from '@/components/tables/StaffConsumptionManager';
+import ReceivableContactSelect, { type ReceivableContact } from '@/components/receivables/ReceivableContactSelect';
+import ElectronicCommandDialog, { type ElectronicCommandLookup } from '@/components/pdv/ElectronicCommandDialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import FirstOperatorDialog from '@/components/pdv/FirstOperatorDialog';
@@ -140,6 +143,7 @@ const PDV_PAYMENT_METHODS: Array<{ value: PdvPaymentMethod; label: string }> = [
   { value: 'cartao_voucher', label: 'Voucher' },
   { value: 'cartao_outros', label: 'Outros' },
   { value: 'dinheiro', label: 'Dinheiro' },
+  { value: 'pagar_depois', label: 'Pagar depois' },
 ];
 
 const emptyPdvPaymentAmounts = (): PdvPaymentAmounts => ({
@@ -149,6 +153,7 @@ const emptyPdvPaymentAmounts = (): PdvPaymentAmounts => ({
   cartao_voucher: '',
   cartao_outros: '',
   dinheiro: '',
+  pagar_depois: '',
 });
 
 const getPaymentMethodLabel = (method: PdvPaymentMethod | string) => {
@@ -221,6 +226,10 @@ const PDV = () => {
   const [changeAmount, setChangeAmount] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
   const [surchargeAmount, setSurchargeAmount] = useState('');
+  const [receivableContactId, setReceivableContactId] = useState('');
+  const [receivableContact, setReceivableContact] = useState<ReceivableContact | null>(null);
+  const [receivableDueDate, setReceivableDueDate] = useState('');
+  const [receivableNotes, setReceivableNotes] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -255,6 +264,10 @@ const PDV = () => {
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
   const [pendingWeightProduct, setPendingWeightProduct] = useState<Product | null>(null);
   const [manualWeight, setManualWeight] = useState('');
+  const [commandLookupOpen, setCommandLookupOpen] = useState(false);
+  const [commandQueryOpen, setCommandQueryOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+  const [commandLookup, setCommandLookup] = useState<ElectronicCommandLookup | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const { isMobile } = useSidebar();
@@ -340,13 +353,19 @@ const PDV = () => {
       const restoredCart = Array.isArray(parsed?.cart)
         ? parsed.cart
             .filter((item: any) => item?.id && item?.name && Number(item?.quantity) > 0)
-            .map((item: any) => ({
-              ...item,
-              cartItemId: item.cartItemId || makeCartItemId(),
-              price: Number(item.price || 0),
-              quantity: Math.max(1, Number(item.quantity || 1)),
-              available: item.available !== false
-            }))
+            .map((item: any) => {
+              const restoredQuantity = Number(item.quantity);
+
+              return {
+                ...item,
+                cartItemId: item.cartItemId || makeCartItemId(),
+                price: Number(item.price || 0),
+                // Produtos pesáveis usam quantidades fracionárias. Arredondar para
+                // no mínimo 1 alterava tanto o peso quanto o total ao voltar ao PDV.
+                quantity: Number.isFinite(restoredQuantity) && restoredQuantity > 0 ? restoredQuantity : 1,
+                available: item.available !== false
+              };
+            })
         : [];
 
       if (restoredCart.length > 0) setCart(restoredCart);
@@ -367,7 +386,10 @@ const PDV = () => {
           pix: typeof parsed.paymentAmounts.pix === 'string' ? parsed.paymentAmounts.pix : '',
           cartao_credito: typeof parsed.paymentAmounts.cartao_credito === 'string' ? parsed.paymentAmounts.cartao_credito : legacyCardAmount,
           cartao_debito: typeof parsed.paymentAmounts.cartao_debito === 'string' ? parsed.paymentAmounts.cartao_debito : '',
+          cartao_voucher: typeof parsed.paymentAmounts.cartao_voucher === 'string' ? parsed.paymentAmounts.cartao_voucher : '',
+          cartao_outros: typeof parsed.paymentAmounts.cartao_outros === 'string' ? parsed.paymentAmounts.cartao_outros : '',
           dinheiro: typeof parsed.paymentAmounts.dinheiro === 'string' ? parsed.paymentAmounts.dinheiro : '',
+          pagar_depois: '',
         });
       }
       if (typeof parsed?.changeAmount === 'string') setChangeAmount(parsed.changeAmount);
@@ -1285,6 +1307,46 @@ const PDV = () => {
     element.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
+  const lookupElectronicCommand = async (rawValue: string, options?: { restoreInput?: boolean }) => {
+    const rawCode = rawValue.trim();
+    if (!rawCode) {
+      toast({
+        title: 'Informe o código da comanda',
+        description: 'Digite o número ou leia o código de barras da comanda.',
+      });
+      return false;
+    }
+
+    const { data, error } = await (supabase as any).rpc('lookup_electronic_command', {
+      p_code: rawCode,
+    });
+
+    if (error) {
+      toast({
+        title: 'Não foi possível consultar a comanda',
+        description: 'Confira o código e tente novamente.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    if (!data?.found) {
+      toast({
+        title: 'Comanda não cadastrada',
+        description: `Não encontramos uma comanda ativa com o código ${rawCode}.`,
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    if (options?.restoreInput) restoreScannerInputTarget();
+    setCommandLookup(data as ElectronicCommandLookup);
+    setCommandLookupOpen(true);
+    setCommandQueryOpen(false);
+    setCommandQuery('');
+    return true;
+  };
+
   const addProductByScannedCode = async (scannedCode: string) => {
     const rawCode = scannedCode.trim();
     const code = normalizeProductLookupCode(rawCode);
@@ -1296,12 +1358,7 @@ const PDV = () => {
     );
 
     if (!product) {
-      toast({
-        title: 'Produto não encontrado',
-        description: `Nenhum produto cadastrado com o código ${rawCode}.`,
-        variant: 'destructive',
-      });
-      return false;
+      return lookupElectronicCommand(rawCode, { restoreInput: true });
     }
 
     restoreScannerInputTarget();
@@ -1336,7 +1393,7 @@ const PDV = () => {
 
     const handleScannerKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (showVariationModal || weightDialogOpen || cashDialogOpen || adminPinOpen || tefOpen || tableLaunchOpen) return;
+      if (showVariationModal || weightDialogOpen || cashDialogOpen || adminPinOpen || tefOpen || tableLaunchOpen || commandLookupOpen || commandQueryOpen) return;
 
       const now = Date.now();
 
@@ -1371,7 +1428,7 @@ const PDV = () => {
       window.removeEventListener('keydown', handleScannerKeyDown, true);
       clearScannerBuffer();
     };
-  }, [activeTab, adminPinOpen, cashDialogOpen, products, showVariationModal, tableLaunchOpen, tefOpen, weightDialogOpen]);
+  }, [activeTab, adminPinOpen, cashDialogOpen, commandLookupOpen, commandQueryOpen, products, showVariationModal, tableLaunchOpen, tefOpen, weightDialogOpen]);
 
   const makeCartItemId = () => {
     try {
@@ -1581,6 +1638,10 @@ const PDV = () => {
     setChangeAmount('');
     setDiscountAmount('');
     setSurchargeAmount('');
+    setReceivableContactId('');
+    setReceivableContact(null);
+    setReceivableDueDate('');
+    setReceivableNotes('');
     setTefData(null);
     setCardProcessingMode('maquininha');
     setPaymentMethod('pix');
@@ -1942,6 +2003,24 @@ const PDV = () => {
       }
     }
 
+    if (paymentMethod === 'pagar_depois' && !receivableContactId) {
+      toast({
+        title: 'Selecione quem pagará depois',
+        description: 'Escolha um cadastro existente ou crie um novo antes de registrar a conta.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (paymentMethod === 'pagar_depois' && hasManualPaymentSplit()) {
+      toast({
+        title: 'Forma de pagamento incompatível',
+        description: 'O pagamento posterior precisa ser registrado sozinho, sem divisão com outras formas.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const paymentLines = getPaymentLines();
     const paymentPaidTotal = getPaymentPaidTotal();
     const paymentRemaining = getPaymentRemaining();
@@ -2105,6 +2184,14 @@ const PDV = () => {
               amount: Number(line.amount.toFixed(2)),
             })),
           },
+          receivable: paymentMethod === 'pagar_depois'
+            ? {
+                contact_id: receivableContactId,
+                contact_name: receivableContact?.name || resolvedCustomerName,
+                due_date: receivableDueDate || null,
+                notes: receivableNotes.trim() || null,
+              }
+            : null,
           environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
           tef: (paymentMethod === 'cartao_credito' || paymentMethod === 'cartao_debito') && cardProcessingMode === 'tef' ? (tefData || null) : null
         }
@@ -2188,6 +2275,22 @@ const PDV = () => {
       console.log('Pedido criado com sucesso:', data);
 
       const created = Array.isArray(data) ? data[0] : data;
+
+      if (paymentMethod === 'pagar_depois') {
+        const { error: receivableError } = await (supabase as any).rpc('register_pdv_receivable', {
+          p_order_id: created?.id,
+          p_contact_id: receivableContactId,
+          p_due_date: receivableDueDate || null,
+          p_notes: receivableNotes.trim() || null,
+        });
+
+        if (receivableError) {
+          if (created?.id) {
+            await supabase.from('orders').delete().eq('id', created.id).eq('user_id', user?.id);
+          }
+          throw new Error('A venda não foi registrada porque a conta a receber não pôde ser criada.');
+        }
+      }
 
       if (!isCounterPdvSale) {
         try {
@@ -2335,6 +2438,15 @@ const PDV = () => {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setCommandQueryOpen(true)}
+                    className="h-9 shrink-0 rounded-xl border-[#FF6400]/15 bg-white/85 px-3 font-semibold text-[#003223] hover:bg-[#F5EBE1]"
+                  >
+                    <Barcode className="mr-1.5 h-4 w-4" />
+                    <span className="hidden sm:inline">Comanda</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="hidden h-9 rounded-xl whitespace-nowrap border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1] md:inline-flex"
                     disabled={!cashSession?.id}
                     onClick={() => { setCashMoveType('in'); setCashMoveOpen(true); }}
@@ -2350,6 +2462,7 @@ const PDV = () => {
                   >
                     Sangria
                   </Button>
+                  <StaffConsumptionManager />
                 </div>
               </div>
               <div className="space-y-1.5 lg:hidden">
@@ -3082,6 +3195,47 @@ const PDV = () => {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={commandQueryOpen} onOpenChange={setCommandQueryOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Consultar comanda eletrônica</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-xl border border-[#003223]/10 bg-[#F4FAEC] p-3 text-sm text-[#003223]/75">
+              Leia o código de barras ou digite o número impresso na comanda para abrir a conta completa.
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="electronic-command-code">Código da comanda</Label>
+              <Input
+                id="electronic-command-code"
+                autoFocus
+                value={commandQuery}
+                onChange={(event) => setCommandQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return;
+                  event.preventDefault();
+                  void lookupElectronicCommand(commandQuery);
+                }}
+                placeholder="Ex.: 000123"
+                className="h-12 font-mono text-lg tracking-wider"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCommandQueryOpen(false)}>Cancelar</Button>
+            <Button onClick={() => void lookupElectronicCommand(commandQuery)} disabled={!commandQuery.trim()}>
+              Consultar conta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ElectronicCommandDialog
+        open={commandLookupOpen}
+        onOpenChange={setCommandLookupOpen}
+        data={commandLookup}
+      />
+
       <CheckoutModal
         open={checkoutOpen}
         onOpenChange={setCheckoutOpen}
@@ -3106,6 +3260,37 @@ const PDV = () => {
         modeVariant={checkoutSettings.mode}
         cpfValue={orderType === 'counter' ? customerName : ''}
         onCpfChange={orderType === 'counter' ? setCustomerName : undefined}
+        inlineContent={paymentMethod === 'pagar_depois' ? (
+          <div className="space-y-3">
+            <ReceivableContactSelect
+              value={receivableContactId}
+              onChange={(contactId, contact) => {
+                setReceivableContactId(contactId);
+                setReceivableContact(contact || null);
+              }}
+            />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <Label>Vencimento (opcional)</Label>
+                <Input
+                  type="date"
+                  className="mt-1 h-11 bg-white"
+                  value={receivableDueDate}
+                  onChange={(event) => setReceivableDueDate(event.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Observação da conta</Label>
+                <Input
+                  className="mt-1 h-11 bg-white"
+                  placeholder="Ex.: descontar no fim do mês"
+                  value={receivableNotes}
+                  onChange={(event) => setReceivableNotes(event.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
         extraFields={(
           <div className="space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">

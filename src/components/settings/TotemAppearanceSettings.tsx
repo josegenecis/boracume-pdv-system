@@ -16,6 +16,7 @@ type TotemColorKey =
   | 'background_color'
   | 'surface_color'
   | 'text_color'
+  | 'price_color'
   | 'button_text_color'
   | 'idle_overlay_color';
 
@@ -25,7 +26,8 @@ const COLOR_FIELDS: Array<{ key: TotemColorKey; label: string; description: stri
   { key: 'accent_color', label: 'Cor de apoio', description: 'Selos, estados positivos e detalhes' },
   { key: 'background_color', label: 'Fundo do cardápio', description: 'Área geral de produtos e categorias' },
   { key: 'surface_color', label: 'Fundo dos cartões', description: 'Produtos, cabeçalho e barra do pedido' },
-  { key: 'text_color', label: 'Textos principais', description: 'Títulos, produtos e valores' },
+  { key: 'text_color', label: 'Textos principais', description: 'Títulos, nomes de produtos e descrições' },
+  { key: 'price_color', label: 'Cor dos preços', description: 'Valores dos produtos, adicionais e total do pedido' },
   { key: 'button_text_color', label: 'Texto dos botões', description: 'Contraste sobre os botões principais' },
   { key: 'idle_overlay_color', label: 'Proteção dos banners', description: 'Degradê que garante a leitura sobre as imagens' },
 ];
@@ -90,6 +92,7 @@ export default function TotemAppearanceSettings() {
         background_color: normalizeHex(form.background_color, DEFAULT_TOTEM_THEME.background_color),
         surface_color: normalizeHex(form.surface_color, DEFAULT_TOTEM_THEME.surface_color),
         text_color: normalizeHex(form.text_color, DEFAULT_TOTEM_THEME.text_color),
+        price_color: normalizeHex(form.price_color, DEFAULT_TOTEM_THEME.price_color),
         button_text_color: normalizeHex(form.button_text_color, DEFAULT_TOTEM_THEME.button_text_color),
         idle_overlay_color: normalizeHex(form.idle_overlay_color, DEFAULT_TOTEM_THEME.idle_overlay_color),
         cta_text: form.cta_text.trim() || DEFAULT_TOTEM_THEME.cta_text,
@@ -200,7 +203,7 @@ export default function TotemAppearanceSettings() {
               <div className="mt-4 text-xl font-black">Produto em destaque</div>
               <div className="mt-1 text-sm opacity-65">Descrição curta e fácil de ler no autoatendimento.</div>
               <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="text-2xl font-black" style={{ color: form.primary_color }}>R$ 24,90</div>
+                <div className="text-2xl font-black" style={{ color: form.price_color }}>R$ 24,90</div>
                 <button type="button" className="h-12 rounded-xl px-5 font-black" style={{ backgroundColor: form.primary_color, color: form.button_text_color }}>Adicionar</button>
               </div>
             </div>
@@ -209,7 +212,7 @@ export default function TotemAppearanceSettings() {
             </div>
             <div className="mt-5 rounded-2xl p-5" style={{ backgroundColor: form.surface_color }}>
               <div className="text-sm font-bold opacity-60">Total do pedido</div>
-              <div className="mt-1 text-3xl font-black">R$ 24,90</div>
+              <div className="mt-1 text-3xl font-black" style={{ color: form.price_color }}>R$ 24,90</div>
               <button type="button" className="mt-4 h-14 w-full rounded-xl font-black" style={{ backgroundColor: form.primary_color, color: form.button_text_color }}>
                 {form.cta_text || DEFAULT_TOTEM_THEME.cta_text}
               </button>

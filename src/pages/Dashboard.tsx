@@ -297,6 +297,7 @@ const Dashboard = () => {
       .from('expenses')
       .select('amount')
       .eq('user_id', user?.id)
+      .eq('is_active', true)
       .gte('expense_date', firstDayOfMonth);
 
     const monthlyExpenses = (expenses || []).reduce((sum: number, exp: any) => sum + Number(exp.amount || 0), 0);
@@ -403,6 +404,7 @@ const Dashboard = () => {
         .from('expenses')
         .select('*')
         .eq('user_id', user.id)
+        .eq('is_active', true)
         .limit(500),
       (supabase as any)
         .from('waiters')

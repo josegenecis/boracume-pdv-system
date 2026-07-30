@@ -294,7 +294,10 @@ const WaiterDashboard = () => {
   if (!waiterSession) return null;
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_40%,#072C1F_100%)] pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-white">
+    <div
+      data-testid="waiter-tables-scroll"
+      className="h-[100dvh] w-full touch-pan-y overflow-x-hidden overflow-y-auto overscroll-y-contain bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_40%,#072C1F_100%)] pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-white [-webkit-overflow-scrolling:touch]"
+    >
       <div className="mx-auto w-full min-w-0 max-w-[430px] px-4 py-3 sm:max-w-3xl sm:px-6 lg:max-w-6xl lg:px-8">
         <div className="flex justify-end">
           <Button

@@ -5,6 +5,7 @@ export interface TotemThemeSettings {
   background_color: string;
   surface_color: string;
   text_color: string;
+  price_color: string;
   button_text_color: string;
   idle_overlay_color: string;
   cta_text: string;
@@ -33,9 +34,9 @@ export const DEFAULT_TOTEM_THEME: TotemThemeSettings = {
   background_color: '#FBF7EF',
   surface_color: '#FFFFFF',
   text_color: '#1C1917',
+  price_color: '#EF6C20',
   button_text_color: '#FFFFFF',
   idle_overlay_color: '#05271F',
   cta_text: 'Toque para pedir',
   banner_interval_seconds: 7,
 };
-

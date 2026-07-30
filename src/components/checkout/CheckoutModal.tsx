@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Banknote, ChevronDown, CreditCard, QrCode, Split, X } from 'lucide-react';
+import { Banknote, ChevronDown, Clock3, CreditCard, QrCode, Split, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,8 @@ export type CheckoutPaymentMethod =
   | 'cartao_debito'
   | 'cartao_voucher'
   | 'cartao_outros'
-  | 'dinheiro';
+  | 'dinheiro'
+  | 'pagar_depois';
 
 export type CheckoutPaymentAmounts = Partial<Record<CheckoutPaymentMethod, string>>;
 
@@ -25,7 +26,10 @@ const PAYMENT_OPTIONS: Array<{ value: CheckoutPaymentMethod; label: string }> = 
   { value: 'cartao_voucher', label: 'Voucher' },
   { value: 'cartao_outros', label: 'Outros' },
   { value: 'dinheiro', label: 'Dinheiro' },
+  { value: 'pagar_depois', label: 'Pagar depois' },
 ];
+
+const SPLIT_PAYMENT_OPTIONS = PAYMENT_OPTIONS.filter((option) => option.value !== 'pagar_depois');
 
 const CARD_OPTIONS: Array<{ value: CheckoutPaymentMethod; label: string }> = [
   { value: 'cartao_credito', label: 'Crédito' },
@@ -55,7 +59,7 @@ const parsePaymentValue = (value: string | number | null | undefined) => {
 const normalizeSplitMethods = (methods: CheckoutPaymentMethod[]) => {
   const unique = methods.filter((method, index, list) => list.indexOf(method) === index);
 
-  for (const option of PAYMENT_OPTIONS) {
+  for (const option of SPLIT_PAYMENT_OPTIONS) {
     if (unique.length >= 2) break;
     if (!unique.includes(option.value)) unique.push(option.value);
   }
@@ -151,7 +155,7 @@ export function CheckoutModal({
   }
 
   function openSplitMode() {
-    const activeMethods = PAYMENT_OPTIONS
+    const activeMethods = SPLIT_PAYMENT_OPTIONS
       .filter((option) => parsePaymentValue(paymentAmounts[option.value] || '') > 0.009)
       .map((option) => option.value);
 
@@ -247,7 +251,7 @@ export function CheckoutModal({
 
   const addSplitMethod = () => {
     const currentMethods = normalizeSplitMethods(splitMethods);
-    const next = PAYMENT_OPTIONS.find((option) => !currentMethods.includes(option.value));
+    const next = SPLIT_PAYMENT_OPTIONS.find((option) => !currentMethods.includes(option.value));
     if (!next) return;
     setSplitMethods([...currentMethods, next.value]);
     onPaymentAmountChange(next.value, remaining > 0.009 ? formatCurrency(remaining) : '');
@@ -292,6 +296,7 @@ export function CheckoutModal({
                 onCard={() => setCardDialogOpen(true)}
                 onCash={() => selectSinglePayment('dinheiro', 'cash')}
                 onSplit={openSplitMode}
+                onDeferred={() => selectSinglePayment('pagar_depois', 'main')}
               />
             )}
 
@@ -373,7 +378,13 @@ export function CheckoutModal({
           <FooterActions
             canConfirm={canConfirm}
             processing={processing}
-            label={confirmLabel || (paymentMethod === 'pix' && mode === 'pix' ? 'Gerar QR Code' : `Confirmar ${formatCurrency(total)}`)}
+            label={confirmLabel || (
+              paymentMethod === 'pix' && mode === 'pix'
+                ? 'Gerar QR Code'
+                : paymentMethod === 'pagar_depois'
+                  ? `Registrar conta de ${formatCurrency(total)}`
+                  : `Confirmar ${formatCurrency(total)}`
+            )}
             onBack={goBack}
             onConfirm={onConfirm}
           />
@@ -421,11 +432,13 @@ function PaymentSelector({
   onCard,
   onCash,
   onSplit,
+  onDeferred,
 }: {
   onPix: () => void;
   onCard: () => void;
   onCash: () => void;
   onSplit: () => void;
+  onDeferred: () => void;
 }) {
   const buttonClass = 'h-16 rounded-2xl text-base font-black shadow-sm';
   return (
@@ -445,6 +458,14 @@ function PaymentSelector({
       <Button variant="outline" className={`${buttonClass} border-[#003223]/15 bg-white text-[#003223]`} onClick={onSplit}>
         <Split className="mr-2 h-5 w-5" />
         Dividir
+      </Button>
+      <Button
+        variant="outline"
+        className={`${buttonClass} col-span-2 border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100`}
+        onClick={onDeferred}
+      >
+        <Clock3 className="mr-2 h-5 w-5" />
+        Pagar depois
       </Button>
     </div>
   );
@@ -567,7 +588,7 @@ function SplitPayment({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PAYMENT_OPTIONS.map((item) => (
+                  {SPLIT_PAYMENT_OPTIONS.map((item) => (
                     <SelectItem
                       key={item.value}
                       value={item.value}

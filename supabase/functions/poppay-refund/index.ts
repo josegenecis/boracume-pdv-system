@@ -167,6 +167,12 @@ Deno.serve(async (req) => {
     if (!providerResponse.ok) {
       await supabase.from('poppay_refunds').update({ status: 'failed', provider_response: providerJson, updated_at: new Date().toISOString() }).eq('id', refundRow.id)
       await supabase.from('pix_checkouts').update({ refund_status: 'failed', updated_at: new Date().toISOString() }).eq('id', checkout.id)
+      await supabase
+        .from('finance_sale_cancellations')
+        .update({ refund_status: 'failed' })
+        .eq('user_id', userId)
+        .eq('order_id', orderId)
+        .eq('refund_requested', true)
       return response({ ok: false, error: 'refund_failed', message: String(providerJson?.message || providerJson?.error || 'O Mercado Pago recusou o reembolso.'), details: providerJson }, 409)
     }
 
@@ -185,6 +191,12 @@ Deno.serve(async (req) => {
       refunded_cents: refundStatus === 'approved' ? Number(checkout.amount_cents) : 0,
       updated_at: new Date().toISOString(),
     }).eq('id', checkout.id)
+    await supabase
+      .from('finance_sale_cancellations')
+      .update({ refund_status: refundStatus })
+      .eq('user_id', userId)
+      .eq('order_id', orderId)
+      .eq('refund_requested', true)
 
     return response({
       ok: true,

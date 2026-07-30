@@ -366,6 +366,67 @@ const createServiceClient = async (supabaseUrl: string) => {
   return { client: null, error: 'invalid_service_key' }
 }
 
+const authorizeFinancialCancellation = async (
+  supabase: any,
+  order: any,
+  userId: string,
+  payload: any,
+) => {
+  const reason = String(payload?.reason || '').trim()
+  const adminPin = String(payload?.adminPin || '').trim()
+  if (!reason) return { ok: false, error: 'cancellation_reason_required' }
+  if (!adminPin) return { ok: false, error: 'admin_pin_required' }
+
+  const { data: openSession, error: sessionError } = await supabase
+    .from('cash_register_sessions')
+    .select('id, opened_at, status')
+    .eq('user_id', userId)
+    .eq('status', 'open')
+    .order('opened_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (sessionError) {
+    return { ok: false, error: 'db_error', details: errInfo(sessionError) }
+  }
+  if (!openSession?.id) return { ok: false, error: 'open_cash_required' }
+
+  const linkedSessionId = String(order?.cash_register_session_id || '')
+  const belongsToOpenSession = linkedSessionId
+    ? linkedSessionId === String(openSession.id)
+    : new Date(order?.created_at || 0).getTime() >= new Date(openSession.opened_at).getTime()
+
+  if (!belongsToOpenSession) {
+    return { ok: false, error: 'historical_sale_cancellation_blocked' }
+  }
+
+  const { data: matchingWaiters, error: waiterError } = await supabase
+    .from('waiters')
+    .select('id, name, role, permissions, active')
+    .eq('user_id', userId)
+    .eq('active', true)
+    .eq('pin', adminPin)
+    .limit(10)
+
+  if (waiterError) {
+    return { ok: false, error: 'db_error', details: errInfo(waiterError) }
+  }
+
+  const administrator = (matchingWaiters || []).find((waiter: any) => (
+    String(waiter?.role || '').toLowerCase() === 'admin' ||
+    waiter?.permissions?.admin === true
+  ))
+  if (!administrator?.id) return { ok: false, error: 'invalid_admin_pin' }
+
+  return {
+    ok: true,
+    reason,
+    sessionId: String(openSession.id),
+    administrator,
+    refundRequested: payload?.refundRequested === true,
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -411,6 +472,17 @@ Deno.serve(async (req: Request) => {
       return ok({ ok: false, error: 'forbidden' })
     }
 
+    let financialAuthorization: any = null
+    if (newStatus === 'cancelled' && body?.financialCancellation) {
+      financialAuthorization = await authorizeFinancialCancellation(
+        supabase,
+        order,
+        userId,
+        body.financialCancellation,
+      )
+      if (!financialAuthorization?.ok) return ok(financialAuthorization)
+    }
+
     const alreadyApplied =
       String(order.status || '') === newStatus &&
       (newStatus !== 'preparing' || String(order.acceptance_status || '') === 'accepted') &&
@@ -452,6 +524,38 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (updateErr) return ok({ ok: false, error: 'db_error', details: errInfo(updateErr) })
+
+    if (financialAuthorization?.ok) {
+      const { error: auditError } = await supabase
+        .from('finance_sale_cancellations')
+        .insert({
+          user_id: userId,
+          order_id: order.id,
+          cash_register_session_id: financialAuthorization.sessionId,
+          original_status: String(order.status || ''),
+          order_snapshot: order,
+          amount: Number(order.total || 0),
+          payment_method: String(order.payment_method || ''),
+          reason: financialAuthorization.reason,
+          authorized_waiter_id: financialAuthorization.administrator.id,
+          authorized_waiter_name: financialAuthorization.administrator.name,
+          created_by: authenticatedUserId,
+          refund_requested: financialAuthorization.refundRequested,
+          refund_status: financialAuthorization.refundRequested ? 'pending' : 'not_requested',
+          operation_id: operationId,
+        })
+
+      if (auditError && String(auditError?.code || '') !== '23505') {
+        await supabase
+          .from('orders')
+          .update({
+            status: order.status,
+            acceptance_status: order.acceptance_status,
+          })
+          .eq('id', orderId)
+        return ok({ ok: false, error: 'cancellation_audit_failed', details: errInfo(auditError) })
+      }
+    }
 
     let stockResult: any = null
     if (['preparing', 'ready', 'in_delivery', 'delivered', 'completed'].includes(newStatus)) {

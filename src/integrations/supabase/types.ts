@@ -1391,6 +1391,7 @@ export type Database = {
           created_at: string
           cta_text: string
           idle_overlay_color: string
+          price_color: string
           primary_color: string
           secondary_color: string
           surface_color: string
@@ -1406,6 +1407,7 @@ export type Database = {
           created_at?: string
           cta_text?: string
           idle_overlay_color?: string
+          price_color?: string
           primary_color?: string
           secondary_color?: string
           surface_color?: string
@@ -1421,6 +1423,7 @@ export type Database = {
           created_at?: string
           cta_text?: string
           idle_overlay_color?: string
+          price_color?: string
           primary_color?: string
           secondary_color?: string
           surface_color?: string

@@ -509,8 +509,13 @@ const GlobalNotificationSystem: React.FC = () => {
   return (
     <div
       className={`fixed left-1/2 top-3 z-50 w-[calc(100vw-1.25rem)] max-w-[22rem] -translate-x-1/2 transition-all duration-300 sm:left-auto sm:right-4 sm:top-4 sm:w-full sm:translate-x-0 ${isAnimatingOut ? '-translate-y-6 opacity-0' : 'translate-y-0 opacity-100'}`}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
     >
-      <Card className="border border-gray-200/90 bg-white/95 shadow-[0_22px_42px_-28px_rgba(15,23,42,0.55)] backdrop-blur">
+      <Card
+        className="border border-gray-200/90 bg-white/95 shadow-[0_22px_42px_-28px_rgba(15,23,42,0.55)] backdrop-blur"
+        role="status"
+      >
         <CardContent className="p-3 sm:p-4">
           <div className="mb-2.5 flex items-start justify-between">
             <div className="flex items-center gap-2">
@@ -531,7 +536,10 @@ const GlobalNotificationSystem: React.FC = () => {
 
           <div className="mb-3 max-h-56 space-y-2 overflow-y-auto sm:max-h-64">
             {visibleOrders.slice(0, 3).map((order) => (
-              <div key={order.id} className="flex items-center justify-between rounded-xl border bg-white px-2.5 py-2">
+              <div
+                key={order.id}
+                className="pointer-events-none flex items-center justify-between rounded-xl border bg-white px-2.5 py-2"
+              >
                 <div className="flex items-center gap-2">
                   {getOrderTypeIcon(order.order_type)}
                   <div>

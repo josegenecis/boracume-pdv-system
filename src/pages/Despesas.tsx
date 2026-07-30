@@ -18,6 +18,7 @@ import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { parseBRL } from '@/lib/currency';
 import { useLocation } from 'react-router-dom';
 import { friendlyErrorMessage } from '@/lib/friendly-error';
+import { ReverseExpenseDialog } from '@/components/finance/ReverseExpenseDialog';
 
 interface Expense {
   id: string;
@@ -32,6 +33,8 @@ interface Expense {
   reversed_at?: string | null;
   reversal_reason?: string | null;
   reversed_by?: string | null;
+  reversed_by_waiter_id?: string | null;
+  reversed_by_name?: string | null;
 }
 
 interface SmartInvoiceItem {
@@ -90,7 +93,7 @@ export default function Despesas() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [showReversed, setShowReversed] = useState(false);
+  const [expenseToReverse, setExpenseToReverse] = useState<Expense | null>(null);
   
   // Form states
   const [description, setDescription] = useState('');
@@ -118,7 +121,7 @@ export default function Despesas() {
 
   useEffect(() => {
     filterExpenses();
-  }, [expenses, searchTerm, selectedCategory, dateFrom, dateTo, showReversed]);
+  }, [expenses, searchTerm, selectedCategory, dateFrom, dateTo]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -156,10 +159,7 @@ export default function Despesas() {
   };
 
   const filterExpenses = () => {
-    let filtered = expenses;
-    if (!showReversed) {
-      filtered = filtered.filter((exp) => exp.is_active !== false);
-    }
+    let filtered = expenses.filter((exp) => exp.is_active !== false);
 
     if (searchTerm) {
       filtered = filtered.filter(exp => 
@@ -182,20 +182,15 @@ export default function Despesas() {
     setFilteredExpenses(filtered);
   };
 
-  const reverseExpense = async (expense: Expense) => {
-    const reason = window.prompt('Motivo do estorno (opcional):') || '';
+  const reverseExpense = async (pin: string, reason: string) => {
+    if (!expenseToReverse) return false;
     try {
-      if (!user?.id) return;
-      const { error } = await supabase
-        .from('expenses')
-        .update({
-          is_active: false,
-          reversed_at: new Date().toISOString(),
-          reversal_reason: reason.trim() || null,
-          reversed_by: user.id
-        })
-        .eq('id', expense.id)
-        .eq('user_id', user.id);
+      if (!user?.id) return false;
+      const { error } = await (supabase as any).rpc('reverse_expense_authorized', {
+        p_expense_id: expenseToReverse.id,
+        p_reason: reason,
+        p_admin_pin: pin,
+      });
 
       if (error) {
         toast({
@@ -203,20 +198,23 @@ export default function Despesas() {
           description: friendlyErrorMessage(error, 'Não foi possível estornar esta despesa.'),
           variant: 'destructive'
         });
-        return;
+        return false;
       }
 
       toast({
-        title: 'Estornado',
-        description: 'Lançamento estornado com sucesso.'
+        title: 'Despesa estornada',
+        description: 'O lançamento saiu dos totais e foi preservado no histórico de estornos.'
       });
-      loadExpenses();
+      setExpenseToReverse(null);
+      await loadExpenses();
+      return true;
     } catch (err: any) {
       toast({
         title: 'Erro ao estornar',
         description: friendlyErrorMessage(err, 'Não foi possível estornar esta despesa.'),
         variant: 'destructive'
       });
+      return false;
     }
   };
 
@@ -518,6 +516,13 @@ export default function Despesas() {
 
   const totalForCategoryShare = Math.max(getTotalExpenses(), 1);
   const smartInvoiceTotal = smartInvoiceItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
+  const reversedExpenses = expenses
+    .filter((expense) => expense.is_active === false)
+    .filter((expense) => !searchTerm || expense.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    .filter((expense) => !selectedCategory || expense.category === selectedCategory)
+    .filter((expense) => !dateFrom || getExpenseDateKey(expense) >= dateFrom)
+    .filter((expense) => !dateTo || getExpenseDateKey(expense) <= dateTo)
+    .sort((a, b) => new Date(b.reversed_at || b.created_at).getTime() - new Date(a.reversed_at || a.created_at).getTime());
 
   if (loading) {
     return (
@@ -849,10 +854,6 @@ export default function Despesas() {
           <CardTitle>Filtros</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm font-medium">Mostrar estornadas</div>
-            <Switch checked={showReversed} onCheckedChange={setShowReversed} />
-          </div>
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="searchExpenses">Pesquisar</Label>
@@ -909,7 +910,7 @@ export default function Despesas() {
       </Card>
 
       <Tabs defaultValue="lancamentos" className="space-y-4">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-2xl grid-cols-3">
           <TabsTrigger value="lancamentos" className="gap-2">
             <FileText className="h-4 w-4" />
             Lançamentos
@@ -917,6 +918,10 @@ export default function Despesas() {
           <TabsTrigger value="categorias" className="gap-2">
             <Tags className="h-4 w-4" />
             Por categoria
+          </TabsTrigger>
+          <TabsTrigger value="estornos" className="gap-2">
+            <Undo2 className="h-4 w-4" />
+            Histórico de estornos
           </TabsTrigger>
         </TabsList>
 
@@ -970,14 +975,10 @@ export default function Despesas() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            {expense.is_active === false ? (
-                              <Badge variant="secondary">Estornado</Badge>
-                            ) : (
-                              <Button variant="outline" size="sm" onClick={() => reverseExpense(expense)}>
-                                <Undo2 className="h-3 w-3 mr-1" />
-                                Estornar
-                              </Button>
-                            )}
+                            <Button variant="outline" size="sm" onClick={() => setExpenseToReverse(expense)}>
+                              <Undo2 className="h-3 w-3 mr-1" />
+                              Estornar
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1051,7 +1052,73 @@ export default function Despesas() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="estornos">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Undo2 className="h-5 w-5" />
+                Histórico de estornos ({reversedExpenses.length})
+              </CardTitle>
+              <CardDescription>
+                Registro permanente de despesas retiradas dos totais, com motivo, responsável e horário.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {reversedExpenses.length === 0 ? (
+                <div className="rounded-2xl border border-dashed py-10 text-center text-muted-foreground">
+                  <PackageCheck className="mx-auto mb-2 h-10 w-10 opacity-50" />
+                  <p>Nenhum estorno encontrado para os filtros selecionados.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Despesa original</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Estornada em</TableHead>
+                        <TableHead>Responsável</TableHead>
+                        <TableHead>Motivo</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {reversedExpenses.map((expense) => (
+                        <TableRow key={expense.id}>
+                          <TableCell>
+                            <div className="font-medium">{expense.description}</div>
+                            <div className="text-xs text-muted-foreground">
+                              Lançada em {formatDate(getExpenseDateKey(expense))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-semibold">{formatCurrency(expense.amount)}</TableCell>
+                          <TableCell>
+                            {expense.reversed_at
+                              ? format(new Date(expense.reversed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+                              : 'Data não registrada'}
+                          </TableCell>
+                          <TableCell>{expense.reversed_by_name || 'Administrador'}</TableCell>
+                          <TableCell className="max-w-[360px] whitespace-normal">
+                            {expense.reversal_reason || 'Motivo não registrado em lançamento antigo'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <ReverseExpenseDialog
+        open={Boolean(expenseToReverse)}
+        description={expenseToReverse?.description}
+        amountLabel={expenseToReverse ? formatCurrency(expenseToReverse.amount) : undefined}
+        onCancel={() => setExpenseToReverse(null)}
+        onConfirm={reverseExpense}
+      />
     </div>
   );
 }

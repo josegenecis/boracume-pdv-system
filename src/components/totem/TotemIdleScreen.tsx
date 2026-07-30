@@ -198,7 +198,7 @@ export default function TotemIdleScreen({
             <div className="totem-idle-eyebrow mb-3 text-sm font-black uppercase tracking-[.22em]" style={{ color: settings.accent_color }}>{slide.eyebrow}</div>
             <h1 className="totem-idle-title text-4xl font-black leading-[.98] drop-shadow-2xl">{slide.title}</h1>
             <p className="totem-idle-description mt-4 max-w-2xl text-base font-semibold leading-relaxed text-white/85">{slide.description}</p>
-            {slide.price !== undefined ? <div className="totem-idle-price mt-4 text-3xl font-black" style={{ color: settings.primary_color }}>A partir de {formatBRL(slide.price)}</div> : null}
+            {slide.price !== undefined ? <div className="totem-idle-price mt-4 text-3xl font-black" style={{ color: settings.price_color }}>A partir de {formatBRL(slide.price)}</div> : null}
           </div>
 
           <div className="totem-idle-action pointer-events-auto mt-8">

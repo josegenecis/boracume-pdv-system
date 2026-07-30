@@ -69,7 +69,8 @@ export function AgentDashboard() {
       const { data: expenses, error: expensesError } = await supabase
         .from('expenses')
         .select('amount, expense_date')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('is_active', true);
 
       if (expensesError) throw expensesError;
 

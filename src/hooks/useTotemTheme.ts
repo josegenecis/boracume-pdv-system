@@ -52,10 +52,11 @@ export function useTotemTheme(restaurantId: string) {
     '--totem-background': settings.background_color,
     '--totem-surface': settings.surface_color,
     '--totem-text': settings.text_color,
+    '--totem-price': settings.price_color,
     '--totem-button-text': settings.button_text_color,
     '--totem-idle-overlay': settings.idle_overlay_color,
     '--menu-primary': settings.primary_color,
-    '--menu-price': settings.primary_color,
+    '--menu-price': settings.price_color,
   }), [settings]);
 
   useEffect(() => {

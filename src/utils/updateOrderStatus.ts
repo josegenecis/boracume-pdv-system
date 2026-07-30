@@ -6,6 +6,11 @@ export const updateOrderStatus = async (
   options?: {
     ifoodCancellationCode?: string
     ifoodCancellationReason?: string
+    financialCancellation?: {
+      reason: string
+      adminPin: string
+      refundRequested?: boolean
+    }
   }
 ) => {
   const operationId =
@@ -43,7 +48,17 @@ export const updateOrderStatus = async (
 
   if (!data?.ok || !data?.order) {
     const detailsMsg = data?.details?.message ? `: ${data.details.message}` : ''
-    throw new Error(`${data?.error || 'edge_function_error'}${detailsMsg}`)
+    const friendlyMessages: Record<string, string> = {
+      cancellation_reason_required: 'Informe o motivo do cancelamento.',
+      admin_pin_required: 'Informe a senha/PIN do administrador.',
+      invalid_admin_pin: 'Senha/PIN inválido ou operador sem permissão de administrador.',
+      open_cash_required: 'Abra o caixa antes de cancelar uma venda.',
+      historical_sale_cancellation_blocked:
+        'Esta venda pertence a um caixa anterior e não pode mais ser cancelada pela operação diária.',
+      cancellation_audit_failed:
+        'O cancelamento não foi concluído porque o histórico de auditoria não pôde ser registrado.',
+    }
+    throw new Error(friendlyMessages[String(data?.error || '')] || `${data?.error || 'edge_function_error'}${detailsMsg}`)
   }
 
   return {

@@ -652,6 +652,18 @@ async function getSessionSnapshot(supabase: any, sessionId: string) {
   if (accountError) throw accountError
 
   const accountIds = (accountRows ?? []).map((row: any) => row.id)
+  const commandIds = (accountRows ?? [])
+    .map((row: any) => row.electronic_command_id)
+    .filter(Boolean)
+
+  const { data: commandRows, error: commandError } = commandIds.length
+    ? await supabase
+        .from('electronic_commands')
+        .select('id,code,label')
+        .in('id', commandIds)
+    : { data: [], error: null }
+
+  if (commandError) throw commandError
 
   const { data: itemRows, error: itemError } = accountIds.length
     ? await supabase
@@ -695,6 +707,7 @@ async function getSessionSnapshot(supabase: any, sessionId: string) {
     sessionRow,
     tableRow,
     accountRows: accountRows ?? [],
+    commandRows: commandRows ?? [],
     itemRows: itemRows ?? [],
     optionRows: optionRows ?? [],
     paymentRows: paymentRows ?? [],
@@ -704,6 +717,7 @@ async function getSessionSnapshot(supabase: any, sessionId: string) {
 
 function buildSessionMetrics(snapshot: Awaited<ReturnType<typeof getSessionSnapshot>>) {
   const optionsMap = buildOptionsMap(snapshot.optionRows)
+  const commandsById = new Map(snapshot.commandRows.map((row: any) => [row.id, row]))
   const ordersById = new Map<string, any>()
   const ordersByAccount = new Map<string, any[]>()
   const itemsByAccount = new Map<string, any[]>()
@@ -799,6 +813,8 @@ function buildSessionMetrics(snapshot: Awaited<ReturnType<typeof getSessionSnaps
       name: row.name || `Conta ${row.account_number ?? 1}`,
       notes: '',
       accountNumber: Number(row.account_number ?? 0),
+      commandCode: row.electronic_command_id ? commandsById.get(row.electronic_command_id)?.code ?? null : null,
+      commandLabel: row.electronic_command_id ? commandsById.get(row.electronic_command_id)?.label ?? null : null,
       total,
       paidTotal,
       dueAmount,
@@ -1865,7 +1881,37 @@ Deno.serve(async (req: Request) => {
     if (action === 'create_account') {
       const sessionId = String(body?.sessionId || '')
       const name = String(body?.name || '').trim()
+      const commandCode = String(body?.commandCode || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '')
       if (!sessionId || !name) return fail('Informe o nome da comanda.', 400)
+
+      let electronicCommandId: string | null = null
+      if (commandCode) {
+        const { data: commandRow, error: commandError } = await supabase
+          .from('electronic_commands')
+          .upsert(
+            {
+              user_id: waiterSession.profile.restaurantId,
+              code: commandCode,
+              active: true,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id,code' },
+          )
+          .select('id')
+          .single()
+        if (commandError) throw commandError
+        electronicCommandId = commandRow.id
+
+        const { data: occupiedAccount, error: occupiedError } = await supabase
+          .from('table_accounts')
+          .select('id')
+          .eq('electronic_command_id', electronicCommandId)
+          .in('status', ['open', 'payment_pending'])
+          .is('closed_at', null)
+          .maybeSingle()
+        if (occupiedError) throw occupiedError
+        if (occupiedAccount) return fail('Esta comanda já está vinculada a outra conta aberta.', 409)
+      }
 
       const nextNumber = await getNextAccountNumber(supabase, sessionId)
       const { error } = await supabase.from('table_accounts').insert({
@@ -1879,6 +1925,7 @@ Deno.serve(async (req: Request) => {
         opened_by_waiter_id: waiterSession.profile.id,
         opened_at: new Date().toISOString(),
         items: [],
+        electronic_command_id: electronicCommandId,
       })
 
       if (error) throw error
@@ -1890,19 +1937,50 @@ Deno.serve(async (req: Request) => {
     if (action === 'rename_account') {
       const accountId = String(body?.accountId || '')
       const name = String(body?.name || '').trim()
+      const commandCode = String(body?.commandCode || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '')
       if (!accountId || !name) return fail('Informe um nome valido.', 400)
 
       const { data: accountRow, error: accountError } = await supabase
         .from('table_accounts')
-        .select('id, session_id')
+        .select('id, session_id, electronic_command_id')
         .eq('id', accountId)
         .single()
 
       if (accountError) throw accountError
 
+      let electronicCommandId: string | null = null
+      if (commandCode) {
+        const { data: commandRow, error: commandError } = await supabase
+          .from('electronic_commands')
+          .upsert(
+            {
+              user_id: waiterSession.profile.restaurantId,
+              code: commandCode,
+              active: true,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id,code' },
+          )
+          .select('id')
+          .single()
+        if (commandError) throw commandError
+        electronicCommandId = commandRow.id
+
+        const { data: occupiedAccount, error: occupiedError } = await supabase
+          .from('table_accounts')
+          .select('id')
+          .eq('electronic_command_id', electronicCommandId)
+          .neq('id', accountId)
+          .in('status', ['open', 'payment_pending'])
+          .is('closed_at', null)
+          .maybeSingle()
+        if (occupiedError) throw occupiedError
+        if (occupiedAccount) return fail('Esta comanda já está vinculada a outra conta aberta.', 409)
+      }
+
       const { error } = await supabase
         .from('table_accounts')
-        .update({ name })
+        .update({ name, electronic_command_id: electronicCommandId })
         .eq('id', accountId)
 
       if (error) throw error

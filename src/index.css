@@ -11,14 +11,25 @@
 @tailwind components;
 @tailwind utilities;
 
-html.waiter-app-active,
+html.waiter-app-active {
+  height: 100%;
+  overflow: hidden;
+}
+
 body.waiter-app-active {
+  height: 100%;
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: none;
-  touch-action: manipulation;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   -webkit-text-size-adjust: 100%;
+}
+
+body.waiter-app-active #root {
+  min-height: 100%;
 }
 
 @layer base {
