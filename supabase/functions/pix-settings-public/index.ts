@@ -77,7 +77,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     const { data, error } = await supabase
       .from('pix_settings')
-      .select('enabled, bank, pix_key, merchant_name, merchant_city')
+      .select('enabled, bank, pix_key, merchant_name, merchant_city, client_id, mp_access_token, mp_refresh_token')
       .eq('user_id', userId)
       .maybeSingle()
 
@@ -96,7 +96,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .eq('user_id', userId)
       .maybeSingle()
     const popPayConnection = await recoverPublicKey(userId, storedPopPayConnection)
-    const hasOnlineCredentials = popPayConnection?.status === 'connected' && popPayConnection?.enabled === true
+    const hasPopPayCredentials = popPayConnection?.status === 'connected' && popPayConnection?.enabled === true
+    // Mantém o PIX das lojas já conectadas antes da migração para o PopPay.
+    // O pix-start-checkout seleciona o PopPay no servidor quando disponível e
+    // usa estas credenciais legadas apenas como fallback seguro.
+    const hasLegacyPixCredentials = Boolean(
+      data.mp_access_token ||
+      data.client_id ||
+      data.mp_refresh_token
+    )
+    const hasOnlineCredentials = hasPopPayCredentials || hasLegacyPixCredentials
     const publicSettings = {
       enabled: Boolean(data.enabled),
       bank: data.bank || 'mercadopago',
@@ -109,10 +118,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       ok: true,
       settings: publicSettings,
       onlineCheckoutAvailable: Boolean(data.enabled) && isMercadoPago && hasOnlineCredentials,
-      cardOnlineAvailable: hasOnlineCredentials &&
+      cardOnlineAvailable: hasPopPayCredentials &&
         popPayConnection?.credit_online_enabled === true &&
         Boolean(popPayConnection?.public_key),
-      mercadoPagoPublicKey: hasOnlineCredentials &&
+      mercadoPagoPublicKey: hasPopPayCredentials &&
         popPayConnection?.credit_online_enabled === true
         ? String(popPayConnection?.public_key || '')
         : null,
