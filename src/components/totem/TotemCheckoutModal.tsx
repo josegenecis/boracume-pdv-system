@@ -166,7 +166,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
         restaurantUserId: userId,
         orderPayload: orderData,
         preferredMethod: 'pix'
-      });
+      }, { allowAnonymous: true });
 
       if (!data) {
         throw new Error(`Erro na conexão com checkout (HTTP ${status})`);

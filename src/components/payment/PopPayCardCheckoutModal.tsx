@@ -178,7 +178,7 @@ export default function PopPayCardCheckoutModal({
                     identification: formData?.payer?.identification,
                   },
                   installments: 1,
-                }, { timeoutMs: 90000 });
+                }, { timeoutMs: 90000, allowAnonymous: true });
 
                 if (status >= 400 || !data?.ok) {
                   throw new Error(String(data?.message || data?.error || 'O pagamento não foi aprovado.'));

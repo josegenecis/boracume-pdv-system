@@ -426,7 +426,10 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   useEffect(() => {
     const fetchPixOnlineAvailability = async () => {
       try {
-        const { data } = await invokeEdgeFunction('pix-settings-public', { userId }, { timeoutMs: 20000 });
+        const { data } = await invokeEdgeFunction('pix-settings-public', { userId }, {
+          timeoutMs: 20000,
+          allowAnonymous: true,
+        });
 
         if (!data?.ok) {
           setPixOnlineCheckoutAvailable(null);
@@ -502,7 +505,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           lat: hasGps ? location.latitude : undefined,
           lng: hasGps ? location.longitude : undefined,
           cartTotal: total
-        }, { timeoutMs: 8000 });
+        }, { timeoutMs: 8000, allowAnonymous: true });
 
         if (data?.ok) {
           setDeliveryQuote(data);
@@ -837,7 +840,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       orderPayload: orderData,
       preferredMethod: 'pix',
       useCheckoutPro: false
-    }, { timeoutMs: 60000 });
+    }, { timeoutMs: 60000, allowAnonymous: true });
 
     if (!data) throw new Error(`Erro na conexão com checkout (HTTP ${status})`);
     if (!data.ok) {

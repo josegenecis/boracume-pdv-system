@@ -1,20 +1,31 @@
 import { supabase, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from '@/integrations/supabase/client'
 
-export const invokeEdgeFunction = async (
+type InvokeEdgeFunctionOptions = {
+  timeoutMs?: number
+  authToken?: string | null
+  /**
+   * Use somente em Edge Functions projetadas para acesso público e publicadas
+   * com verify_jwt = false.
+   */
+  allowAnonymous?: boolean
+}
+
+export const invokeEdgeFunction = async <T = any>(
   functionName: string,
   body: unknown,
-  options?: { timeoutMs?: number; authToken?: string | null }
-): Promise<{ data: any | null; status: number }> => {
+  options?: InvokeEdgeFunctionOptions
+): Promise<{ data: T | null; status: number }> => {
   const functionPath = functionName.replace(/^\/+|\/+$/g, '');
   
   console.log(`[EdgeFunction] Invoking ${functionPath}...`);
   const startTime = Date.now();
 
   try {
+    const allowAnonymous = options?.allowAnonymous === true
     let authToken = String(options?.authToken || '').trim();
     let authFailure = '';
     try {
-      if (!authToken) {
+      if (!authToken && !allowAnonymous) {
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) authFailure = sessionError.message;
         let session = sessionData?.session || null;
@@ -30,6 +41,12 @@ export const invokeEdgeFunction = async (
       }
     } catch (error: any) {
       authFailure = String(error?.message || error || '');
+    }
+
+    // A chave anônima identifica o projeto sem exigir que o consumidor final
+    // possua uma conta no PopSystem.
+    if (!authToken && allowAnonymous) {
+      authToken = SUPABASE_PUBLISHABLE_KEY
     }
 
     if (!authToken) {
@@ -88,7 +105,7 @@ export const invokeEdgeFunction = async (
       result?.status === 401 ||
       String(result?.data?.error || '').trim().toLowerCase() === 'unauthorized';
 
-    if (returnedUnauthorized) {
+    if (returnedUnauthorized && !allowAnonymous) {
       const refreshed = await supabase.auth.refreshSession();
       const refreshedToken = String(refreshed.data?.session?.access_token || '').trim();
       if (refreshed.error || !refreshedToken) {

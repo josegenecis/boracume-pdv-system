@@ -304,7 +304,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           lat: hasGps ? location.latitude : undefined,
           lng: hasGps ? location.longitude : undefined,
           cartTotal: total
-        });
+        }, { allowAnonymous: true });
 
         if (data?.ok) {
           setDeliveryQuote(data);
@@ -407,7 +407,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           restaurantUserId: userId,
           orderPayload: orderData,
           preferredMethod: paymentMethod
-        })
+        }, { allowAnonymous: true })
         if (!data) {
           throw new Error(`Erro na conexão com checkout (HTTP ${status})`)
         }
