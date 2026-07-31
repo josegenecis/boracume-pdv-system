@@ -13,6 +13,7 @@ import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAut
 
 interface StaffConsumption {
   id: string;
+  contact_id?: string | null;
   employee_name: string;
   amount: number;
   due_date?: string | null;
@@ -33,6 +34,15 @@ interface StaffConsumption {
     subtotal?: number;
     total?: number;
   }> | null;
+}
+
+interface ReceivableGroup {
+  key: string;
+  name: string;
+  debtorType: NonNullable<StaffConsumption['debtor_type']>;
+  rows: StaffConsumption[];
+  openRows: StaffConsumption[];
+  pendingTotal: number;
 }
 
 const currency = new Intl.NumberFormat('pt-BR', {
@@ -72,6 +82,14 @@ const getItemTotal = (item: NonNullable<StaffConsumption['items']>[number]) => {
   return Number(item.quantity || 0) * Number(item.price ?? item.unit_price ?? 0);
 };
 
+const normalizeLegacyIdentity = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .replace(/\s+/g, ' ');
+
 const StaffConsumptionManager: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -79,14 +97,15 @@ const StaffConsumptionManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<StaffConsumption[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<Record<string, string>>({});
-  const [pendingSettlement, setPendingSettlement] = useState<StaffConsumption | null>(null);
+  const [pendingSettlement, setPendingSettlement] = useState<ReceivableGroup | null>(null);
+  const [settlingGroupKey, setSettlingGroupKey] = useState<string | null>(null);
 
   const loadRows = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('staff_consumptions')
-      .select('id,employee_name,amount,due_date,notes,status,payment_method,paid_at,created_at,debtor_type,source_type,items')
+      .select('id,contact_id,employee_name,amount,due_date,notes,status,payment_method,paid_at,created_at,debtor_type,source_type,items')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -107,41 +126,84 @@ const StaffConsumptionManager: React.FC = () => {
     void loadRows();
   }, [loadRows]);
 
-  const pendingCount = useMemo(() => rows.filter((row) => row.status === 'open').length, [rows]);
+  const groups = useMemo<ReceivableGroup[]>(() => {
+    const grouped = new Map<string, StaffConsumption[]>();
+
+    rows.forEach((row) => {
+      // Cadastros novos usam o UUID do contato. O fallback mantém lançamentos
+      // antigos agrupados sem misturar tipos diferentes com o mesmo nome.
+      const key = row.contact_id
+        ? `contact:${row.contact_id}`
+        : `legacy:${row.debtor_type || 'employee'}:${normalizeLegacyIdentity(row.employee_name)}`;
+      grouped.set(key, [...(grouped.get(key) || []), row]);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([key, groupedRows]) => {
+        const openRows = groupedRows.filter((row) => row.status === 'open');
+        return {
+          key,
+          name: groupedRows[0].employee_name,
+          debtorType: groupedRows[0].debtor_type || 'employee',
+          rows: groupedRows,
+          openRows,
+          pendingTotal: openRows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+        };
+      })
+      .sort((a, b) => {
+        if (a.openRows.length > 0 && b.openRows.length === 0) return -1;
+        if (a.openRows.length === 0 && b.openRows.length > 0) return 1;
+        return new Date(b.rows[0].created_at).getTime() - new Date(a.rows[0].created_at).getTime();
+      });
+  }, [rows]);
+
+  const pendingCount = useMemo(() => groups.filter((group) => group.openRows.length > 0).length, [groups]);
   const pendingTotal = useMemo(
     () => rows.filter((row) => row.status === 'open').reduce((sum, row) => sum + Number(row.amount || 0), 0),
     [rows],
   );
 
-  const executeSettlement = async (row: StaffConsumption, authorizedWaiterId: string) => {
-    const paymentMethod = paymentMethods[row.id] || getDefaultPaymentMethod(row);
-    const { error } = await (supabase as any).rpc('settle_staff_consumption_authorized', {
-      p_receivable_id: row.id,
-      p_payment_method: paymentMethod,
-      p_authorized_waiter_id: authorizedWaiterId,
-    });
-    if (error) {
-      toast({
-        title: 'Pagamento não registrado',
-        description: error.message,
-        variant: 'destructive',
+  const executeSettlement = async (group: ReceivableGroup, authorizedWaiterId: string) => {
+    const paymentMethod = paymentMethods[group.key] || getDefaultPaymentMethod(group.openRows[0] || group.rows[0]);
+    setSettlingGroupKey(group.key);
+
+    let settledCount = 0;
+    for (const row of group.openRows) {
+      const { error } = await (supabase as any).rpc('settle_staff_consumption_authorized', {
+        p_receivable_id: row.id,
+        p_payment_method: paymentMethod,
+        p_authorized_waiter_id: authorizedWaiterId,
       });
-      return;
+      if (error) {
+        setSettlingGroupKey(null);
+        await loadRows();
+        toast({
+          title: settledCount > 0 ? 'Pagamento registrado parcialmente' : 'Pagamento não registrado',
+          description: settledCount > 0
+            ? `${settledCount} lançamento(s) foram baixados. Revise os pendentes antes de tentar novamente.`
+            : 'Não foi possível baixar essa conta. Atualize a página e tente novamente.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      settledCount += 1;
     }
+
+    setSettlingGroupKey(null);
     toast({
       title: 'Conta recebida',
-      description: `Pagamento de ${row.employee_name} registrado com sucesso.`,
+      description: `${currency.format(group.pendingTotal)} de ${group.name} registrado com sucesso.`,
     });
     await loadRows();
   };
 
-  const settle = async (row: StaffConsumption) => {
+  const settle = async (group: ReceivableGroup) => {
     const operator = getLocalOperatorSession();
     if (operator?.id && isAdminOperator(operator)) {
-      await executeSettlement(row, operator.id);
+      await executeSettlement(group, operator.id);
       return;
     }
-    setPendingSettlement(row);
+    setPendingSettlement(group);
   };
 
   return (
@@ -172,80 +234,109 @@ const StaffConsumptionManager: React.FC = () => {
 
         {loading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">Carregando contas...</div>
-        ) : rows.length === 0 ? (
+        ) : groups.length === 0 ? (
           <div className="rounded-xl border border-dashed py-8 text-center text-sm text-muted-foreground">
             Nenhuma conta a receber registrada.
           </div>
         ) : (
           <div className="space-y-3">
-            {rows.map((row) => (
-              <div key={row.id} className="rounded-xl border bg-white p-4">
+            {groups.map((group) => (
+              <div key={group.key} className="rounded-xl border bg-white p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-bold text-[#082F23]">{row.employee_name}</div>
+                    <div className="font-bold text-[#082F23]">{group.name}</div>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      <Badge variant="outline">{debtorLabels[row.debtor_type || 'employee'] || 'Pessoa'}</Badge>
-                      <Badge variant="outline">Origem: {sourceLabels[row.source_type || 'table'] || 'Sistema'}</Badge>
+                      <Badge variant="outline">{debtorLabels[group.debtorType] || 'Pessoa'}</Badge>
+                      <Badge variant="outline">
+                        {group.openRows.length} {group.openRows.length === 1 ? 'lançamento pendente' : 'lançamentos pendentes'}
+                      </Badge>
                     </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      Lançado em {new Date(row.created_at).toLocaleString('pt-BR')}
-                      {row.due_date ? ` • vence ${new Date(`${row.due_date}T12:00:00`).toLocaleDateString('pt-BR')}` : ''}
-                    </div>
-                    {row.notes && <p className="mt-2 break-words text-sm text-slate-600">{row.notes}</p>}
-                    {Array.isArray(row.items) && row.items.length > 0 && (
-                      <details className="mt-3 rounded-lg border bg-slate-50 px-3 py-2">
-                        <summary className="cursor-pointer text-xs font-bold text-[#082F23]">
-                          Ver itens da conta ({row.items.length})
-                        </summary>
-                        <div className="mt-2 space-y-1.5">
-                          {row.items.map((item, index) => (
-                            <div
-                              key={item.id || `${row.id}-${index}`}
-                              className="flex items-start justify-between gap-3 text-xs text-slate-600"
-                            >
-                              <span>{Number(item.quantity || 1)}x {getItemName(item)}</span>
-                              <strong className="shrink-0 text-[#082F23]">{currency.format(getItemTotal(item))}</strong>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-black text-[#082F23]">{currency.format(Number(row.amount || 0))}</div>
-                    <Badge variant={row.status === 'open' ? 'destructive' : 'secondary'}>
-                      {row.status === 'open' ? 'Pendente' : row.status === 'paid' ? 'Pago' : 'Cancelado'}
+                    <div className="text-lg font-black text-[#082F23]">{currency.format(group.pendingTotal)}</div>
+                    <Badge variant={group.openRows.length > 0 ? 'destructive' : 'secondary'}>
+                      {group.openRows.length > 0 ? 'Pendente' : 'Sem pendências'}
                     </Badge>
                   </div>
                 </div>
 
-                {row.status === 'open' ? (
+                <details className="mt-3 rounded-lg border bg-slate-50 px-3 py-2">
+                  <summary className="cursor-pointer text-xs font-bold text-[#082F23]">
+                    Ver histórico e itens ({group.rows.length} {group.rows.length === 1 ? 'lançamento' : 'lançamentos'})
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {group.rows.map((row) => (
+                      <div key={row.id} className="rounded-lg border bg-white p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap gap-1">
+                              <Badge variant="outline">Origem: {sourceLabels[row.source_type || 'table'] || 'Sistema'}</Badge>
+                              <Badge variant={row.status === 'open' ? 'destructive' : 'secondary'}>
+                                {row.status === 'open' ? 'Pendente' : row.status === 'paid' ? 'Pago' : 'Cancelado'}
+                              </Badge>
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {new Date(row.created_at).toLocaleString('pt-BR')}
+                              {row.due_date ? ` • vence ${new Date(`${row.due_date}T12:00:00`).toLocaleDateString('pt-BR')}` : ''}
+                            </div>
+                            {row.notes && <p className="mt-2 break-words text-xs text-slate-600">{row.notes}</p>}
+                          </div>
+                          <strong className="shrink-0 text-sm text-[#082F23]">
+                            {currency.format(Number(row.amount || 0))}
+                          </strong>
+                        </div>
+                        {Array.isArray(row.items) && row.items.length > 0 && (
+                          <div className="mt-2 space-y-1 border-t pt-2">
+                            {row.items.map((item, index) => (
+                              <div
+                                key={item.id || `${row.id}-${index}`}
+                                className="flex items-start justify-between gap-3 text-xs text-slate-600"
+                              >
+                                <span>{Number(item.quantity || 1)}x {getItemName(item)}</span>
+                                <span className="shrink-0">{currency.format(getItemTotal(item))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {row.status !== 'open' && row.payment_method && (
+                          <div className="mt-2 border-t pt-2 text-xs text-slate-500">
+                            Baixado por {paymentLabels[row.payment_method] || row.payment_method}
+                            {row.paid_at ? ` em ${new Date(row.paid_at).toLocaleString('pt-BR')}` : ''}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+
+                {group.openRows.length > 0 && (
                   <div className="mt-4 flex flex-col gap-2 border-t pt-3 sm:flex-row">
                     <Select
-                      value={paymentMethods[row.id] || getDefaultPaymentMethod(row)}
-                      onValueChange={(value) => setPaymentMethods((current) => ({ ...current, [row.id]: value }))}
+                      value={paymentMethods[group.key] || getDefaultPaymentMethod(group.openRows[0])}
+                      onValueChange={(value) => setPaymentMethods((current) => ({ ...current, [group.key]: value }))}
                     >
                       <SelectTrigger className="sm:w-56">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {Object.entries(paymentLabels)
-                          .filter(([value]) => value !== 'desconto_folha' || row.debtor_type === 'employee')
+                          .filter(([value]) => value !== 'desconto_folha' || group.debtorType === 'employee')
                           .map(([value, label]) => (
                           <SelectItem key={value} value={value}>{label}</SelectItem>
                           ))}
                       </SelectContent>
                     </Select>
-                    <Button onClick={() => void settle(row)} className="sm:flex-1">
-                      Registrar pagamento
+                    <Button
+                      onClick={() => void settle(group)}
+                      className="sm:flex-1"
+                      disabled={settlingGroupKey === group.key}
+                    >
+                      {settlingGroupKey === group.key
+                        ? 'Registrando...'
+                        : `Receber total de ${currency.format(group.pendingTotal)}`}
                     </Button>
                   </div>
-                ) : row.payment_method ? (
-                  <div className="mt-3 border-t pt-3 text-xs text-slate-500">
-                    Baixado por {paymentLabels[row.payment_method] || row.payment_method}
-                    {row.paid_at ? ` em ${new Date(row.paid_at).toLocaleString('pt-BR')}` : ''}
-                  </div>
-                ) : null}
+                )}
               </div>
             ))}
           </div>
@@ -265,9 +356,9 @@ const StaffConsumptionManager: React.FC = () => {
           toast({ title: 'Sem permissão', description: 'PIN inválido ou o operador não é administrador.', variant: 'destructive' });
           return;
         }
-        const row = pendingSettlement;
+        const group = pendingSettlement;
         setPendingSettlement(null);
-        await executeSettlement(row, authorization.waiterId);
+        await executeSettlement(group, authorization.waiterId);
       }}
     />
     </>
