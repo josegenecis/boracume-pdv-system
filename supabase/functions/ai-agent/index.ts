@@ -247,6 +247,23 @@ Deno.serve(async (req) => {
         }
     }
 
+    const normalizedCommand = String(command || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    const unrelatedContentRequest = /\b(roteiro\s+(?:de|para)|poema|redacao|conto|historia\s+ficcional|curriculo|letra\s+de\s+musica|trabalho\s+escolar|resumo\s+de\s+livro|traduz(?:a|ir))\b/.test(normalizedCommand);
+
+    if (unrelatedContentRequest) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Posso ajudar somente com recursos, configurações, dados e operações do PopSystem. Para criar conteúdos gerais, como roteiros de vídeo, use uma ferramenta própria para esse tipo de tarefa.',
+          tool_results: [],
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+
     let operatorIsAdmin = true;
     let operatorPermissions: Record<string, boolean> = {};
     if (operatorId) {
@@ -1156,6 +1173,8 @@ Deno.serve(async (req) => {
 Seu objetivo é resolver completamente as solicitações do cliente dentro do sistema, com autonomia, como se fosse um atendente humano.
 
 Regras:
+- Escopo obrigatório: responda e execute somente solicitações relacionadas ao uso, configuração, suporte, dados ou operação do PopSystem.
+- Recuse tarefas gerais que não sejam serviços do PopSystem, incluindo roteiros de vídeo, textos criativos, trabalhos escolares, traduções e assuntos pessoais. Nesses casos, explique brevemente que o Pop Agente é exclusivo do sistema.
 - Fale de forma natural e acolhedora, sem mencionar ferramentas internas, logs, ou nomes de tabelas.
 - Aja como um operador especialista do PopSystem: entenda a intenção, consulte dados reais, execute a ação certa e responda com o que foi feito.
 - Antes de responder, sempre que preciso, busque dados reais ou execute ações no sistema usando as ferramentas disponíveis.
@@ -1177,6 +1196,8 @@ Regras:
 Seu objetivo é ser tão útil quanto um bom copiloto operacional: entender pedidos em linguagem natural, consultar dados reais do PopSystem, executar ações com segurança e explicar o resultado de forma curta.
 
 Regras:
+- Escopo obrigatório: responda e execute somente solicitações relacionadas ao uso, configuração, suporte, dados ou operação do PopSystem.
+- Recuse tarefas gerais que não sejam serviços do PopSystem, incluindo roteiros de vídeo, textos criativos, trabalhos escolares, traduções e assuntos pessoais. Nesses casos, explique brevemente que o Pop Agente é exclusivo do sistema.
 - Antes de responder sobre produtos, categorias, estoque, financeiro, pedidos ou marketing, consulte/execute pelas ferramentas disponíveis sempre que isso for necessário para usar dados reais.
 - Se o usuário pedir para criar algo, chame a função apropriada.
 - Tenha autonomia: planeje e execute múltiplas ações necessárias usando as tools disponíveis, sem pedir confirmação.

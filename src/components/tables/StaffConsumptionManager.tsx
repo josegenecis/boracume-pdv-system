@@ -90,10 +90,18 @@ const normalizeLegacyIdentity = (value: string) =>
     .toLocaleLowerCase('pt-BR')
     .replace(/\s+/g, ' ');
 
-const StaffConsumptionManager: React.FC = () => {
+interface StaffConsumptionManagerProps {
+  initialOpen?: boolean;
+}
+
+const StaffConsumptionManager: React.FC<StaffConsumptionManagerProps> = ({ initialOpen = false }) => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
+
+  useEffect(() => {
+    if (initialOpen) setOpen(true);
+  }, [initialOpen]);
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<StaffConsumption[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<Record<string, string>>({});

@@ -828,7 +828,12 @@ const Entregadores: React.FC = () => {
                       <TableCell>{row.orderCount}</TableCell>
                       <TableCell>{formatBRL(row.deliveryTotal)}</TableCell>
                       <TableCell>{formatBRL(row.allowance)}</TableCell>
-                      <TableCell className="font-semibold">{formatBRL(row.total)}</TableCell>
+                      <TableCell>
+                        <div className="font-semibold">{formatBRL(row.total)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatBRL(row.deliveryTotal)} em taxas + {formatBRL(row.allowance)} de ajuda
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant="outline"
@@ -1126,16 +1131,20 @@ const Entregadores: React.FC = () => {
                 name="daily_allowance"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Ajuda de custo diária (R$)</FormLabel>
+                    <FormLabel>Ajuda de custo diária</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.01"
-                        value={field.value ?? 0}
-                        onChange={(event) => field.onChange(Number(event.target.value || 0))}
-                      />
+                      <div className="relative">
+                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center font-semibold text-muted-foreground">R$</span>
+                        <Input
+                          className="pl-10"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          value={field.value ?? 0}
+                          onChange={(event) => field.onChange(Number(event.target.value || 0))}
+                        />
+                      </div>
                     </FormControl>
                     <p className="text-xs text-muted-foreground">
                       Somada uma vez no fechamento do dia quando houver ao menos uma entrega concluída.

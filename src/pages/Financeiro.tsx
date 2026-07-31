@@ -1235,6 +1235,7 @@ const Financeiro = () => {
   ];
   const topExpenseCards = expenseByCategory.slice(0, 4);
   const isCashRoute = location.pathname.startsWith('/caixa');
+  const openReceivablesFromNavigation = new URLSearchParams(location.search).get('section') === 'receivables';
   const headerTitle = isCashRoute ? 'Caixa geral' : 'Financeiro';
   const headerSubtitle = isCashRoute
     ? 'Abertura, suprimento, sangria e conferência do caixa em uma visão operacional.'
@@ -1342,9 +1343,9 @@ const Financeiro = () => {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {isCashRoute && (
+              {!isCashRoute && (
                 <div className="[&>button]:border-white/20 [&>button]:bg-white/15 [&>button]:text-white [&>button]:hover:bg-white/25">
-                  <StaffConsumptionManager />
+                  <StaffConsumptionManager initialOpen={openReceivablesFromNavigation} />
                 </div>
               )}
               <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
@@ -1729,7 +1730,7 @@ const Financeiro = () => {
           })}
         </section>
 
-        {isCashRoute && (
+        {!isCashRoute && (
           <section className="[&>button]:h-10 [&>button]:w-full [&>button]:justify-center [&>button]:rounded-[14px] [&>button]:border-[#003223]/10 [&>button]:bg-white [&>button]:text-[#003223] [&>button]:shadow-sm">
             <StaffConsumptionManager />
           </section>

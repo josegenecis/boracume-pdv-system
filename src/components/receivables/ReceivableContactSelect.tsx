@@ -103,7 +103,7 @@ const ReceivableContactSelect: React.FC<Props> = ({ value, onChange }) => {
 
   const saveContact = async () => {
     if (!user?.id || !name.trim()) {
-      toast({ title: 'Informe o nome de quem pagará depois', variant: 'destructive' });
+      toast({ title: 'Informe o responsável pela conta a receber', variant: 'destructive' });
       return;
     }
 
@@ -146,7 +146,7 @@ const ReceivableContactSelect: React.FC<Props> = ({ value, onChange }) => {
       <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-3">
         <div className="flex items-center gap-2 font-bold text-amber-950">
           <Clock3 className="h-4 w-4" />
-          Quem pagará depois?
+          Responsável pela conta a receber
         </div>
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <Select
@@ -177,7 +177,7 @@ const ReceivableContactSelect: React.FC<Props> = ({ value, onChange }) => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Novo cadastro para pagamento posterior</DialogTitle>
+            <DialogTitle>Novo cadastro de contas a receber</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2 sm:grid-cols-2">
             <div className="sm:col-span-2">

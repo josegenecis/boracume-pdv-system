@@ -481,7 +481,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     if (currentOrder.source !== 'table_accounts') {
       toast({
         title: 'Conta antiga não compatível',
-        description: 'Esta conta precisa ser fechada pelo fluxo atual. Novos lançamentos já permitem pagar depois.',
+        description: 'Esta conta precisa ser fechada pelo fluxo atual. Novos lançamentos já permitem registrar em contas a receber.',
         variant: 'destructive',
       });
       return;
@@ -1333,7 +1333,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 font-bold text-amber-950">
                     <UserRoundCheck size={18} />
-                    Funcionário vai pagar depois?
+                    Registrar em contas a receber?
                   </div>
                   <p className="mt-1 text-sm text-amber-800">
                     Registre o responsável, preserve os itens e libere a mesa sem apagar a movimentação.

@@ -26,7 +26,7 @@ const PAYMENT_OPTIONS: Array<{ value: CheckoutPaymentMethod; label: string }> = 
   { value: 'cartao_voucher', label: 'Voucher' },
   { value: 'cartao_outros', label: 'Outros' },
   { value: 'dinheiro', label: 'Dinheiro' },
-  { value: 'pagar_depois', label: 'Pagar depois' },
+  { value: 'pagar_depois', label: 'Contas a receber' },
 ];
 
 const SPLIT_PAYMENT_OPTIONS = PAYMENT_OPTIONS.filter((option) => option.value !== 'pagar_depois');
@@ -465,7 +465,7 @@ function PaymentSelector({
         onClick={onDeferred}
       >
         <Clock3 className="mr-2 h-5 w-5" />
-        Pagar depois
+        Contas a receber
       </Button>
     </div>
   );

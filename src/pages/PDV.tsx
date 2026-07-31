@@ -38,6 +38,7 @@ import { useCheckoutSettings } from '@/hooks/useCheckoutSettings';
 import { prefetchSimpleVariations, type Variation } from '@/hooks/useSimpleVariations';
 import type { PizzaCategoryConfig } from '@/lib/pizza-pricing';
 import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
+import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import {
   fetchTableOrderFlowSettings,
   filterItemsForTableManagerOrder,
@@ -141,7 +142,7 @@ const PDV_PAYMENT_METHODS: Array<{ value: PdvPaymentMethod; label: string }> = [
   { value: 'cartao_voucher', label: 'Voucher' },
   { value: 'cartao_outros', label: 'Outros' },
   { value: 'dinheiro', label: 'Dinheiro' },
-  { value: 'pagar_depois', label: 'Pagar depois' },
+  { value: 'pagar_depois', label: 'Contas a receber' },
 ];
 
 const emptyPdvPaymentAmounts = (): PdvPaymentAmounts => ({
@@ -215,6 +216,7 @@ const PDV = () => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [customerDocument, setCustomerDocument] = useState('');
+  const [deliveryCustomerFound, setDeliveryCustomerFound] = useState('');
   const [orderType, setOrderType] = useState<'delivery' | 'pickup' | 'dine_in' | 'counter'>('counter');
   const [selectedDeliveryZone, setSelectedDeliveryZone] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('');
@@ -269,6 +271,7 @@ const PDV = () => {
   const [commandLookup, setCommandLookup] = useState<ElectronicCommandLookup | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { lookupCustomer, isLoading: customerLookupLoading } = useCustomerLookup(user?.id || '');
   const { isMobile } = useSidebar();
   const { settings: tefSettings } = useTefSettings();
   const { settings: checkoutSettings } = useCheckoutSettings();
@@ -1964,6 +1967,35 @@ const PDV = () => {
     return { fiscal: true as const, nfce: nfceData };
   };
 
+  const handleDeliveryCustomerLookup = async () => {
+    if (orderType !== 'delivery' || customerPhone.replace(/\D/g, '').length < 10) return;
+
+    const customer = await lookupCustomer(customerPhone);
+    if (!customer) {
+      setDeliveryCustomerFound('');
+      toast({
+        title: 'Cliente não localizado',
+        description: 'Complete o endereço para cadastrar esta entrega normalmente.',
+      });
+      return;
+    }
+
+    setCustomerName(customer.name || '');
+    setCustomerAddress(customer.address || '');
+    setDeliveryCustomerFound(customer.name || 'Cadastro encontrado');
+
+    const normalizeLocation = (value: string) => value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+    const normalizedNeighborhood = normalizeLocation(customer.neighborhood || '');
+    const matchingZone = deliveryZones.find((zone) => normalizeLocation(zone.name) === normalizedNeighborhood);
+    const savedZone = deliveryZones.find((zone) => zone.id === customer.deliveryZoneId);
+
+    setSelectedDeliveryZone(savedZone?.id || matchingZone?.id || '');
+  };
+
   const handleFinalizeSale = async () => {
     console.log('Finalizando venda...');
     
@@ -1977,6 +2009,15 @@ const PDV = () => {
     }
 
     if (orderType === 'delivery') {
+      if (customerPhone.replace(/\D/g, '').length < 10) {
+        toast({
+          title: "Telefone obrigatório",
+          description: "Informe o telefone do cliente para localizar os dados da entrega.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (!customerAddress.trim()) {
         toast({
           title: "Endereço obrigatório",
@@ -2010,7 +2051,7 @@ const PDV = () => {
 
     if (paymentMethod === 'pagar_depois' && !receivableContactId) {
       toast({
-        title: 'Selecione quem pagará depois',
+        title: 'Selecione o responsável pela conta',
         description: 'Escolha um cadastro existente ou crie um novo antes de registrar a conta.',
         variant: 'destructive',
       });
@@ -2020,7 +2061,7 @@ const PDV = () => {
     if (paymentMethod === 'pagar_depois' && hasManualPaymentSplit()) {
       toast({
         title: 'Forma de pagamento incompatível',
-        description: 'O pagamento posterior precisa ser registrado sozinho, sem divisão com outras formas.',
+        description: 'Contas a receber devem ser registradas separadamente, sem divisão com outras formas.',
         variant: 'destructive',
       });
       return;
@@ -2150,7 +2191,7 @@ const PDV = () => {
 
       const orderData: any = {
         customer_name: resolvedCustomerName,
-        customer_phone: customerPhone.trim() || null,
+        customer_phone: orderType === 'delivery' || orderType === 'pickup' ? customerPhone.trim() || null : null,
         customer_address: orderType === 'delivery' ? customerAddress.trim() : null,
         order_type: orderType,
         delivery_zone_id: orderType === 'delivery' ? selectedDeliveryZone || null : null,
@@ -2703,7 +2744,7 @@ const PDV = () => {
               <div className="p-2 space-y-2">
                 {/* Compact Form */}
                 <div className="space-y-2 rounded-xl border border-[#003223]/10 bg-[#FAFCFB] p-2">
-                   <div className="flex gap-2">
+                   {orderType === 'pickup' && <div className="flex gap-2">
                       <Input
                         placeholder="Nome do cliente (opcional)"
                         value={customerName}
@@ -2716,10 +2757,26 @@ const PDV = () => {
                         onChange={(e) => setCustomerPhone(e.target.value)}
                         className="h-8 w-28 shrink-0 text-xs"
                       />
-                    </div>
+                    </div>}
 
                     {orderType === 'delivery' && (
                       <>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Telefone do cliente *"
+                            value={customerPhone}
+                            onChange={(e) => {
+                              setCustomerPhone(e.target.value);
+                              setDeliveryCustomerFound('');
+                            }}
+                            onBlur={() => void handleDeliveryCustomerLookup()}
+                            className="h-8 text-xs"
+                          />
+                          <Button type="button" variant="outline" className="h-8 px-3 text-xs" disabled={customerLookupLoading} onMouseDown={(event) => event.preventDefault()} onClick={() => void handleDeliveryCustomerLookup()}>
+                            {customerLookupLoading ? 'Buscando...' : 'Localizar'}
+                          </Button>
+                        </div>
+                        {deliveryCustomerFound && <p className="text-[11px] font-medium text-emerald-700">Cliente encontrado: {deliveryCustomerFound}</p>}
                         <Input
                           placeholder="Endereço *"
                           value={customerAddress}
@@ -2952,7 +3009,7 @@ const PDV = () => {
                {/* Mobile Checkout Form */}
                <div className="border-t bg-white p-3">
                   <div className="mb-3 space-y-2 rounded-xl border border-[#003223]/10 bg-[#FAFCFB] p-2">
-                    <div className="grid grid-cols-2 gap-2">
+                    {orderType === 'pickup' && <div className="grid grid-cols-2 gap-2">
                       <Input
                         placeholder="Nome (Opcional)"
                         value={customerName}
@@ -2965,10 +3022,26 @@ const PDV = () => {
                         onChange={(e) => setCustomerPhone(e.target.value)}
                         className="h-9 text-sm"
                       />
-                    </div>
+                    </div>}
 
                     {orderType === 'delivery' && (
                       <>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Telefone do cliente *"
+                            value={customerPhone}
+                            onChange={(e) => {
+                              setCustomerPhone(e.target.value);
+                              setDeliveryCustomerFound('');
+                            }}
+                            onBlur={() => void handleDeliveryCustomerLookup()}
+                            className="h-9 text-sm"
+                          />
+                          <Button type="button" variant="outline" className="h-9 px-3 text-xs" disabled={customerLookupLoading} onMouseDown={(event) => event.preventDefault()} onClick={() => void handleDeliveryCustomerLookup()}>
+                            {customerLookupLoading ? 'Buscando...' : 'Localizar'}
+                          </Button>
+                        </div>
+                        {deliveryCustomerFound && <p className="text-xs font-medium text-emerald-700">Cliente encontrado: {deliveryCustomerFound}</p>}
                         <Input
                           placeholder="Endereço Completo *"
                           value={customerAddress}
@@ -3240,7 +3313,7 @@ const PDV = () => {
         ) : null}
         extraFields={(
           <div className="space-y-3">
-            <div className="grid gap-2 sm:grid-cols-2">
+            {orderType === 'pickup' && <div className="grid gap-2 sm:grid-cols-2">
               <Input
                 placeholder="Nome do cliente (opcional)"
                 value={customerName}
@@ -3253,28 +3326,46 @@ const PDV = () => {
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 className="h-10"
               />
-            </div>
+            </div>}
 
             {orderType === 'delivery' && (
-              <div className="grid gap-2 sm:grid-cols-[1fr_220px]">
-                <Input
-                  placeholder="Endereço *"
-                  value={customerAddress}
-                  onChange={(e) => setCustomerAddress(e.target.value)}
-                  className="h-10"
-                />
-                <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Bairro *" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {deliveryZones.map((zone) => (
-                      <SelectItem key={zone.id} value={zone.id}>
-                        {zone.name} (+{formatCurrency(zone.delivery_fee)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Telefone do cliente *"
+                    value={customerPhone}
+                    onChange={(e) => {
+                      setCustomerPhone(e.target.value);
+                      setDeliveryCustomerFound('');
+                    }}
+                    onBlur={() => void handleDeliveryCustomerLookup()}
+                    className="h-10"
+                  />
+                  <Button type="button" variant="outline" className="h-10" disabled={customerLookupLoading} onMouseDown={(event) => event.preventDefault()} onClick={() => void handleDeliveryCustomerLookup()}>
+                    {customerLookupLoading ? 'Buscando...' : 'Localizar cliente'}
+                  </Button>
+                </div>
+                {deliveryCustomerFound && <p className="text-xs font-medium text-emerald-700">Cliente encontrado: {deliveryCustomerFound}</p>}
+                <div className="grid gap-2 sm:grid-cols-[1fr_220px]">
+                  <Input
+                    placeholder="Endereço *"
+                    value={customerAddress}
+                    onChange={(e) => setCustomerAddress(e.target.value)}
+                    className="h-10"
+                  />
+                  <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder="Bairro *" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {deliveryZones.map((zone) => (
+                        <SelectItem key={zone.id} value={zone.id}>
+                          {zone.name} (+{formatCurrency(zone.delivery_fee)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             )}
 
