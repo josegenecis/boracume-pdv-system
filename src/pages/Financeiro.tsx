@@ -71,6 +71,7 @@ import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { parseBRL } from '@/lib/currency';
 import { CancelSaleDialog } from '@/components/finance/CancelSaleDialog';
 import { friendlyErrorMessage } from '@/lib/friendly-error';
+import StaffConsumptionManager from '@/components/tables/StaffConsumptionManager';
 
 type PaymentMethod = 'pix' | 'pix_online' | 'pix_entrega' | 'dinheiro' | 'cartao' | 'cartao_online';
 type PaymentMethodFilter = '' | 'all' | PaymentMethod;
@@ -1341,7 +1342,12 @@ const Financeiro = () => {
             </div>
 
             <div className="flex flex-wrap gap-2">
-           <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
+              {isCashRoute && (
+                <div className="[&>button]:border-white/20 [&>button]:bg-white/15 [&>button]:text-white [&>button]:hover:bg-white/25">
+                  <StaffConsumptionManager />
+                </div>
+              )}
+              <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
             <DialogTrigger asChild>
               <Button className="border border-white/20 bg-white/15 text-white hover:bg-white/25" variant="outline" onClick={() => {
                 setCashOperation(currentSession ? 'close' : 'open');
@@ -1722,6 +1728,12 @@ const Financeiro = () => {
             );
           })}
         </section>
+
+        {isCashRoute && (
+          <section className="[&>button]:h-10 [&>button]:w-full [&>button]:justify-center [&>button]:rounded-[14px] [&>button]:border-[#003223]/10 [&>button]:bg-white [&>button]:text-[#003223] [&>button]:shadow-sm">
+            <StaffConsumptionManager />
+          </section>
+        )}
 
         <section className="rounded-[18px] border border-slate-200/80 bg-white/95 p-2.5 shadow-sm">
           <div className="space-y-3">

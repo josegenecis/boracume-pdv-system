@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw, Wallet, ChevronLeft, ChevronRight, Scale, Barcode } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, Wallet, ChevronLeft, ChevronRight, Scale } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -16,8 +16,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import CheckoutModal, { CheckoutPaymentMethod } from '@/components/checkout/CheckoutModal';
-import TableManager from '@/components/tables/TableManager';
-import StaffConsumptionManager from '@/components/tables/StaffConsumptionManager';
 import ReceivableContactSelect, { type ReceivableContact } from '@/components/receivables/ReceivableContactSelect';
 import ElectronicCommandDialog, { type ElectronicCommandLookup } from '@/components/pdv/ElectronicCommandDialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -2409,61 +2407,14 @@ const PDV = () => {
           {/* Left Column: Products (Scrollable) */}
           <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-2 pt-0 sm:px-4 sm:pb-4 sm:pt-0 lg:border-r">
             <div className="sticky top-0 z-20 mb-3 flex flex-col gap-2 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-2 pb-2 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] sm:px-4 lg:px-6">
-              <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                <TabsList className="hidden h-9 w-full grid-cols-2 rounded-xl border border-[#FF6400]/15 bg-white/80 p-1 shadow-sm lg:grid xl:w-64">
-                  <TabsTrigger value="products" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Vendas</TabsTrigger>
-                  <TabsTrigger value="accounts" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Mesas</TabsTrigger>
-                </TabsList>
-                <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:flex-nowrap">
-                  <div className="relative hidden min-w-[220px] flex-1 xl:block xl:w-80 xl:flex-none">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#003223]/40" />
-                    <Input
-                      placeholder="Buscar produtos..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/85 pl-9 text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
-                    />
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setActiveTab(activeTab === 'products' ? 'accounts' : 'products')}
-                    className="h-8 w-8 shrink-0 rounded-[16px] border-[#FF6400]/15 bg-white/85 hover:bg-[#F5EBE1] lg:hidden"
-                  >
-                    {activeTab === 'products' ? <UtensilsCrossed size={14} className="text-[#003223]/70" /> : <Store size={14} className="text-[#003223]/70" />}
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={() => fetchData({ background: true })} className="h-8 w-8 shrink-0 rounded-[16px] border-[#FF6400]/15 bg-white/85 hover:bg-[#F5EBE1] xl:h-9 xl:w-9 xl:rounded-xl">
-                    <RefreshCw size={16} className={`text-[#003223]/70 ${refreshing ? 'animate-spin' : ''}`} />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCommandQueryOpen(true)}
-                    className="h-9 shrink-0 rounded-xl border-[#FF6400]/15 bg-white/85 px-3 font-semibold text-[#003223] hover:bg-[#F5EBE1]"
-                  >
-                    <Barcode className="mr-1.5 h-4 w-4" />
-                    <span className="hidden sm:inline">Comanda</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="hidden h-9 rounded-xl whitespace-nowrap border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1] md:inline-flex"
-                    disabled={!cashSession?.id}
-                    onClick={() => { setCashMoveType('in'); setCashMoveOpen(true); }}
-                  >
-                    Suprimento
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="hidden h-9 rounded-xl whitespace-nowrap border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1] md:inline-flex"
-                    disabled={!cashSession?.id}
-                    onClick={() => { setCashMoveType('out'); setCashMoveOpen(true); }}
-                  >
-                    Sangria
-                  </Button>
-                  <StaffConsumptionManager />
-                </div>
+              <div className="relative w-full max-w-[260px]">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#003223]/40" />
+                <Input
+                  placeholder="Buscar produtos..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/90 pl-9 text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
+                />
               </div>
               <div className="space-y-1.5 lg:hidden">
                 <div className="scrollbar-hide flex gap-1.5 overflow-x-auto">
@@ -3127,17 +3078,6 @@ const PDV = () => {
           </Sheet>
         </TabsContent>
 
-          <TabsContent value="accounts" className="flex-1 overflow-y-auto mt-0">
-            <div className="sticky top-0 z-20 hidden border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-4 pb-3 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] lg:block">
-              <TabsList className="grid h-9 w-full max-w-64 grid-cols-2 rounded-xl border border-[#FF6400]/15 bg-white/80 p-1 shadow-sm">
-                <TabsTrigger value="products" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Vendas</TabsTrigger>
-                <TabsTrigger value="accounts" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Mesas</TabsTrigger>
-              </TabsList>
-            </div>
-            <div className="p-4">
-              <TableManager />
-            </div>
-          </TabsContent>
       </Tabs>
 
       {selectedProduct && (
