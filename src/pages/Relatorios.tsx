@@ -5,12 +5,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Download, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users, Package } from 'lucide-react';
+import { CalendarIcon, Download, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users, Package, BarChart3 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { PageHero } from '@/components/layout/PageHero';
 
 interface ReportData {
   totalSales: number;
@@ -191,22 +192,24 @@ const Relatorios = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Relatórios</h1>
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-gray-600">Carregando relatórios...</p>
+      <div className="space-y-5">
+        <PageHero title="Análise de desempenho" description="Indicadores detalhados para consultas e exportações quando você precisar." eyebrow="Relatórios" icon={BarChart3} />
+        <div className="rounded-[28px] border border-[#003223]/8 bg-white py-16 text-center shadow-sm">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#003223]/15 border-t-[#FF6400]" />
+          <p className="mt-4 text-sm text-gray-600">Carregando indicadores...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight">Relatórios</h1>
-        
-        <div className="flex items-center gap-2">
+    <div className="space-y-5">
+      <PageHero
+        title="Análise de desempenho"
+        description="Consulte vendas, produtos e categorias em períodos específicos sem poluir a navegação principal."
+        eyebrow="Relatórios"
+        icon={BarChart3}
+        actions={<div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/20 bg-white/15 p-2 backdrop-blur">
           <Popover open={showFromCalendar} onOpenChange={setShowFromCalendar}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm">
@@ -257,8 +260,8 @@ const Relatorios = () => {
             <Download className="w-4 h-4 mr-2" />
             Exportar
           </Button>
-        </div>
-      </div>
+        </div>}
+      />
 
       {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

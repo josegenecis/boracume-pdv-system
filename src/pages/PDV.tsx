@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, Wallet, ChevronLeft, ChevronRight, Scale } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, Wallet, ChevronLeft, ChevronRight, Scale, AlertTriangle } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -33,6 +33,7 @@ import { ensureDefaultTables } from '@/utils/tableDefaults';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useNavigate } from 'react-router-dom';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { parseBRL } from '@/lib/currency';
 import { useCheckoutSettings } from '@/hooks/useCheckoutSettings';
 import { prefetchSimpleVariations, type Variation } from '@/hooks/useSimpleVariations';
@@ -45,6 +46,7 @@ import {
   getTableManagerOrderStatus,
   shouldCreateTableManagerOrder,
 } from '@/utils/tableOrderFlow';
+import { getOpenTableCount } from '@/services/openTables';
 
 interface Product {
   id: string;
@@ -249,6 +251,8 @@ const PDV = () => {
   const [cashAmountInput, setCashAmountInput] = useState('');
   const [cashCloseLoading, setCashCloseLoading] = useState(false);
   const [cashCloseSummary, setCashCloseSummary] = useState<CashCloseSummary | null>(null);
+  const [openTablesCount, setOpenTablesCount] = useState(0);
+  const [openTablesConsent, setOpenTablesConsent] = useState(false);
   const [mustCreateOperator, setMustCreateOperator] = useState(false);
   const [cashMoveOpen, setCashMoveOpen] = useState(false);
   const [cashMoveType, setCashMoveType] = useState<'in' | 'out'>('out');
@@ -793,11 +797,17 @@ const PDV = () => {
     setCashDialogMode(mode);
     setCashCloseSummary(null);
     setCashAmountInput('');
+    setOpenTablesConsent(false);
+    setOpenTablesCount(0);
     if (mode === 'close' && user?.id && cashSession?.id) {
       try {
         setCashCloseLoading(true);
-        const summary = await loadCashCloseSummary(cashSession);
+        const [summary, activeTables] = await Promise.all([
+          loadCashCloseSummary(cashSession),
+          getOpenTableCount(user.id),
+        ]);
         setCashCloseSummary(summary);
+        setOpenTablesCount(activeTables);
         setCashAmountInput(formatBRL(summary.expectedCash));
       } catch {}
       setCashCloseLoading(false);
@@ -859,6 +869,16 @@ const PDV = () => {
           toast({ title: 'Caixa não encontrado', variant: 'destructive' });
           return;
         }
+        const latestOpenTablesCount = await getOpenTableCount(user.id);
+        setOpenTablesCount(latestOpenTablesCount);
+        if (latestOpenTablesCount > 0 && !openTablesConsent) {
+          toast({
+            title: 'Existem mesas abertas',
+            description: `Confirme que deseja fechar o caixa mesmo com ${latestOpenTablesCount} mesa(s) aberta(s).`,
+            variant: 'destructive',
+          });
+          return;
+        }
         const latestSummary = cashCloseSummary || await loadCashCloseSummary(cashSession, amount);
         setCashCloseSummary(latestSummary);
         let error: any = null;
@@ -867,6 +887,9 @@ const PDV = () => {
           closed_at: new Date().toISOString(),
           final_amount: amount,
           expected_amount: latestSummary?.expectedCash ?? null,
+          notes: latestOpenTablesCount > 0
+            ? `Fechamento autorizado com ${latestOpenTablesCount} mesa(s) aberta(s).`
+            : null,
         };
         if (waiterId) updatePayload.closed_by_waiter_id = waiterId;
         const res1 = await supabase
@@ -3670,11 +3693,39 @@ const PDV = () => {
                   </div>
                 )}
               </div>
+              <div className={`rounded-2xl border p-4 ${openTablesCount > 0 ? 'border-amber-300 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                {cashCloseLoading ? (
+                  <p className="text-sm text-slate-600">Conferindo mesas em atendimento...</p>
+                ) : openTablesCount > 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex gap-3 text-amber-950">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                      <div>
+                        <p className="font-semibold">{openTablesCount} mesa(s) ainda aberta(s)</p>
+                        <p className="text-sm">Finalize as mesas ou autorize expressamente o fechamento.</p>
+                      </div>
+                    </div>
+                    <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-white/75 p-3 text-sm text-amber-950">
+                      <Checkbox
+                        checked={openTablesConsent}
+                        onCheckedChange={(checked) => setOpenTablesConsent(checked === true)}
+                        aria-label="Confirmar fechamento com mesas abertas"
+                      />
+                      <span>Estou ciente e autorizo fechar o caixa com mesas abertas.</span>
+                    </label>
+                  </div>
+                ) : (
+                  <p className="text-sm font-medium text-emerald-800">Nenhuma mesa aberta. O fechamento está liberado.</p>
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setCashDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCashSubmit} disabled={cashDialogMode === 'close' && cashCloseLoading}>
+            <Button
+              onClick={handleCashSubmit}
+              disabled={cashDialogMode === 'close' && (cashCloseLoading || (openTablesCount > 0 && !openTablesConsent))}
+            >
               {cashDialogMode === 'open' ? 'Abrir' : 'Fechar'}
             </Button>
           </DialogFooter>

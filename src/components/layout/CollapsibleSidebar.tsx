@@ -170,14 +170,6 @@ const CollapsibleSidebar = () => {
       ]
     },
     {
-      id: 'relatorios',
-      icon: BarChart3,
-      label: 'Relatórios',
-      items: [
-        { to: '/relatorios', label: 'Relatórios', feature: 'reports', area: 'reports' },
-      ]
-    },
-    {
       id: 'marketing',
       icon: Megaphone,
       label: 'Propaganda',

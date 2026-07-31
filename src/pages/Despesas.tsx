@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter } from 'lucide-react';
+import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter, ReceiptText } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
@@ -19,6 +19,7 @@ import { parseBRL } from '@/lib/currency';
 import { useLocation } from 'react-router-dom';
 import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { ReverseExpenseDialog } from '@/components/finance/ReverseExpenseDialog';
+import { PageHero } from '@/components/layout/PageHero';
 
 interface Expense {
   id: string;
@@ -533,14 +534,19 @@ export default function Despesas() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Lançamento de Despesas</h1>
-        <p className="text-muted-foreground">
-          Registre e acompanhe suas despesas mensais
-        </p>
-      </div>
+    <div className="container mx-auto space-y-6 p-4 sm:p-6">
+      <PageHero
+        title="Contas a pagar"
+        description="Registre despesas, acompanhe comprovantes e mantenha o histórico de estornos com rastreabilidade."
+        eyebrow="Financeiro"
+        icon={ReceiptText}
+        actions={(
+          <div className="rounded-2xl border border-white/20 bg-white/15 px-5 py-3 backdrop-blur">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/70">Despesas ativas</p>
+            <p className="mt-1 text-xl font-bold">{getTotalExpenses().toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+          </div>
+        )}
+      />
 
       <Card ref={smartInvoiceRef} className="border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50">
         <CardHeader>

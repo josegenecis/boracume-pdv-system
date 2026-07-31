@@ -46,6 +46,7 @@ import {
   WalletCards,
   Sparkles,
   TrendingUp,
+  AlertTriangle,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -72,6 +73,8 @@ import { parseBRL } from '@/lib/currency';
 import { CancelSaleDialog } from '@/components/finance/CancelSaleDialog';
 import { friendlyErrorMessage } from '@/lib/friendly-error';
 import StaffConsumptionManager from '@/components/tables/StaffConsumptionManager';
+import { Checkbox } from '@/components/ui/checkbox';
+import { getOpenTableCount } from '@/services/openTables';
 
 type PaymentMethod = 'pix' | 'pix_online' | 'pix_entrega' | 'dinheiro' | 'cartao' | 'cartao_online';
 type PaymentMethodFilter = '' | 'all' | PaymentMethod;
@@ -138,6 +141,9 @@ const Financeiro = () => {
   const [isCashDialogOpen, setIsCashDialogOpen] = useState(false);
   const [cashOperation, setCashOperation] = useState<'open' | 'close' | 'in' | 'out'>('open');
   const [cashDescription, setCashDescription] = useState('');
+  const [openTablesCount, setOpenTablesCount] = useState(0);
+  const [checkingOpenTables, setCheckingOpenTables] = useState(false);
+  const [openTablesConsent, setOpenTablesConsent] = useState(false);
   const [mobileFinanceTab, setMobileFinanceTab] = useState<'caixa' | 'movimentos' | 'relatorios'>('caixa');
 
   const [filters, setFilters] = useState({
@@ -817,13 +823,27 @@ const Financeiro = () => {
         });
       } else if (cashOperation === 'close') {
         if (!currentSession) return;
+        const latestOpenTablesCount = await getOpenTableCount(user.id);
+        setOpenTablesCount(latestOpenTablesCount);
+        if (latestOpenTablesCount > 0 && !openTablesConsent) {
+          toast({
+            title: 'Existem mesas abertas',
+            description: `Confirme que deseja fechar o caixa mesmo com ${latestOpenTablesCount} mesa(s) aberta(s).`,
+            variant: 'destructive',
+          });
+          return;
+        }
         const closedAt = new Date().toISOString();
-        const reportLines = await buildCashCloseReportLines(currentSession, amount, closedAt);
+        const closeAuditNote = latestOpenTablesCount > 0
+          ? `Fechamento autorizado com ${latestOpenTablesCount} mesa(s) aberta(s).`
+          : '';
+        const closeNotes = [cashDescription.trim(), closeAuditNote].filter(Boolean).join(' | ');
+        const reportLines = await buildCashCloseReportLines(currentSession, amount, closedAt, closeNotes);
         const { error } = await (supabase as any).from('cash_register_sessions').update({
           status: 'closed',
           closed_at: closedAt,
           final_amount: amount,
-          notes: cashDescription
+          notes: closeNotes
         }).eq('id', currentSession.id);
         if (error) throw error;
         toast({ title: 'Caixa fechado com sucesso' });
@@ -1241,18 +1261,34 @@ const Financeiro = () => {
     ? 'Abertura, suprimento, sangria e conferência do caixa em uma visão operacional.'
     : 'Acompanhe receitas, despesas, lucro e DRE no período selecionado';
 
-  const openCashActionDialog = (operation: 'open' | 'close' | 'in' | 'out') => {
+  const openCashActionDialog = async (operation: 'open' | 'close' | 'in' | 'out') => {
     setCashOperation(operation);
     setCashAmount('');
     setCashDescription('');
+    setOpenTablesConsent(false);
+    setOpenTablesCount(0);
     setIsCashDialogOpen(true);
+    if (operation === 'close' && user?.id) {
+      setCheckingOpenTables(true);
+      try {
+        setOpenTablesCount(await getOpenTableCount(user.id));
+      } catch (error) {
+        toast({
+          title: 'Não foi possível conferir as mesas',
+          description: friendlyErrorMessage(error, 'Tente novamente antes de fechar o caixa.'),
+          variant: 'destructive',
+        });
+      } finally {
+        setCheckingOpenTables(false);
+      }
+    }
   };
 
   useEffect(() => {
     const action = new URLSearchParams(location.search).get('cashAction');
     if (!action || !['open', 'close', 'in', 'out'].includes(action)) return;
 
-    openCashActionDialog(action as 'open' | 'close' | 'in' | 'out');
+    void openCashActionDialog(action as 'open' | 'close' | 'in' | 'out');
     navigate(location.pathname, { replace: true });
   }, [location.pathname, location.search, navigate]);
 
@@ -1351,8 +1387,7 @@ const Financeiro = () => {
               <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
             <DialogTrigger asChild>
               <Button className="border border-white/20 bg-white/15 text-white hover:bg-white/25" variant="outline" onClick={() => {
-                setCashOperation(currentSession ? 'close' : 'open');
-                setCashAmount('');
+                void openCashActionDialog(currentSession ? 'close' : 'open');
               }}>
                 {currentSession ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
                 {currentSession ? 'Gerenciar Caixa' : 'Abrir Caixa'}
@@ -1369,7 +1404,7 @@ const Financeiro = () => {
                 <DialogDescription>
                   {currentSession && (
                     <div className="flex gap-2 mb-4">
-                      <Button variant={cashOperation === 'close' ? 'default' : 'outline'} size="sm" onClick={() => setCashOperation('close')}>Fechar</Button>
+                      <Button variant={cashOperation === 'close' ? 'default' : 'outline'} size="sm" onClick={() => { void openCashActionDialog('close'); }}>Fechar</Button>
                       <Button variant={cashOperation === 'in' ? 'default' : 'outline'} size="sm" onClick={() => setCashOperation('in')}>Suprimento</Button>
                       <Button variant={cashOperation === 'out' ? 'default' : 'outline'} size="sm" onClick={() => setCashOperation('out')}>Sangria</Button>
                     </div>
@@ -1395,9 +1430,41 @@ const Financeiro = () => {
                    />
                  </div>
                 )}
+                {cashOperation === 'close' && (
+                  <div className={`rounded-2xl border p-4 ${openTablesCount > 0 ? 'border-amber-300 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                    {checkingOpenTables ? (
+                      <p className="text-sm text-slate-600">Conferindo mesas em atendimento...</p>
+                    ) : openTablesCount > 0 ? (
+                      <div className="space-y-3">
+                        <div className="flex gap-3 text-amber-950">
+                          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                          <div>
+                            <p className="font-semibold">{openTablesCount} mesa(s) ainda aberta(s)</p>
+                            <p className="text-sm">O recomendado é receber ou liberar essas mesas antes do fechamento.</p>
+                          </div>
+                        </div>
+                        <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-white/75 p-3 text-sm text-amber-950">
+                          <Checkbox
+                            checked={openTablesConsent}
+                            onCheckedChange={(checked) => setOpenTablesConsent(checked === true)}
+                            aria-label="Confirmar fechamento com mesas abertas"
+                          />
+                          <span>Estou ciente e autorizo fechar o caixa com essas mesas abertas.</span>
+                        </label>
+                      </div>
+                    ) : (
+                      <p className="text-sm font-medium text-emerald-800">Nenhuma mesa aberta. O caixa pode ser fechado com segurança.</p>
+                    )}
+                  </div>
+                )}
               </div>
               <DialogFooter>
-                <Button onClick={handleCashOperation}>Confirmar</Button>
+                <Button
+                  onClick={handleCashOperation}
+                  disabled={cashOperation === 'close' && (checkingOpenTables || (openTablesCount > 0 && !openTablesConsent))}
+                >
+                  Confirmar
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -1450,6 +1517,17 @@ const Financeiro = () => {
             <PackageCheck className="mr-2 h-4 w-4" />
             Nota + estoque
           </Button>
+          {!isCashRoute && (
+            <Button
+              type="button"
+              variant="outline"
+              className="border-white/20 bg-white/15 text-white hover:bg-white/25"
+              onClick={() => navigate('/despesas')}
+            >
+              <ReceiptText className="mr-2 h-4 w-4" />
+              Contas a pagar
+            </Button>
+          )}
             </div>
           </div>
         </CardContent>
@@ -1459,18 +1537,7 @@ const Financeiro = () => {
         <div className="space-y-5">
           <div className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_28px_70px_-36px_rgba(0,50,35,0.32)] dark:border-white/10 dark:bg-[#101a16]/96 dark:shadow-[0_26px_60px_-36px_rgba(0,0,0,0.82)]">
             <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="min-w-0 space-y-2">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400] dark:border-[#FF6400]/25 dark:bg-[#FF6400]/10">
-                    <DollarSign className="h-3.5 w-3.5" />
-                    Financial cockpit
-                  </div>
-                  <div className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Visão financeira inteligente</div>
-                  <div className="max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-                    Um layout mais analítico para acompanhar caixa, margem, mix de pagamentos e pressão das despesas no período.
-                  </div>
-                </div>
-                <div className="grid w-full shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:w-[420px] 2xl:w-[480px]">
+              <div className="grid w-full grid-cols-2 gap-3 xl:grid-cols-4">
                   <div className="min-w-0 rounded-[22px] border border-[#8CC850]/18 bg-gradient-to-br from-white to-[#F5FBED] p-4 dark:border-[#8CC850]/15 dark:from-[#0c1512] dark:to-[#112017]">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Receitas</div>
                     <div className="mt-2 truncate text-[1.35rem] font-bold text-slate-900 dark:text-white 2xl:text-2xl">{formatCurrency(totalIncome)}</div>
@@ -1487,7 +1554,6 @@ const Financeiro = () => {
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Margem</div>
                     <div className="mt-2 truncate text-[1.35rem] font-bold text-slate-900 dark:text-white 2xl:text-2xl">{Number(margemOperacional.toFixed(1)).toString().replace('.', ',')}%</div>
                   </div>
-                </div>
               </div>
 
               <div className="flex flex-col gap-3 rounded-[24px] border border-[#003223]/8 bg-gradient-to-r from-[#F8FAF8] via-white to-[#FFF5EC] p-3 dark:border-white/10 dark:from-[#0c1512] dark:via-[#101a16] dark:to-[#1e1510] lg:flex-row lg:items-center lg:justify-between">
