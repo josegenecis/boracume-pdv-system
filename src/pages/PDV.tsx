@@ -214,6 +214,7 @@ const PDV = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [customerDocument, setCustomerDocument] = useState('');
   const [orderType, setOrderType] = useState<'delivery' | 'pickup' | 'dine_in' | 'counter'>('counter');
   const [selectedDeliveryZone, setSelectedDeliveryZone] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('');
@@ -1629,6 +1630,7 @@ const PDV = () => {
     setCustomerName('');
     setCustomerPhone('');
     setCustomerAddress('');
+    setCustomerDocument('');
     setSelectedDeliveryZone('');
     setSelectedTable('');
     setTableLaunchId('');
@@ -1916,7 +1918,12 @@ const PDV = () => {
       },
       body: JSON.stringify({
         order_id: order.id,
-        consumer_data: order.customer_name ? { nome: order.customer_name } : null,
+        consumer_data: order.customer_name || customerDocument
+          ? {
+              nome: order.customer_name || null,
+              cpf_cnpj: customerDocument.replace(/\D/g, '') || null,
+            }
+          : null,
         observacoes: '',
       }),
     });
@@ -2407,14 +2414,80 @@ const PDV = () => {
           {/* Left Column: Products (Scrollable) */}
           <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-2 pt-0 sm:px-4 sm:pb-4 sm:pt-0 lg:border-r">
             <div className="sticky top-0 z-20 mb-3 flex flex-col gap-2 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-2 pb-2 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] sm:px-4 lg:px-6">
-              <div className="relative w-full max-w-[260px]">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#003223]/40" />
-                <Input
-                  placeholder="Buscar produtos..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/90 pl-9 text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
-                />
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="relative w-[150px] shrink-0 sm:w-[210px] xl:w-[240px]">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#003223]/40" />
+                  <Input
+                    placeholder="Buscar produtos..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/90 pl-9 text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
+                  />
+                </div>
+                {(categories.length > 0 || categoryOptions.hasUncategorized) && (
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-label="Rolar categorias para a esquerda"
+                      onClick={() => scrollCategories('left')}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FF6400]/15 bg-white/95 text-[#003223] shadow-sm transition-colors hover:bg-[#F5EBE1] active:scale-95"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <div
+                      ref={categoryScrollerRef}
+                      onWheel={(event) => event.preventDefault()}
+                      className="scrollbar-hide flex min-w-0 flex-1 gap-2 overflow-x-hidden pb-0.5"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setActiveCategoryId('all')}
+                        className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          activeCategoryId === 'all'
+                            ? 'border-[#003223] bg-[#003223] text-white shadow-sm'
+                            : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
+                        }`}
+                      >
+                        Todas
+                      </button>
+                      {categoryOptions.categoriesWithProducts.map((category) => (
+                        <button
+                          key={category.id}
+                          type="button"
+                          onClick={() => setActiveCategoryId(category.id)}
+                          className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            activeCategoryId === category.id
+                              ? 'border-[#FF6400] bg-[#FF6400] text-white shadow-sm'
+                              : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
+                          }`}
+                        >
+                          {category.name}
+                        </button>
+                      ))}
+                      {categoryOptions.hasUncategorized && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveCategoryId('uncategorized')}
+                          className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            activeCategoryId === 'uncategorized'
+                              ? 'border-[#FF6400] bg-[#FF6400] text-white shadow-sm'
+                              : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
+                          }`}
+                        >
+                          Sem categoria
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Rolar categorias para a direita"
+                      onClick={() => scrollCategories('right')}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FF6400]/15 bg-white/95 text-[#003223] shadow-sm transition-colors hover:bg-[#F5EBE1] active:scale-95"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5 lg:hidden">
                 <div className="scrollbar-hide flex gap-1.5 overflow-x-auto">
@@ -2451,70 +2524,6 @@ const PDV = () => {
                   </div>
                 </div>
               </div>
-              {(categories.length > 0 || categoryOptions.hasUncategorized) && (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    aria-label="Rolar categorias para a esquerda"
-                    onClick={() => scrollCategories('left')}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FF6400]/15 bg-white/95 text-[#003223] shadow-sm transition-colors hover:bg-[#F5EBE1] active:scale-95"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <div
-                    ref={categoryScrollerRef}
-                    onWheel={(event) => event.preventDefault()}
-                    className="scrollbar-hide flex min-w-0 flex-1 gap-2 overflow-x-hidden pb-0.5"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setActiveCategoryId('all')}
-                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        activeCategoryId === 'all'
-                          ? 'border-[#003223] bg-[#003223] text-white shadow-sm'
-                          : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
-                      }`}
-                    >
-                      Todas
-                    </button>
-                    {categoryOptions.categoriesWithProducts.map((category) => (
-                    <button
-                      key={category.id}
-                      type="button"
-                      onClick={() => setActiveCategoryId(category.id)}
-                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        activeCategoryId === category.id
-                          ? 'border-[#FF6400] bg-[#FF6400] text-white shadow-sm'
-                          : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
-                      }`}
-                    >
-                      {category.name}
-                    </button>
-                    ))}
-                    {categoryOptions.hasUncategorized && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveCategoryId('uncategorized')}
-                        className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                          activeCategoryId === 'uncategorized'
-                            ? 'border-[#FF6400] bg-[#FF6400] text-white shadow-sm'
-                            : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
-                        }`}
-                      >
-                        Sem categoria
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    aria-label="Rolar categorias para a direita"
-                    onClick={() => scrollCategories('right')}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FF6400]/15 bg-white/95 text-[#003223] shadow-sm transition-colors hover:bg-[#F5EBE1] active:scale-95"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
             </div>
             <Card className="h-full flex flex-col border-none shadow-none bg-transparent">
               <div className={`flex-1 ${isMobile ? 'pb-28' : 'pb-24 lg:pb-0'}`}>
@@ -2693,22 +2702,20 @@ const PDV = () => {
             <div className="bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0 z-30">
               <div className="p-2 space-y-2">
                 {/* Compact Form */}
-                <div className="hidden">
+                <div className="space-y-2 rounded-xl border border-[#003223]/10 bg-[#FAFCFB] p-2">
                    <div className="flex gap-2">
                       <Input
-                        placeholder={orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome (Opcional)"}
+                        placeholder="Nome do cliente (opcional)"
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         className="h-8 text-xs"
                       />
-                      {orderType !== 'counter' && (
-                        <Input
-                          placeholder="Tel"
-                          value={customerPhone}
-                          onChange={(e) => setCustomerPhone(e.target.value)}
-                          className="h-8 text-xs w-28 shrink-0"
-                        />
-                      )}
+                      <Input
+                        placeholder="Telefone"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        className="h-8 w-28 shrink-0 text-xs"
+                      />
                     </div>
 
                     {orderType === 'delivery' && (
@@ -2944,8 +2951,8 @@ const PDV = () => {
 
                {/* Mobile Checkout Form */}
                <div className="border-t bg-white p-3">
-                  <div className="hidden">
-                    <div className="hidden gap-2">
+                  <div className="mb-3 space-y-2 rounded-xl border border-[#003223]/10 bg-[#FAFCFB] p-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <Input
                         placeholder="Nome (Opcional)"
                         value={customerName}
@@ -2960,7 +2967,7 @@ const PDV = () => {
                       />
                     </div>
 
-                    {false && orderType === 'delivery' && (
+                    {orderType === 'delivery' && (
                       <>
                         <Input
                           placeholder="Endereço Completo *"
@@ -2983,7 +2990,7 @@ const PDV = () => {
                       </>
                     )}
 
-                   {false && orderType === 'dine_in' ? (
+                   {orderType === 'dine_in' ? (
                      <div className="flex gap-2 items-center">
                         <Select value={selectedTable} onValueChange={setSelectedTable}>
                            <SelectTrigger className="h-9 text-sm flex-1">
@@ -3198,8 +3205,8 @@ const PDV = () => {
         onConfirm={handleFinalizeSale}
         processing={processing || cart.length === 0}
         modeVariant={checkoutSettings.mode}
-        cpfValue={orderType === 'counter' ? customerName : ''}
-        onCpfChange={orderType === 'counter' ? setCustomerName : undefined}
+        cpfValue={customerDocument}
+        onCpfChange={setCustomerDocument}
         inlineContent={paymentMethod === 'pagar_depois' ? (
           <div className="space-y-3">
             <ReceivableContactSelect
@@ -3235,19 +3242,17 @@ const PDV = () => {
           <div className="space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">
               <Input
-                placeholder={orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome (Opcional)"}
+                placeholder="Nome do cliente (opcional)"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="h-10"
               />
-              {orderType !== 'counter' && (
-                <Input
-                  placeholder="Telefone"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="h-10"
-                />
-              )}
+              <Input
+                placeholder="Telefone"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                className="h-10"
+              />
             </div>
 
             {orderType === 'delivery' && (
