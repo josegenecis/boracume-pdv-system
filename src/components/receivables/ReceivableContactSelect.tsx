@@ -27,6 +27,28 @@ const typeLabels: Record<ReceivableContactType, string> = {
   other: 'Outro',
 };
 
+const getContactSaveError = (error: any) => {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '').toLowerCase();
+
+  if (code === '42501' || message.includes('row-level security') || message.includes('sem permissão')) {
+    return 'Seu acesso não tem permissão para cadastrar nesta loja. Entre novamente ou peça liberação ao administrador.';
+  }
+  if (code === '23505' || message.includes('duplicate')) {
+    return 'Já existe um cadastro com esses dados nesta loja.';
+  }
+  if (code === '23503' || message.includes('foreign key')) {
+    return 'Não foi possível vincular o cadastro à loja selecionada. Atualize a página e tente novamente.';
+  }
+  if (code.startsWith('PGRST') || message.includes('schema cache')) {
+    return 'O cadastro está sendo atualizado no servidor. Aguarde alguns segundos e tente novamente.';
+  }
+  if (message.includes('nome')) {
+    return 'Informe um nome válido para continuar.';
+  }
+  return 'Não foi possível salvar agora. Atualize a página e tente novamente.';
+};
+
 interface Props {
   value: string;
   onChange: (value: string, contact?: ReceivableContact) => void;
@@ -87,23 +109,25 @@ const ReceivableContactSelect: React.FC<Props> = ({ value, onChange }) => {
 
     setSaving(true);
     const { data, error } = await (supabase as any)
-      .from('receivable_contacts')
-      .insert({
-        user_id: user.id,
-        name: name.trim(),
-        contact_type: type,
-        document: document.trim() || null,
-        phone: phone.trim() || null,
-        notes: notes.trim() || null,
+      .rpc('create_receivable_contact', {
+        p_user_id: user.id,
+        p_name: name.trim(),
+        p_contact_type: type,
+        p_document: document.replace(/\D/g, '') || null,
+        p_phone: phone.replace(/\D/g, '') || null,
+        p_notes: notes.trim() || null,
       })
-      .select('id,name,contact_type,document,phone')
       .single();
     setSaving(false);
 
     if (error) {
+      console.error('[CONTAS_A_RECEBER] Falha ao criar cadastro:', {
+        code: error.code,
+        message: error.message,
+      });
       toast({
         title: 'Cadastro não realizado',
-        description: 'Confira os dados e tente novamente.',
+        description: getContactSaveError(error),
         variant: 'destructive',
       });
       return;
