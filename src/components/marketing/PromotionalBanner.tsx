@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Instagram, Play } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { publicSupabase } from '@/integrations/supabase/publicClient';
 import { useAuth } from '@/contexts/AuthContext';
 import BannerStoryViewer, { StoryBanner, StoryLinkedProduct } from '@/components/marketing/BannerStoryViewer';
 import AutoplayVideo from '@/components/media/AutoplayVideo';
@@ -72,6 +73,8 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   };
   
   useEffect(() => {
+    let cancelled = false;
+
     const fetchBanners = async () => {
       if (!userId) {
         setBanners([]);
@@ -82,10 +85,14 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
       try {
         setIsLoading(true);
 
+        // O cardápio público não deve herdar uma eventual sessão do painel.
+        // Isso mantém a leitura dos banners vinculada apenas ao restaurante da URL.
+        const bannerClient = restaurantId ? publicSupabase : supabase;
+
         let promoBanners: any[] | null = null;
         let promoError: any = null;
 
-        const res1 = await supabase
+        const res1 = await bannerClient
           .from('promotional_banners')
           .select('id,title,description,image_url,link_url,external_video_url,media_source,active,display_order,start_date,end_date,banner_type,product_id')
           .eq('user_id', userId)
@@ -96,7 +103,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         promoError = res1.error as any;
 
         if (promoError && (String(promoError.message || '').includes('banner_type') || String(promoError.message || '').includes('external_video_url') || String(promoError.message || '').includes('media_source'))) {
-          const res2 = await supabase
+          const res2 = await bannerClient
             .from('promotional_banners')
             .select('id,title,description,image_url,link_url,active,display_order,start_date,end_date,product_id')
             .eq('user_id', userId)
@@ -120,9 +127,9 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
             mediaSource: banner.media_source || (isInstagramUrl(banner.external_video_url || banner.link_url) ? 'instagram' : 'file'),
             externalVideoUrl: banner.external_video_url || (isInstagramUrl(banner.link_url) ? banner.link_url : '')
           }));
-          setBanners(convertedBanners);
+          if (!cancelled) setBanners(convertedBanners);
         } else {
-          const { data: marketingData, error: marketingError } = await supabase
+          const { data: marketingData, error: marketingError } = await bannerClient
             .from('marketing_settings')
             .select('banner_images')
             .eq('user_id', userId)
@@ -130,7 +137,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
           
           if (marketingError) {
             console.error('Erro ao buscar configurações de marketing:', marketingError);
-            setBanners([]);
+            if (!cancelled) setBanners([]);
           } else if (marketingData?.banner_images && Array.isArray(marketingData.banner_images) && marketingData.banner_images.length > 0) {
             const parsedBanners: Banner[] = [];
             
@@ -152,21 +159,25 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
               }
             }
             
-            setBanners(parsedBanners);
+            if (!cancelled) setBanners(parsedBanners);
           } else {
-            setBanners([]);
+            if (!cancelled) setBanners([]);
           }
         }
       } catch (error) {
         console.error('Error fetching banners:', error);
-        setBanners([]);
+        if (!cancelled) setBanners([]);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
     
     fetchBanners();
-  }, [userId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [restaurantId, userId, variant]);
   
   const clickables = useMemo(() => {
     return banners.filter((b) => String(b.imageUrl || b.externalVideoUrl || b.link || '').trim());
