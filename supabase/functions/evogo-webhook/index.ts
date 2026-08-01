@@ -145,6 +145,32 @@ function isMessageFromRestaurant(item: any) {
   return toBooleanFlag(getFromMeRaw(item));
 }
 
+function pickProviderMessageId(item: any): string {
+  const key = item?.key || item?.data?.key || {};
+  const info = item?.Info || item?.info || item?.data?.Info || item?.data?.info || {};
+  const source = info?.MessageSource || info?.messageSource || {};
+  const candidates = [
+    key?.id,
+    key?.ID,
+    key?.Id,
+    item?.id,
+    item?.ID,
+    item?.Id,
+    info?.id,
+    info?.ID,
+    info?.Id,
+    source?.id,
+    source?.ID,
+    source?.Id,
+    item?.messageId,
+    item?.messageID,
+    item?.data?.messageId,
+    item?.data?.messageID
+  ];
+
+  return candidates.map((value) => String(value || '').trim()).find(Boolean) || '';
+}
+
 function pickCustomerJid(item: any) {
   const key = item?.key || item?.data?.key || {};
   const candidates = [
@@ -402,7 +428,8 @@ serve(async (req) => {
             restaurantId: instanceRow.restaurant_id,
             instanceName: instanceRow.instance_name || instanceName,
             customerPhone: phone,
-            text
+            text,
+            providerMessageId: pickProviderMessageId(primaryIncoming)
           });
           lastResult = result;
           await logWhatsAppBotStep(supabaseClient, instanceRow.restaurant_id, result.ok ? 'whatsapp_webhook_processed' : 'whatsapp_webhook_error', result.ok ? 'Webhook evogo processado com sucesso' : 'Webhook evogo falhou ao processar', {

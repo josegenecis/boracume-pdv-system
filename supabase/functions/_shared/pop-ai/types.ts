@@ -61,6 +61,7 @@ export interface PopAiIncomingMessage {
   customerPhone: string;
   text: string;
   media?: any;
+  providerMessageId?: string | null;
 }
 
 export interface PopAiEngineResult {

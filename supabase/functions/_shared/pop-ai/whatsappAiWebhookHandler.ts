@@ -114,6 +114,30 @@ export async function processPopAiMessage(params: PopAiIncomingMessage): Promise
     return { ok: false, skipped: true, reason: 'missing_input' };
   }
 
+  // Reserve the inbound message before any AI work. WhatsApp providers can
+  // deliver the same event simultaneously to more than one webhook/worker;
+  // the database function serializes those deliveries per message.
+  try {
+    const { data: claimed, error: claimError } = await supabase.rpc('claim_whatsapp_inbound_message', {
+      p_restaurant_id: restaurantId,
+      p_customer_phone: phone,
+      p_content: text,
+      p_provider_message_id: params.providerMessageId || null,
+      p_instance_name: params.instanceName || null,
+      p_window_seconds: 30
+    });
+
+    if (claimError) {
+      // Fail open during rolling deploys so a delayed database migration does
+      // not interrupt customer service. The legacy deduplication remains active.
+      console.warn('[PopAI] inbound claim unavailable:', claimError.message || claimError);
+    } else if (claimed !== true) {
+      return { ok: true, skipped: true, reason: 'duplicate_inbound_message' };
+    }
+  } catch (claimError) {
+    console.warn('[PopAI] inbound claim failed:', claimError);
+  }
+
   let aiConversation: any = null;
   try {
     const [settings, customer] = await Promise.all([

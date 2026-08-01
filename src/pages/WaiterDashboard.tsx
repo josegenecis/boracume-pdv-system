@@ -483,17 +483,14 @@ const WaiterDashboard = () => {
           setSelectedTable(null);
         }
       }}>
-        <DialogContent className="rounded-[28px] border-0 p-0 sm:max-w-md">
-          <div className="bg-[#082F23] px-6 py-6 text-white">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-[28px] border-0 p-0 sm:max-w-md">
+          <div className="bg-[#082F23] px-5 py-5 text-white sm:px-6">
             <DialogTitle className="text-2xl font-semibold">Abrir Mesa {selectedTable?.number}</DialogTitle>
             <DialogDescription className="mt-2 text-white/70">
               Defina quantas comandas iniciais devem nascer na abertura desta mesa.
             </DialogDescription>
           </div>
-          <div className="space-y-5 px-6 py-6">
-            <div className="rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-              O app cria uma comanda por pessoa inicialmente, mas depois voce pode renomear, juntar, mover itens e abrir novas comandas.
-            </div>
+          <div className="space-y-4 px-5 py-5 sm:px-6 sm:py-6">
             <div className="space-y-2">
               <Label htmlFor="customerName">Nome do cliente</Label>
               <Input
@@ -514,14 +511,14 @@ const WaiterDashboard = () => {
                 className="h-12 rounded-2xl"
               />
             </div>
-            <DialogFooter className="gap-3 sm:justify-between">
-              <Button variant="outline" className="rounded-2xl" onClick={() => {
+            <DialogFooter className="sticky bottom-0 -mx-5 -mb-5 gap-3 border-t bg-white px-5 py-4 sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:bg-transparent sm:p-0 sm:justify-between">
+              <Button variant="outline" className="w-full rounded-2xl sm:w-auto" onClick={() => {
                 setCustomerName('');
                 setSelectedTable(null);
               }} disabled={submitting}>
                 Cancelar
               </Button>
-              <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={handleOpenSession} disabled={submitting}>
+              <Button className="w-full rounded-2xl bg-[#FF6400] hover:bg-[#E25A00] sm:w-auto" onClick={handleOpenSession} disabled={submitting}>
                 {submitting ? 'Abrindo...' : 'Entrar no atendimento'}
               </Button>
             </DialogFooter>

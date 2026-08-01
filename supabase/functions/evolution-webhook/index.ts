@@ -185,6 +185,32 @@ function isMessageFromRestaurant(data: any) {
   return toBooleanFlag(getFromMeRaw(data));
 }
 
+function pickProviderMessageId(data: any): string {
+  const key = data?.key || data?.data?.key || {};
+  const info = data?.Info || data?.info || data?.data?.Info || data?.data?.info || {};
+  const source = info?.MessageSource || info?.messageSource || {};
+  const candidates = [
+    key?.id,
+    key?.ID,
+    key?.Id,
+    data?.id,
+    data?.ID,
+    data?.Id,
+    info?.id,
+    info?.ID,
+    info?.Id,
+    source?.id,
+    source?.ID,
+    source?.Id,
+    data?.messageId,
+    data?.messageID,
+    data?.data?.messageId,
+    data?.data?.messageID
+  ];
+
+  return candidates.map((value) => String(value || '').trim()).find(Boolean) || '';
+}
+
 function pickIncomingEnvelope(body: any) {
   const direct = body?.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data : body;
   const list = body?.data?.messages || body?.messages || body?.data;
@@ -353,7 +379,8 @@ Deno.serve(async (req: Request) => {
     instanceName: instance,
     customerPhone,
     text,
-    media
+    media,
+    providerMessageId: pickProviderMessageId(data)
   });
 
   if (!result.ok) {
