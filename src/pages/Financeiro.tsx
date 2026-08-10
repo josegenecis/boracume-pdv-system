@@ -839,13 +839,24 @@ const Financeiro = () => {
           : '';
         const closeNotes = [cashDescription.trim(), closeAuditNote].filter(Boolean).join(' | ');
         const reportLines = await buildCashCloseReportLines(currentSession, amount, closedAt, closeNotes);
-        const { error } = await (supabase as any).from('cash_register_sessions').update({
+        const { data: closedSession, error } = await (supabase as any).from('cash_register_sessions').update({
           status: 'closed',
           closed_at: closedAt,
           final_amount: amount,
           notes: closeNotes
-        }).eq('id', currentSession.id);
+        })
+          .eq('id', currentSession.id)
+          .eq('user_id', user.id)
+          .eq('status', 'open')
+          .select('id,status,closed_at')
+          .maybeSingle();
         if (error) throw error;
+        if (closedSession?.status !== 'closed') throw new Error('A sessão aberta não foi alterada no banco. Atualize e tente novamente.');
+        setCurrentSession(null);
+        setCashSessions((current) => current.map((session) => session.id === currentSession.id
+          ? { ...session, status: 'closed', closed_at: closedAt }
+          : session));
+        window.dispatchEvent(new CustomEvent('cash-session-changed'));
         toast({ title: 'Caixa fechado com sucesso' });
         await PrinterService.printCashReport({
           title: '',

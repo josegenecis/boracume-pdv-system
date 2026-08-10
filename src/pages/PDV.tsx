@@ -883,7 +883,6 @@ const PDV = () => {
         }
         const latestSummary = cashCloseSummary || await loadCashCloseSummary(cashSession, amount);
         setCashCloseSummary(latestSummary);
-        let error: any = null;
         const updatePayload: any = {
           status: 'closed',
           closed_at: new Date().toISOString(),
@@ -894,28 +893,38 @@ const PDV = () => {
             : null,
         };
         if (waiterId) updatePayload.closed_by_waiter_id = waiterId;
-        const res1 = await supabase
-          .from('cash_register_sessions' as any)
-          .update(updatePayload)
-          .eq('id', cashSession.id);
-        error = (res1 as any).error;
-        if (error && String(error.message || '').includes('expected_amount')) {
-          const { expected_amount, ...fallback } = updatePayload;
-          const res2 = await supabase
+        const { expected_amount, closed_by_waiter_id, ...requiredClosePayload } = updatePayload;
+        const candidates = [
+          updatePayload,
+          { ...requiredClosePayload, ...(closed_by_waiter_id ? { closed_by_waiter_id } : {}) },
+          { ...requiredClosePayload, ...(expected_amount != null ? { expected_amount } : {}) },
+          requiredClosePayload,
+        ];
+        let closedRow: any = null;
+        let lastCloseError: any = null;
+        for (const candidate of candidates) {
+          const { data: updated, error } = await supabase
             .from('cash_register_sessions' as any)
-            .update(fallback)
-            .eq('id', cashSession.id);
-          error = (res2 as any).error;
+            .update(candidate)
+            .eq('id', cashSession.id)
+            .eq('user_id', user.id)
+            .eq('status', 'open')
+            .select('id,status,closed_at')
+            .maybeSingle();
+          if (!error && updated?.status === 'closed') {
+            closedRow = updated;
+            break;
+          }
+          lastCloseError = error || new Error('A sessão aberta não foi alterada no banco.');
+          const message = String(error?.message || '');
+          if (!/expected_amount|closed_by_waiter_id/i.test(message)) break;
         }
-        if (error && String(error.message || '').includes('closed_by_waiter_id')) {
-          const { closed_by_waiter_id, ...fallback } = updatePayload;
-          const res2 = await supabase
-            .from('cash_register_sessions' as any)
-            .update(fallback)
-            .eq('id', cashSession.id);
-          error = (res2 as any).error;
-        }
-        if (error) throw error;
+        if (!closedRow) throw lastCloseError || new Error('Não foi possível confirmar o fechamento do caixa.');
+
+        setCashSession(null);
+        setCashSessionDeadline(null);
+        setCashDialogOpen(false);
+        window.dispatchEvent(new CustomEvent('cash-session-changed'));
         toast({ title: 'Caixa fechado' });
         await PrinterService.printCashReport({
           title: '',
@@ -2075,15 +2084,18 @@ const PDV = () => {
       description: modelCode === '55' ? 'A nota fiscal modelo 55 será transmitida à Sefaz.' : 'O cupom fiscal modelo 65 será emitido e impresso automaticamente.',
     });
 
+    if (modelCode === '55') {
+      // NF-e gera dois documentos distintos: primeiro o comprovante operacional
+      // normal na térmica; somente depois transmite e abre o DANFE em PDF A4.
+      await PrinterService.printOrder(order, {
+        openCashDrawer: shouldOpenCashDrawerForOrder(order),
+      });
+    }
+
     const nfceData = await emitNfceForOrder(order);
     const fiscalOrder = { ...order, nfce: nfceData };
 
     if (modelCode === '55') {
-      // NF-e gera dois documentos distintos: primeiro o comprovante operacional
-      // normal na térmica e, depois, o DANFE modelo 55 em PDF A4 para conferência.
-      await PrinterService.printOrder(order, {
-        openCashDrawer: shouldOpenCashDrawerForOrder(order),
-      });
       await PrinterService.printOrder(fiscalOrder);
       return { fiscal: true as const, nfce: nfceData };
     }
