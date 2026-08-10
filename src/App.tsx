@@ -89,6 +89,7 @@ import './styles/responsive.css';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '@/integrations/supabase/client';
 import { getCashSessionDeadline, isCashSessionOverdue } from '@/utils/cashSession';
+import { getLocalOperatorSession } from '@/services/operatorAuth';
 
 const queryClient = new QueryClient();
 
@@ -310,7 +311,6 @@ function DesktopCashSessionGuard() {
     const api = window.electronAPI;
     if (!api?.isElectron || !api.setCashSessionStatus) return;
     let active = true;
-    let lastOverdueNotice = '';
 
     const refresh = async () => {
       if (!user?.id) {
@@ -324,10 +324,12 @@ function DesktopCashSessionGuard() {
       if (!active) return;
       const overdue = Boolean(session?.opened_at && isCashSessionOverdue(session.opened_at, profile?.opening_hours));
       api.setCashSessionStatus?.({ open: Boolean(session?.id), overdue });
-      if (overdue && lastOverdueNotice !== session.id) {
-        lastOverdueNotice = session.id;
+      const noticeKey = session?.id ? `cash-overdue-notice:${session.id}` : '';
+      const operatorSelected = Boolean(getLocalOperatorSession()?.id);
+      if (overdue && operatorSelected && noticeKey && sessionStorage.getItem(noticeKey) !== 'shown') {
+        sessionStorage.setItem(noticeKey, 'shown');
         const deadline = getCashSessionDeadline(session.opened_at, profile?.opening_hours);
-        toast.error(`O limite deste caixa venceu em ${deadline.toLocaleString('pt-BR')}. Feche-o antes de continuar as vendas.`, { duration: 12000 });
+        toast.error(`O limite deste caixa venceu em ${deadline.toLocaleString('pt-BR')}. Feche-o antes de continuar as vendas.`, { id: noticeKey, duration: 12000 });
         navigate('/caixa?acao=fechar&motivo=limite');
       }
     };
