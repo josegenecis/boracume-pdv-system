@@ -1725,6 +1725,28 @@ const PDV = () => {
     return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
   };
 
+  const ensureCashCanReceiveOrder = () => {
+    if (!cashSession?.id) {
+      toast({
+        title: 'Caixa fechado',
+        description: 'Abra o caixa antes de lançar um pedido.',
+        variant: 'destructive',
+      });
+      openCashDialog('open');
+      return false;
+    }
+    if (cashSessionDeadline && Date.now() > cashSessionDeadline.getTime()) {
+      toast({
+        title: 'Caixa pendente de encerramento',
+        description: `O limite deste caixa venceu em ${cashSessionDeadline.toLocaleString('pt-BR')}. Feche-o antes de lançar um novo pedido.`,
+        variant: 'destructive',
+      });
+      navigate('/caixa?acao=fechar&motivo=limite');
+      return false;
+    }
+    return true;
+  };
+
   const addToTable = async (tableIdOverride?: string) => {
     const targetTableId = tableIdOverride || selectedTable;
     if (cart.length === 0) {
@@ -1745,15 +1767,7 @@ const PDV = () => {
       return;
     }
 
-    if (!cashSession?.id) {
-      toast({
-        title: "Caixa fechado",
-        description: "Abra o caixa antes de lançar itens em mesas.",
-        variant: "destructive",
-      });
-      openCashDialog('open');
-      return;
-    }
+    if (!ensureCashCanReceiveOrder()) return;
 
     try {
       setProcessing(true);
@@ -1900,6 +1914,7 @@ const PDV = () => {
       });
       return;
     }
+    if (!ensureCashCanReceiveOrder()) return;
     setTableLaunchId(selectedTable || '');
     setTableLaunchOpen(true);
   };
@@ -1913,6 +1928,8 @@ const PDV = () => {
       });
       return;
     }
+
+    if (!ensureCashCanReceiveOrder()) return;
 
     setMobileCartOpen(false);
     setCheckoutOpen(true);
