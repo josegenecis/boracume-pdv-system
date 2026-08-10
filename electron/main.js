@@ -43,7 +43,13 @@ function loadHardwareModules() {
 }
 
 function focusMainWindow() {
-  if (!mainWindow) return;
+  if (!mainWindow) {
+    if (updateWindow) {
+      updateWindow.show();
+      updateWindow.focus();
+    }
+    return;
+  }
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
@@ -122,6 +128,12 @@ function createWindow() {
       mainWindow.webContents.openDevTools();
     }
   });
+
+  // O carregamento da interface nunca pode deixar o processo invisível.
+  const startupVisibilityFallback = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) mainWindow.show();
+  }, 3000);
+  mainWindow.once('show', () => clearTimeout(startupVisibilityFallback));
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (pendingOAuthCallback) mainWindow.webContents.send('oauth-callback', pendingOAuthCallback);
@@ -408,10 +420,15 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
-  runAutoUpdateFlow().then(() => {
-    createWindow();
-    startPrintServer();
-  });
+  // A janela abre primeiro. Falha, lentidão ou indisponibilidade do provedor de
+  // updates nunca mais impede o operador de acessar o sistema.
+  createWindow();
+  startPrintServer();
+  setTimeout(() => {
+    void runAutoUpdateFlow().catch((error) => {
+      console.error('Falha não bloqueante ao verificar atualização:', error);
+    });
+  }, 1500);
 });
 
 app.on('window-all-closed', () => {
