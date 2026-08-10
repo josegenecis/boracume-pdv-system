@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Edit, Search, Package, ShoppingBag, ArrowDownToLine } from 'lucide-react';
+import { Plus, Edit, Search, Package, ShoppingBag, ArrowDownToLine, ArrowUpFromLine, ClipboardCheck } from 'lucide-react';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { useNavigate } from 'react-router-dom';
 
@@ -27,6 +27,7 @@ interface Ingredient {
   last_purchase_cost?: number | null;
   current_stock: number;
   min_stock: number;
+  stock_control_mode: 'automatic_recipe' | 'manual_withdrawal' | 'periodic_count';
   user_id: string;
   created_at: string;
   updated_at: string;
@@ -72,6 +73,10 @@ export default function Ingredientes() {
   const [stockEntryTarget, setStockEntryTarget] = useState<{ type: 'product' | 'ingredient'; id: string; name: string } | null>(null);
   const [stockEntryQuantity, setStockEntryQuantity] = useState('');
   const [stockEntryCost, setStockEntryCost] = useState(0);
+  const [stockOperationOpen, setStockOperationOpen] = useState(false);
+  const [stockOperationTarget, setStockOperationTarget] = useState<Ingredient | null>(null);
+  const [stockOperationQuantity, setStockOperationQuantity] = useState('');
+  const [stockOperationUnit, setStockOperationUnit] = useState<'purchase' | 'consumption'>('purchase');
   const [formData, setFormData] = useState({
     name: '',
     unit: 'un',
@@ -80,7 +85,8 @@ export default function Ingredientes() {
     yield_percentage: 100,
     cost_price: 0,
     current_stock: 0,
-    min_stock: 0
+    min_stock: 0,
+    stock_control_mode: 'automatic_recipe' as Ingredient['stock_control_mode']
   });
 
   useEffect(() => {
@@ -132,6 +138,7 @@ export default function Ingredientes() {
     last_purchase_cost: ingredient?.last_purchase_cost == null ? null : Number(ingredient.last_purchase_cost),
     current_stock: Number(ingredient?.current_stock ?? 0),
     min_stock: Number(ingredient?.min_stock ?? 0),
+    stock_control_mode: ingredient?.stock_control_mode || 'automatic_recipe',
   });
 
   const normalizeProductStock = (product: any): ProductStock => ({
@@ -149,6 +156,7 @@ export default function Ingredientes() {
       purchase_unit: formData.purchase_unit,
       purchase_conversion: Number(formData.purchase_conversion || 1),
       yield_percentage: Number(formData.yield_percentage || 100),
+      stock_control_mode: formData.stock_control_mode,
       user_id: user?.id,
     };
 
@@ -290,7 +298,8 @@ export default function Ingredientes() {
       yield_percentage: ingredient.yield_percentage || 100,
       cost_price: ingredient.price,
       current_stock: ingredient.current_stock || 0,
-      min_stock: ingredient.min_stock || 0
+      min_stock: ingredient.min_stock || 0,
+      stock_control_mode: ingredient.stock_control_mode || 'automatic_recipe'
     });
     setIsFormOpen(true);
   };
@@ -387,8 +396,44 @@ export default function Ingredientes() {
       yield_percentage: 100,
       cost_price: 0,
       current_stock: 0,
-      min_stock: 0
+      min_stock: 0,
+      stock_control_mode: 'automatic_recipe'
     });
+  };
+
+  const openStockOperation = (ingredient: Ingredient) => {
+    setStockOperationTarget(ingredient);
+    setStockOperationQuantity('');
+    setStockOperationUnit(ingredient.stock_control_mode === 'manual_withdrawal' ? 'purchase' : 'consumption');
+    setStockOperationOpen(true);
+  };
+
+  const handleStockOperation = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user || !stockOperationTarget) return;
+    const quantity = Number(stockOperationQuantity.replace(',', '.'));
+    const isWithdrawal = stockOperationTarget.stock_control_mode === 'manual_withdrawal';
+    if (!Number.isFinite(quantity) || quantity < 0 || (isWithdrawal && quantity === 0)) {
+      toast({ title: 'Quantidade inválida', description: 'Informe uma quantidade válida.', variant: 'destructive' });
+      return;
+    }
+    try {
+      const { error } = isWithdrawal
+        ? await (supabase as any).rpc('record_ingredient_withdrawal', {
+            p_ingredient_id: stockOperationTarget.id, p_quantity: quantity,
+            p_quantity_unit: stockOperationUnit, p_reason: 'Retirada/abertura registrada no estoque', p_owner_id: user.id,
+          })
+        : await (supabase as any).rpc('record_ingredient_count', {
+            p_ingredient_id: stockOperationTarget.id, p_counted_quantity: quantity,
+            p_reason: 'Inventário por contagem física', p_owner_id: user.id,
+          });
+      if (error) throw error;
+      toast({ title: isWithdrawal ? 'Retirada registrada' : 'Contagem registrada', description: 'O saldo e o histórico foram atualizados.' });
+      setStockOperationOpen(false);
+      await loadIngredients();
+    } catch (error: any) {
+      toast({ title: 'Erro ao atualizar estoque', description: error?.message || 'Não foi possível registrar a operação.', variant: 'destructive' });
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -585,6 +630,7 @@ export default function Ingredientes() {
                       <TableRow>
                         <TableHead>Nome</TableHead>
                         <TableHead>Compra → Consumo</TableHead>
+                        <TableHead>Controle</TableHead>
                         <TableHead>Estoque Atual</TableHead>
                         <TableHead>Estoque Mínimo</TableHead>
                         <TableHead>Preço de Custo</TableHead>
@@ -607,6 +653,11 @@ export default function Ingredientes() {
                               ) : null}
                             </TableCell>
                             <TableCell>
+                              <Badge variant="outline">
+                                {ingredient.stock_control_mode === 'automatic_recipe' ? 'Automático por venda' : ingredient.stock_control_mode === 'manual_withdrawal' ? 'Retirada manual' : 'Contagem periódica'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
                               <Badge variant={isLowStock ? "destructive" : "secondary"} className={isLowStock ? "bg-red-500" : "bg-boracume-green text-white"}>
                                 {ingredient.current_stock || 0}
                               </Badge>
@@ -625,6 +676,11 @@ export default function Ingredientes() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
+                                {ingredient.stock_control_mode !== 'automatic_recipe' ? (
+                                  <Button variant="ghost" size="sm" onClick={() => openStockOperation(ingredient)} title={ingredient.stock_control_mode === 'manual_withdrawal' ? 'Registrar retirada' : 'Registrar contagem'}>
+                                    {ingredient.stock_control_mode === 'manual_withdrawal' ? <ArrowUpFromLine className="h-4 w-4" /> : <ClipboardCheck className="h-4 w-4" />}
+                                  </Button>
+                                ) : null}
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -702,6 +758,23 @@ export default function Ingredientes() {
                 <p className="text-xs text-gray-500">É a unidade consumida na receita, como g, ml ou un.</p>
               </div>
 
+              <div className="grid gap-2 rounded-xl border p-4">
+                <Label htmlFor="stock_control_mode">Modelo de controle físico *</Label>
+                <Select value={formData.stock_control_mode} onValueChange={(value: Ingredient['stock_control_mode']) => setFormData(prev => ({ ...prev, stock_control_mode: value }))}>
+                  <SelectTrigger id="stock_control_mode"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="automatic_recipe">Automático pela ficha técnica</SelectItem>
+                    <SelectItem value="manual_withdrawal">Manual ao retirar/abrir pacote</SelectItem>
+                    <SelectItem value="periodic_count">Inventário por contagem periódica</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {formData.stock_control_mode === 'automatic_recipe' && 'Cada venda baixa a quantidade prevista na receita.'}
+                  {formData.stock_control_mode === 'manual_withdrawal' && 'As vendas calculam o CMV, mas o saldo só baixa quando alguém registra a retirada.'}
+                  {formData.stock_control_mode === 'periodic_count' && 'As vendas calculam o CMV e o saldo é ajustado nas contagens físicas.'}
+                </p>
+              </div>
+
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
                 <p className="mb-3 text-sm font-semibold text-emerald-950">Conversão da compra</p>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -726,9 +799,12 @@ export default function Ingredientes() {
                       id="purchase_conversion"
                       type="number"
                       min="0.000001"
-                      step="0.001"
-                      value={formData.purchase_conversion}
-                      onChange={(event) => setFormData(prev => ({ ...prev, purchase_conversion: Number(event.target.value) }))}
+                      step="any"
+                      value={formData.purchase_conversion === 0 ? '' : formData.purchase_conversion}
+                      onChange={(event) => setFormData(prev => ({
+                        ...prev,
+                        purchase_conversion: event.target.value === '' ? 0 : Number(event.target.value),
+                      }))}
                       required
                     />
                   </div>
@@ -741,8 +817,11 @@ export default function Ingredientes() {
                     min="0.01"
                     max="100"
                     step="0.01"
-                    value={formData.yield_percentage}
-                    onChange={(event) => setFormData(prev => ({ ...prev, yield_percentage: Number(event.target.value) }))}
+                    value={formData.yield_percentage === 0 ? '' : formData.yield_percentage}
+                    onChange={(event) => setFormData(prev => ({
+                      ...prev,
+                      yield_percentage: event.target.value === '' ? 0 : Number(event.target.value),
+                    }))}
                     required
                   />
                   <p className="text-xs text-emerald-800">
@@ -862,6 +941,45 @@ export default function Ingredientes() {
               <Button type="submit" className="bg-boracume-green hover:bg-boracume-green/90">
                 Somar no estoque
               </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={stockOperationOpen} onOpenChange={setStockOperationOpen}>
+        <DialogContent className="sm:max-w-[460px]">
+          <form onSubmit={handleStockOperation}>
+            <DialogHeader>
+              <DialogTitle>{stockOperationTarget?.stock_control_mode === 'manual_withdrawal' ? 'Registrar retirada' : 'Registrar contagem física'}</DialogTitle>
+              <DialogDescription>
+                {stockOperationTarget?.stock_control_mode === 'manual_withdrawal'
+                  ? `Informe o que foi retirado ou aberto de ${stockOperationTarget?.name}.`
+                  : `Informe o saldo realmente contado de ${stockOperationTarget?.name}.`}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              {stockOperationTarget?.stock_control_mode === 'manual_withdrawal' ? (
+                <div className="grid gap-2">
+                  <Label>Informar quantidade em</Label>
+                  <Select value={stockOperationUnit} onValueChange={(value: 'purchase' | 'consumption') => setStockOperationUnit(value)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="purchase">Embalagem de compra ({stockOperationTarget.purchase_unit})</SelectItem>
+                      <SelectItem value="consumption">Unidade de consumo ({stockOperationTarget.unit})</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              <div className="grid gap-2">
+                <Label htmlFor="stock_operation_quantity">
+                  {stockOperationTarget?.stock_control_mode === 'manual_withdrawal' ? 'Quantidade retirada *' : `Saldo contado em ${stockOperationTarget?.unit} *`}
+                </Label>
+                <Input id="stock_operation_quantity" type="number" min="0" step="0.001" value={stockOperationQuantity} onChange={(event) => setStockOperationQuantity(event.target.value)} required />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setStockOperationOpen(false)}>Cancelar</Button>
+              <Button type="submit">Confirmar e registrar</Button>
             </DialogFooter>
           </form>
         </DialogContent>

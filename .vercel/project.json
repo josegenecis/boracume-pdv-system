@@ -1,1 +1,16 @@
-{"projectId":"prj_wp6LP8LdNYoO2oqrnOQhs0Z4s6sQ","orgId":"team_QDaaHsHvBb0IXOt0LvonYn3b","projectName":"boracume-pdv-system"}
+{
+  "projectId": "prj_wp6LP8LdNYoO2oqrnOQhs0Z4s6sQ",
+  "orgId": "team_QDaaHsHvBb0IXOt0LvonYn3b",
+  "projectName": "boracume-pdv-system",
+  "settings": {
+    "createdAt": 1761408141709,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "22.x"
+  }
+}

@@ -59,7 +59,7 @@ if ('serviceWorker' in navigator) {
   }
 })();
 
-const marketingPaths = new Set(['/', '/landing', '/termos', '/privacidade', '/lgpd']);
+const marketingPaths = new Set(['/', '/landing', '/termos', '/privacidade', '/lgpd', '/exclusao-de-dados']);
 const mainDomains = new Set([
   'popsystem.com.br',
   'www.popsystem.com.br',

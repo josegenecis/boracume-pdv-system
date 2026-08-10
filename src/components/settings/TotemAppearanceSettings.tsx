@@ -97,6 +97,7 @@ export default function TotemAppearanceSettings() {
         idle_overlay_color: normalizeHex(form.idle_overlay_color, DEFAULT_TOTEM_THEME.idle_overlay_color),
         cta_text: form.cta_text.trim() || DEFAULT_TOTEM_THEME.cta_text,
         banner_interval_seconds: Math.min(30, Math.max(4, Number(form.banner_interval_seconds || 7))),
+        idle_timeout_minutes: Math.min(60, Math.max(1, Number(form.idle_timeout_minutes || 3))),
       };
 
       const { error } = await supabase
@@ -156,25 +157,10 @@ export default function TotemAppearanceSettings() {
             })}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-[1fr_220px]">
+          <div>
             <div>
               <Label htmlFor="totem-cta">Texto do botão inicial</Label>
               <Input id="totem-cta" value={form.cta_text} maxLength={40} onChange={(event) => update('cta_text', event.target.value)} className="mt-2 h-12" />
-            </div>
-            <div>
-              <Label htmlFor="totem-interval">Trocar banner a cada</Label>
-              <div className="relative mt-2">
-                <Input
-                  id="totem-interval"
-                  type="number"
-                  min={4}
-                  max={30}
-                  value={form.banner_interval_seconds}
-                  onChange={(event) => update('banner_interval_seconds', Number(event.target.value))}
-                  className="h-12 pr-20"
-                />
-                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400">segundos</span>
-              </div>
             </div>
           </div>
 

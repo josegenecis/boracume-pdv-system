@@ -140,6 +140,7 @@ serve(async (req) => {
           installment_count: Math.max(1, Number(planChange.to_installment_count || 1)),
           current_period_start: periodStart.toISOString(),
           current_period_end: periodEnd.toISOString(),
+          access_override_until: null,
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", planChange.user_id);
@@ -204,6 +205,7 @@ serve(async (req) => {
               periodStart,
               Math.max(1, Number(directSubscription.billing_months || 1)),
             ).toISOString();
+            directUpdate.access_override_until = null;
           }
           await supabase.from("subscriptions").update(directUpdate).eq("id", directSubscription.id);
         }
@@ -236,6 +238,7 @@ serve(async (req) => {
           const periodEnd = addMonths(periodStart, Math.max(1, Number(currentSubscription?.billing_months || 1)));
           updatePayload.current_period_start = periodStart.toISOString();
           updatePayload.current_period_end = periodEnd.toISOString();
+          updatePayload.access_override_until = null;
         }
 
         await supabase

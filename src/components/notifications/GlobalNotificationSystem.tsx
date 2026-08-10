@@ -68,10 +68,10 @@ const GlobalNotificationSystem: React.FC = () => {
   // Verifica se esta na pagina de pedidos para nao mostrar notificacao.
   // Adicionado '/track' para evitar notificacoes na tela do cliente.
   const isOnOrdersPage =
-    ['/orders', '/pedidos', '/kitchen', '/cozinha', '/kds-view', '/customer-view', '/menu-digital'].some((path) =>
+    ['/orders', '/pedidos', '/kitchen', '/cozinha', '/kds-view', '/customer-view', '/menu-digital', '/totem'].some((path) =>
       location.pathname.startsWith(path),
     ) || location.pathname.includes('/track');
-  const isDigitalMenu = location.pathname.includes('/menu');
+  const isStandaloneOrderingScreen = location.pathname.includes('/menu') || location.pathname.startsWith('/totem');
 
   const isOnOrdersPageRef = useRef(isOnOrdersPage);
   const soundEnabledRef = useRef(soundEnabled);
@@ -95,14 +95,22 @@ const GlobalNotificationSystem: React.FC = () => {
   }, [soundEnabled, volume]);
 
   useEffect(() => {
-    const shouldLoopAlert = soundEnabled && pendingOrders.length > 0;
+    const shouldLoopAlert = !isStandaloneOrderingScreen && soundEnabled && pendingOrders.length > 0;
     if (shouldLoopAlert) {
       soundNotifications.startPersistentAlert(POPSYSTEM_ORDER_SOUND_TYPE);
       return;
     }
     soundNotifications.stopPersistentAlert();
     soundNotifications.stopAllSounds();
-  }, [pendingOrders.length, soundEnabled]);
+  }, [pendingOrders.length, soundEnabled, isStandaloneOrderingScreen]);
+
+  useEffect(() => {
+    if (!isStandaloneOrderingScreen) return;
+    setPendingOrders([]);
+    setIsVisible(false);
+    soundNotifications.stopPersistentAlert();
+    soundNotifications.stopAllSounds();
+  }, [isStandaloneOrderingScreen]);
 
   const showBackgroundOrderNotification = async (order: PendingOrder) => {
     const title = 'Novo pedido recebido';
@@ -174,7 +182,7 @@ const GlobalNotificationSystem: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
-    if (isDigitalMenu) return;
+    if (isStandaloneOrderingScreen) return;
 
     const loadSettings = async () => {
       try {
@@ -377,7 +385,7 @@ const GlobalNotificationSystem: React.FC = () => {
       if (pollingRef.current) window.clearInterval(pollingRef.current);
       pollingRef.current = null;
     };
-  }, [user, isDigitalMenu, toast]);
+  }, [user, isStandaloneOrderingScreen, toast]);
 
   useEffect(() => {
     if (isOnOrdersPage) {
@@ -502,7 +510,7 @@ const GlobalNotificationSystem: React.FC = () => {
     });
   };
 
-  if (!isVisible || visibleOrders.length === 0 || isOnOrdersPage || isDigitalMenu) {
+  if (!isVisible || visibleOrders.length === 0 || isOnOrdersPage || isStandaloneOrderingScreen) {
     return null;
   }
 

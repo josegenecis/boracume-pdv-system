@@ -173,10 +173,14 @@ const WhatsAppIntegration: React.FC = () => {
         body: { _storeId: user?.id }
       });
 
-      if (connectError) throw new Error(connectError.message);
+      if (connectError) throw new Error('O serviço de conexão do WhatsApp não respondeu. Aguarde alguns segundos e tente novamente.');
       if (connectData?.error) {
         console.error("Detalhes do erro na EvoGo (Connect):", connectData);
-        throw new Error(`Falha na API EvoGo (${connectData.status}): ${JSON.stringify(connectData.details)}`);
+        const status = Number(connectData.status || 0);
+        if (status === 401 || status === 403) throw new Error('A integração do WhatsApp recusou a autenticação. A equipe técnica precisa renovar a chave da Evolution API.');
+        if (status === 404) throw new Error('A instância do WhatsApp não foi encontrada. Clique novamente para o sistema recriá-la.');
+        if (status >= 500) throw new Error('A Evolution API está temporariamente indisponível. Aguarde alguns segundos e tente novamente.');
+        throw new Error(connectData.message || 'Não foi possível preparar a conexão do WhatsApp.');
       }
 
       if (connectData?.connected || connectData?.status === 'connected') {
@@ -196,10 +200,12 @@ const WhatsAppIntegration: React.FC = () => {
         body: { _storeId: user?.id }
       });
 
-      if (qrError) throw new Error(qrError.message);
+      if (qrError) throw new Error('O serviço demorou para gerar o QR Code. Aguarde alguns segundos e tente novamente.');
       if (qrData?.error) {
         console.error("Detalhes do erro na EvoGo (QR):", qrData);
-        throw new Error(`Falha ao pegar QR (${qrData.status}): ${JSON.stringify(qrData.details)}`);
+        throw new Error(qrData.message === 'QR Code ainda não disponível'
+          ? 'A conexão foi iniciada, mas o QR Code ainda não ficou disponível. Aguarde alguns segundos e clique novamente.'
+          : (qrData.message || 'Não foi possível gerar o QR Code do WhatsApp.'));
       }
 
       if (qrData?.connected) {

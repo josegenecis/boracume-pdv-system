@@ -9,6 +9,10 @@ const normalizeSettings = (value: Partial<TotemThemeSettings> | null | undefined
     30,
     Math.max(4, Number(value?.banner_interval_seconds || DEFAULT_TOTEM_THEME.banner_interval_seconds)),
   ),
+  idle_timeout_minutes: Math.min(
+    60,
+    Math.max(1, Number(value?.idle_timeout_minutes || DEFAULT_TOTEM_THEME.idle_timeout_minutes)),
+  ),
 });
 
 export function useTotemTheme(restaurantId: string) {

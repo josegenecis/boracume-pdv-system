@@ -83,6 +83,8 @@ export interface ElectronAPI {
   openExternal: (url: string) => Promise<DeviceResponse>;
   getPendingOAuthCallback: () => Promise<string>;
   onOAuthCallback: (callback: (url: string) => void) => () => void;
+  setCashSessionStatus: (payload: { open: boolean; overdue?: boolean }) => void;
+  onNavigateToCashClose: (callback: () => void) => () => void;
   
   // Platform detection
 

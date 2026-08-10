@@ -164,7 +164,7 @@ const Garcons = () => {
 
   const buildPermissions = () => {
     const basePermissions = formData.role === 'admin'
-      ? PERMISSIONS_GROUPS.flatMap(g => g.permissions).reduce((acc, p) => ({ ...acc, [p.id]: true }), {})
+      ? PERMISSIONS_GROUPS.flatMap(g => g.permissions).reduce((acc, p) => ({ ...acc, [p.id]: true }), { admin: true } as Record<string, boolean>)
       : (formData.permissions || {});
 
     return {
@@ -172,6 +172,18 @@ const Garcons = () => {
       waiter_app: Boolean(formData.waiter_access)
     };
   };
+
+  const isActiveAdmin = (waiter?: Partial<Waiter>) => Boolean(
+    waiter
+    && waiter.active !== false
+    && (waiter.role === 'admin' || waiter.permissions?.admin === true)
+  );
+
+  const isLastActiveAdmin = (waiter?: Partial<Waiter>) => Boolean(
+    waiter?.id
+    && isActiveAdmin(waiter)
+    && waiters.filter(isActiveAdmin).length === 1
+  );
 
   useEffect(() => {
     if (user) {
@@ -248,7 +260,7 @@ const Garcons = () => {
 
   const handleOpenDialog = (waiter?: Waiter) => {
     if (waiter) {
-      setFormData({ ...waiter, password: '', waiter_access: getWaiterAppAccess(waiter) });
+      setFormData({ ...waiter, active: waiter.active !== false, password: '', waiter_access: getWaiterAppAccess(waiter) });
     } else {
       setFormData({
         name: '',
@@ -379,6 +391,16 @@ const Garcons = () => {
       return;
     }
 
+    const originalWaiter = waiters.find((waiter) => waiter.id === formData.id);
+    if (isLastActiveAdmin(originalWaiter) && (formData.active === false || formData.role !== 'admin')) {
+      toast({
+        title: 'Administrador obrigatório',
+        description: 'Ative ou crie outro administrador antes de inativar ou alterar o perfil deste usuário.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setLoading(true);
       const permissions = buildPermissions();
@@ -390,7 +412,7 @@ const Garcons = () => {
         ...(normalizedCpf ? { cpf: normalizedCpf } : {}),
         pin: formData.pin?.trim(),
         role: formData.role,
-        active: formData.active,
+        active: formData.active !== false,
         permissions,
         employment_type: formData.employment_type || 'monthly',
         salary_amount: Number(formData.salary_amount || 0),
@@ -444,6 +466,15 @@ const Garcons = () => {
   };
 
   const handleDelete = async (id: string) => {
+    const waiter = waiters.find((item) => item.id === id);
+    if (isLastActiveAdmin(waiter)) {
+      toast({
+        title: 'Administrador obrigatório',
+        description: 'Não é possível remover o último administrador ativo da loja.',
+        variant: 'destructive',
+      });
+      return;
+    }
     const ok = await confirm({
       title: 'Remover usuário',
       description: 'Tem certeza que deseja remover este usuário?',
@@ -594,12 +625,12 @@ const Garcons = () => {
                   </TableCell>
                   <TableCell>
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      waiter.active 
+                      waiter.active !== false
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${waiter.active ? 'bg-green-500' : 'bg-gray-400'}`} />
-                      {waiter.active ? 'Ativo' : 'Inativo'}
+                      <span className={`w-1.5 h-1.5 rounded-full ${waiter.active !== false ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      {waiter.active !== false ? 'Ativo' : 'Inativo'}
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
@@ -607,7 +638,7 @@ const Garcons = () => {
                       <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(waiter)}>
                         <Settings className="h-4 w-4 text-gray-500" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(waiter.id)}>
+                      <Button variant="ghost" size="icon" disabled={isLastActiveAdmin(waiter)} title={isLastActiveAdmin(waiter) ? 'A loja precisa manter pelo menos um administrador ativo' : 'Remover usuário'} onClick={() => handleDelete(waiter.id)}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
                     </div>
@@ -756,6 +787,7 @@ const Garcons = () => {
                     <Select 
                       value={formData.role} 
                       onValueChange={(v: any) => setFormData({ ...formData, role: v })}
+                      disabled={isLastActiveAdmin(waiters.find((waiter) => waiter.id === formData.id))}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -773,11 +805,12 @@ const Garcons = () => {
                     <Label>Status da Conta</Label>
                     <div className="flex items-center space-x-2 border p-2 rounded-md">
                       <Switch 
-                        checked={formData.active}
+                        checked={formData.active !== false}
                         onCheckedChange={(c) => setFormData({ ...formData, active: c })}
+                        disabled={isLastActiveAdmin(waiters.find((waiter) => waiter.id === formData.id))}
                       />
                       <span className="text-sm font-medium">
-                        {formData.active ? 'Ativo - Pode acessar' : 'Inativo - Acesso bloqueado'}
+                        {formData.active !== false ? 'Ativo - Pode acessar' : 'Inativo - Acesso bloqueado'}
                       </span>
                     </div>
                   </div>

@@ -116,6 +116,7 @@ export default function PopMarketingAI() {
   const [selectedCopyIndex, setSelectedCopyIndex] = useState(0);
   const [selectedCreativeId, setSelectedCreativeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [uploadingCreativeKey, setUploadingCreativeKey] = useState<string | null>(null);
   const [pendingCreativeImage, setPendingCreativeImage] = useState<{ creative: Creative; key: string; file: File } | null>(null);
   const [form, setForm] = useState({
@@ -257,6 +258,22 @@ export default function PopMarketingAI() {
   };
 
   const generatePlan = async () => {
+    setGenerationError(null);
+
+    if (form.productId === 'none' && !form.productFocus.trim()) {
+      const message = 'Selecione um produto ou informe o nome de um produto/categoria.';
+      setGenerationError(message);
+      toast({ title: 'Informe o que será anunciado', description: message, variant: 'destructive' });
+      return;
+    }
+
+    if (selectedProduct && !selectedProduct.image_url) {
+      const message = `O produto ${selectedProduct.name} ainda não possui uma foto cadastrada.`;
+      setGenerationError(message);
+      toast({ title: 'Foto do produto necessária', description: message, variant: 'destructive' });
+      return;
+    }
+
     setLoading(true);
     try {
       const payload = {
@@ -273,7 +290,9 @@ export default function PopMarketingAI() {
         if (data) await openCampaign(data);
       }
     } catch (error: any) {
-      toast({ title: 'Erro ao gerar campanha', description: error?.message || 'Não foi possível gerar o plano.', variant: 'destructive' });
+      const message = error?.message || 'Não foi possível gerar o plano.';
+      setGenerationError(message);
+      toast({ title: 'Erro ao gerar campanha', description: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -450,19 +469,52 @@ export default function PopMarketingAI() {
             </div>
             <div className="space-y-2">
               <Label>O que deseja anunciar?</Label>
-              <Select value={form.productId} onValueChange={(v) => setForm((p) => ({ ...p, productId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecionar produto" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">PopSystem escolhe / categoria</SelectItem>
-                  {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>{product.name} - {money(product.price)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={form.productId}
+                onChange={(event) => {
+                  const productId = event.target.value;
+                  const product = products.find((item) => item.id === productId);
+                  setGenerationError(null);
+                  setForm((previous) => ({
+                    ...previous,
+                    productId,
+                    productFocus: product?.name || previous.productFocus,
+                  }));
+                }}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-label="Produto que será anunciado"
+              >
+                <option value="none">PopSystem escolhe pelo nome ou categoria</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name} - {money(product.price)}{product.image_url ? '' : ' (sem foto)'}
+                  </option>
+                ))}
+              </select>
+              {selectedProduct ? (
+                <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
+                  {selectedProduct.image_url ? (
+                    <img
+                      src={normalizeImageUrlForDisplay(selectedProduct.image_url)}
+                      alt={selectedProduct.name}
+                      className="h-12 w-12 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-12 w-12 place-items-center rounded-lg bg-white"><ImageIcon className="h-5 w-5" /></div>
+                  )}
+                  <div>
+                    <div className="font-bold">Produto selecionado: {selectedProduct.name}</div>
+                    <div className="text-xs">{selectedProduct.image_url ? 'Foto pronta para os criativos.' : 'Cadastre uma foto antes de gerar.'}</div>
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>Digite o produto ou categoria</Label>
-              <Input value={form.productFocus} onChange={(e) => setForm((p) => ({ ...p, productFocus: e.target.value }))} placeholder="Ex.: hambúrguer, pizza, açaí, combo família" />
+              <Input value={form.productFocus} onChange={(e) => {
+                setGenerationError(null);
+                setForm((p) => ({ ...p, productFocus: e.target.value }));
+              }} placeholder="Ex.: hambúrguer, pizza, açaí, combo família" />
             </div>
             <div className="space-y-2">
               <Label>Quanto deseja investir por dia?</Label>
@@ -557,8 +609,15 @@ export default function PopMarketingAI() {
               <Textarea value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Ex.: destacar entrega rápida, promoção só hoje, evitar prometer tempo exato..." />
             </div>
             <div className="md:col-span-2">
+              {generationError ? (
+                <Alert className="mb-3 border-red-200 bg-red-50 text-red-900">
+                  <AlertTitle>Não foi possível gerar</AlertTitle>
+                  <AlertDescription>{generationError}</AlertDescription>
+                </Alert>
+              ) : null}
               <Button onClick={generatePlan} disabled={loading} className="w-full bg-[#ff5a00] text-white hover:bg-[#e75000]">
-                <Sparkles className="mr-2 h-4 w-4" /> Gerar campanha para revisão
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                {loading ? 'Gerando campanha e criativos...' : 'Gerar campanha para revisão'}
               </Button>
             </div>
           </CardContent>

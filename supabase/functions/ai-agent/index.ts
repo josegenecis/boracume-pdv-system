@@ -99,6 +99,33 @@ async function uploadGeneratedProductImage(supabase: any, productId: string, byt
   return data.publicUrl;
 }
 
+async function uploadAttachedProductImage(supabase: any, productId: string, imageBase64: string) {
+  const raw = String(imageBase64 || '').trim();
+  if (!raw) return null;
+
+  const dataUrlMatch = raw.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=\s]+)$/i);
+  const contentType = String(dataUrlMatch?.[1] || 'image/jpeg').toLowerCase();
+  const encoded = String(dataUrlMatch?.[2] || raw).replace(/\s/g, '');
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(contentType)) {
+    throw new Error('A imagem anexada deve estar em PNG, JPEG ou WebP.');
+  }
+
+  const bytes = bytesFromBase64(encoded);
+  if (bytes.byteLength === 0 || bytes.byteLength > 8 * 1024 * 1024) {
+    throw new Error('A imagem anexada deve possuir no máximo 8 MB.');
+  }
+
+  await ensurePublicBucket(supabase, 'product-images');
+  const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+  const filePath = `products/agent-${productId}-${Date.now()}.${extension}`;
+  const { error } = await supabase.storage
+    .from('product-images')
+    .upload(filePath, bytes, { contentType, upsert: false } as any);
+  if (error) throw error;
+  const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
+  return { publicUrl: data.publicUrl, filePath, contentType, size: bytes.byteLength };
+}
+
 async function generateProductImageWithOpenAI(params: {
   apiKey: string;
   supabase: any;
@@ -648,6 +675,67 @@ Deno.serve(async (req) => {
             .trim()
             .toLowerCase();
 
+    const resolveOrCreateProductCategory = async (requestedName: any) => {
+        const categoryName = String(requestedName || '').trim() || 'Outros';
+        const normalizedRequested = normalizeText(categoryName);
+        const singularRequested = normalizedRequested.replace(/s$/, '');
+        const { data: categories, error } = await supabase
+            .from('product_categories')
+            .select('id, name, display_order')
+            .eq('user_id', userId)
+            .order('display_order', { ascending: true })
+            .limit(500);
+        if (error) throw error;
+
+        const existing = (categories || []).find((category: any) => normalizeText(category.name) === normalizedRequested)
+            || (categories || []).find((category: any) => normalizeText(category.name).replace(/s$/, '') === singularRequested)
+            || (categories || []).find((category: any) => {
+                const normalized = normalizeText(category.name);
+                return normalized.length >= 4 && (
+                    normalizedRequested.includes(normalized) || normalized.includes(normalizedRequested)
+                );
+            });
+
+        if (existing) {
+            return { id: existing.id, name: existing.name, created: false };
+        }
+
+        const nextOrder = (categories || []).reduce(
+            (highest: number, category: any) => Math.max(highest, Number(category?.display_order || 0)),
+            -1,
+        ) + 1;
+        const { data: created, error: createError } = await supabase
+            .from('product_categories')
+            .insert({ user_id: userId, name: categoryName, display_order: nextOrder })
+            .select('id, name')
+            .single();
+        if (createError) throw createError;
+        return { id: created.id, name: created.name, created: true };
+    };
+
+    const attachRequestImageToProduct = async (product: any) => {
+        if (!imageBase64 || !product?.id) return { product, attachment: null };
+        let uploaded: any = null;
+        try {
+            uploaded = await uploadAttachedProductImage(supabase, String(product.id), String(imageBase64));
+            const { data: updated, error } = await supabase
+                .from('products')
+                .update({ image_url: uploaded?.publicUrl || null, updated_at: new Date().toISOString() } as any)
+                .eq('user_id', userId)
+                .eq('id', product.id)
+                .select()
+                .single();
+            if (error) throw error;
+            return { product: updated, attachment: uploaded };
+        } catch (error) {
+            if (uploaded?.filePath) {
+                await supabase.storage.from('product-images').remove([uploaded.filePath]).catch(() => undefined);
+            }
+            await supabase.from('products').delete().eq('user_id', userId).eq('id', product.id);
+            throw error;
+        }
+    };
+
     const parseOptions = (raw: any): Array<{ name: string; price: number; active?: boolean }> => {
         let parsed = raw;
         if (typeof parsed === 'string') {
@@ -749,8 +837,19 @@ Deno.serve(async (req) => {
         {
             type: "function",
             function: {
+                name: "list_product_categories",
+                description: "Lista as categorias reais do cardápio. Use antes de cadastrar um produto para escolher a categoria existente mais relacionada. Se nenhuma combinar, a ferramenta de criação cadastrará a nova categoria informada.",
+                parameters: {
+                    type: "object",
+                    properties: {}
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
                 name: "create_product",
-                description: "Cria um novo produto no cardápio.",
+                description: "Cria um novo produto de venda no cardápio. Se houver uma imagem anexada à solicitação, ela será armazenada e vinculada automaticamente ao produto. Reutiliza a categoria relacionada ou cria uma nova quando necessário.",
                 parameters: {
                     type: "object",
                     properties: {
@@ -767,7 +866,7 @@ Deno.serve(async (req) => {
             type: "function",
             function: {
                 name: "create_product_full",
-                description: "Cria um produto completo com variações de preço (product_variants) e complementos/adicionais (product_variations). Use quando o usuário pedir tamanhos/variações de preço ou complementos/adicionais.",
+                description: "Cria um produto completo com variações de preço (product_variants) e complementos/adicionais (product_variations). Se houver uma imagem anexada, salva e vincula automaticamente. Use quando o usuário pedir tamanhos/variações de preço ou complementos/adicionais.",
                 parameters: {
                     type: "object",
                     properties: {
@@ -1181,12 +1280,14 @@ Regras:
 - Não peça confirmação para passos triviais; execute e confirme o resultado.
 - Se faltar um dado indispensável (ex.: qual produto, qual período, qual categoria), faça 1 pergunta objetiva.
 - Não reexecute uma ação que já aparece no histórico como concluída. Se o usuário repetir o mesmo pedido, explique o estado atual e ofereça o próximo passo.
+- Ao cadastrar produto, consulte list_product_categories, escolha a categoria existente semanticamente mais relacionada e só informe uma nova categoria quando nenhuma existente for adequada.
+- Se houver uma foto anexada e o pedido for cadastrar/criar um produto, extraia dela nome, marca, descrição e outros dados visíveis úteis. Use create_product ou create_product_full: a própria ferramenta salvará a foto original no produto. Não gere outra imagem e não trate a foto como simples análise.
 - Se o pedido envolver cadastro completo de produto com tamanhos/variações e/ou complementos, use create_product_full.
 - Se o pedido envolver mudança em produto já existente (preço, nome, categoria, descrição, disponibilidade, PDV/delivery ou destaque), use update_product. Nunca crie um novo produto quando o usuário pediu para alterar um produto existente.
 - Se o usuário pedir "vá nos produtos/categoria X e liste todos", use list_products com category: "X". Não transforme categoria em busca por nome.
 - Para alterações de cardápio, preserve todos os campos que o usuário não pediu para mudar. Se houver mais de um produto possível, pare e peça uma confirmação objetiva com as opções encontradas.
 - Se o usuário pedir para listar ou alterar preços de grupos de complementos já existentes, use list_variation_group e adjust_variation_group_prices.
-- Se o pedido envolver imagem do produto, use generate_product_image ou generate_missing_product_images.
+- Se o usuário pedir uma imagem nova sem anexar uma foto, use generate_product_image ou generate_missing_product_images. Quando houver foto anexada no cadastro, preserve e salve a foto original pela ferramenta de criação.
 - Se o usuário disser "pode fazer", "sim", "isso", "continue", "pode aplicar" ou algo parecido, entenda como autorização para executar a última solicitação acionável do histórico. Não pergunte "o que você quer que eu faça?" se existir uma ação pendente no histórico.
 - Quando o pedido for acionável, execute. Evite apenas sugerir passos.
 - Mantenha respostas curtas e diretas.
@@ -1205,13 +1306,15 @@ Regras:
 - Se existir uma tarefa longa em andamento, não abra outra igual. Informe o status e oriente o usuário a aguardar ou cancelar.
 - Se o usuário disser "pode fazer", "sim", "isso", "continue", "pode aplicar" ou algo parecido, entenda como autorização para executar a última solicitação acionável do histórico. Não pergunte "o que você quer que eu faça?" se existir uma ação pendente no histórico.
 - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
+- Ao cadastrar produto, consulte list_product_categories, escolha a categoria existente semanticamente mais relacionada e só informe uma nova categoria quando nenhuma existente for adequada.
+- Se houver uma foto anexada e o pedido for cadastrar/criar um produto, extraia dela nome, marca, descrição e outros dados visíveis úteis. Use create_product ou create_product_full: a própria ferramenta salvará a foto original no produto. Não gere outra imagem e não trate a foto como simples análise.
 - Se o usuário pedir para criar produto com tamanhos/variações de preço e/ou complementos/adicionais, use create_product_full.
 - Se o usuário pedir para alterar produto existente (ex.: mudar preço, nome, categoria, descrição, disponibilidade, destacar, aparecer ou ocultar do delivery/PDV), use update_product e não crie duplicado.
 - Se o usuário pedir para listar produtos de uma categoria, use list_products com category. Ex.: "vai nos produtos Extras e lista todos" significa category="Extras", não search="Extras".
 - Ao editar cardápio, seja conservador: localize o produto correto, preserve os campos não mencionados e peça confirmação se o nome estiver ambíguo.
 - Se o usuário pedir para listar ou reajustar preços de um grupo de complementos/adicionais já existente, use list_variation_group e adjust_variation_group_prices.
 - Se o usuário enviar uma imagem de comprovante/recibo, extraia as informações e lance a despesa usando create_expense. Categorize automaticamente da melhor forma.
-- Se o usuário pedir para criar imagem de produto, ou para gerar imagens faltantes, use generate_product_image / generate_missing_product_images.
+- Se o usuário pedir para criar imagem de produto sem anexar uma foto, ou para gerar imagens faltantes, use generate_product_image / generate_missing_product_images. Quando houver foto anexada no cadastro, preserve e salve a foto original pela ferramenta de criação.
 - Se o usuário pedir imagens para produtos sem imagem, execute generate_missing_product_images com process_all=true e limit=100. Não peça para o usuário mandar "continue" quando ainda houver produtos pendentes; a ferramenta deve tentar o lote completo na mesma solicitação.
 - Se o usuário pedir informações, use a função de listar para buscar dados reais antes de responder.
 - Se faltar algum dado indispensável, faça 1 pergunta objetiva para destravar a execução.
@@ -1349,47 +1452,67 @@ Regras:
             console.log(`[Agent] Executing tool: ${fnName}`, args);
 
             try {
-                // --- CREATE PRODUCT ---
-                if (fnName === "create_product") {
-                    // 1. Find or create category
-                    let categoryId = null;
-                    const { data: existingCat } = await supabase
+                if (fnName === "list_product_categories") {
+                    const { data: categories, error } = await supabase
                         .from('product_categories')
-                        .select('id')
+                        .select('id, name, description, display_order')
                         .eq('user_id', userId)
-                        .ilike('name', `%${args.category}%`)
-                        .maybeSingle();
-                    
-                    if (existingCat) {
-                        categoryId = existingCat.id;
-                    } else {
-                        const { data: newCat } = await supabase
-                            .from('product_categories')
-                            .insert({ user_id: userId, name: args.category })
-                            .select('id')
-                            .single();
-                        if (newCat) categoryId = newCat.id;
-                    }
-
-                    // 2. Create product
-                    const { data: prod, error } = await supabase
-                        .from('products')
-                        .insert({
-                            user_id: userId,
-                            name: args.name,
-                            price: args.price,
-                            description: args.description || '',
-                            category: args.category,
-                            category_id: categoryId,
-                            available: true,
-                            show_in_pdv: true,
-                            show_in_delivery: true
-                        })
-                        .select()
-                        .single();
-                    
+                        .order('display_order', { ascending: true })
+                        .limit(500);
                     if (error) throw error;
-                    result = { success: true, product: prod };
+                    result = { success: true, count: categories?.length || 0, categories: categories || [] };
+                }
+
+                // --- CREATE PRODUCT ---
+                else if (fnName === "create_product") {
+                    const productName = String(args.name || '').trim();
+                    const price = parseMoney(args.price);
+                    if (!productName || !Number.isFinite(price) || price < 0) {
+                        result = { success: false, error: 'Nome e preço válido são obrigatórios para cadastrar o produto.' };
+                    } else {
+                        const { data: possibleDuplicates, error: duplicateError } = await supabase
+                            .from('products')
+                            .select('id, name, price, category, image_url, available')
+                            .eq('user_id', userId)
+                            .ilike('name', productName)
+                            .limit(5);
+                        if (duplicateError) throw duplicateError;
+                        const duplicate = (possibleDuplicates || []).find((product: any) => normalizeText(product.name) === normalizeText(productName));
+                        if (duplicate) {
+                            result = {
+                                success: false,
+                                error: `Já existe um produto chamado "${duplicate.name}". Edite o existente para evitar duplicidade.`,
+                                existing_product: duplicate
+                            };
+                        } else {
+                            const category = await resolveOrCreateProductCategory(args.category);
+                            const { data: createdProduct, error } = await supabase
+                                .from('products')
+                                .insert({
+                                    user_id: userId,
+                                    name: productName,
+                                    price,
+                                    description: String(args.description || '').trim(),
+                                    category: category.name,
+                                    category_id: category.id,
+                                    available: true,
+                                    show_in_pdv: true,
+                                    show_in_delivery: true
+                                })
+                                .select()
+                                .single();
+                            if (error) throw error;
+
+                            const attached = await attachRequestImageToProduct(createdProduct);
+                            result = {
+                                success: true,
+                                product: attached.product,
+                                category_created: category.created,
+                                image_attached: Boolean(attached.attachment),
+                                image_url: attached.attachment?.publicUrl || attached.product?.image_url || null
+                            };
+                        }
+                    }
                 }
 
                 else if (fnName === "create_product_full") {
@@ -1402,23 +1525,7 @@ Regras:
                     if (!prodName || !catName) {
                         result = { success: false, error: 'Nome e categoria são obrigatórios.' };
                     } else {
-                        let categoryId: string | null = null;
-                        const { data: existingCat } = await supabase
-                            .from('product_categories')
-                            .select('id')
-                            .eq('user_id', userId)
-                            .ilike('name', `%${catName}%`)
-                            .maybeSingle();
-                        if (existingCat) {
-                            categoryId = existingCat.id;
-                        } else {
-                            const { data: newCat } = await supabase
-                                .from('product_categories')
-                                .insert({ user_id: userId, name: catName })
-                                .select('id')
-                                .single();
-                            if (newCat) categoryId = newCat.id;
-                        }
+                        const category = await resolveOrCreateProductCategory(catName);
 
                         const parsedVariantPrices = variants
                             .map((v: any) => ({
@@ -1440,15 +1547,16 @@ Regras:
                                 name: prodName,
                                 price: basePrice,
                                 description,
-                                category: catName,
-                                category_id: categoryId,
+                                category: category.name,
+                                category_id: category.id,
                                 available: true,
                                 show_in_pdv: true,
                                 show_in_delivery: true
                             })
-                            .select('id, name, price, category')
+                            .select('id, name, price, category, image_url')
                             .single();
                         if (error) throw error;
+                        const attached = await attachRequestImageToProduct(prod);
 
                         let createdVariants = 0;
                         if (parsedVariantPrices.length > 0) {
@@ -1489,7 +1597,10 @@ Regras:
 
                         result = {
                             success: true,
-                            product: prod,
+                            product: attached.product,
+                            category_created: category.created,
+                            image_attached: Boolean(attached.attachment),
+                            image_url: attached.attachment?.publicUrl || attached.product?.image_url || null,
                             created_price_variants: createdVariants,
                             created_variation_groups: createdGroups
                         };

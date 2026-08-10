@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Eye, EyeOff, Plus, SlidersHorizontal, Copy } from 'lucide-react';
+import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Eye, EyeOff, Plus, SlidersHorizontal, Copy, Database } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import ProductForm from '@/components/products/ProductForm';
 import ProductImageUpload from '@/components/products/ProductImageUpload';
 import MenuImportModal from '@/components/products/MenuImportModal';
+import DataMigrationModal from '@/components/products/DataMigrationModal';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 import GlobalVariationManager from '@/components/products/GlobalVariationManager';
 import CategoryManager from '@/components/products/CategoryManager';
@@ -28,6 +29,8 @@ interface ProductItem {
   barcode?: string | null;
   description?: string;
   price: number;
+  costing_mode?: 'automatic_recipe' | 'manual';
+  manual_unit_cost?: number | null;
   category: string;
   category_id?: string;
   image_url?: string;
@@ -87,6 +90,7 @@ const Products = () => {
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDataMigrationModal, setShowDataMigrationModal] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -1167,6 +1171,11 @@ const Products = () => {
         onClose={() => setShowImportModal(false)} 
         onImportComplete={fetchProducts}
       />
+      <DataMigrationModal
+        isOpen={showDataMigrationModal}
+        onClose={() => setShowDataMigrationModal(false)}
+        onImportComplete={fetchData}
+      />
 
       <Tabs
         value={tab}
@@ -1190,6 +1199,10 @@ const Products = () => {
           </div>
 
           <div className="hidden items-center justify-end gap-2 lg:flex">
+            <Button variant="outline" onClick={() => setShowDataMigrationModal(true)} className="h-9 rounded-xl border-[#003223]/15 bg-white px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
+              <Database className="mr-2 h-4 w-4" />
+              Migrar sistema
+            </Button>
             <Button variant="outline" onClick={() => setShowImportModal(true)} className="h-9 rounded-xl border-[#FF6400]/15 bg-white px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
               <Import className="mr-2 h-4 w-4" />
               Importar cardápio
@@ -1286,6 +1299,10 @@ const Products = () => {
               </Button>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" className="h-11 flex-1 rounded-2xl border-[#003223]/15 bg-white px-4 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setShowDataMigrationModal(true)}>
+                <Database className="mr-2 h-4 w-4" />
+                Migrar sistema
+              </Button>
               <Button variant="outline" className="h-11 flex-1 rounded-2xl border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setSelectedCategory('all')}>
                 <SlidersHorizontal className="mr-2 h-4 w-4" />
                 Todas categorias

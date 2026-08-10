@@ -36,6 +36,7 @@ interface Table {
 }
 
 interface OrderItem {
+  id?: string;
   product_id: string;
   product_name: string;
   price: number;
@@ -256,6 +257,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             );
 
             return {
+              id: item.id,
               product_id: item.product_id,
               product_name: item.product_name,
               price: unitPrice,
@@ -537,16 +539,28 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     if (!currentOrder || currentOrder.source !== 'table_accounts') return;
     try {
       setLoading(true);
-      const { data, error } = await (supabase as any).rpc('cancel_table_account_item_authorized', {
-        p_account_id: currentOrder.account_id || currentOrder.id,
-        p_item_index: itemIndex,
-        p_reason: cancelItemReason.trim(),
-        p_authorized_waiter_id: authorizedWaiterId,
-      });
+      const selectedItem = currentOrder.items[itemIndex];
+      const rpcName = selectedItem?.id
+        ? 'cancel_table_order_item_authorized'
+        : 'cancel_table_account_item_authorized';
+      const rpcPayload = selectedItem?.id
+        ? {
+            p_account_id: currentOrder.account_id || currentOrder.id,
+            p_item_id: selectedItem.id,
+            p_reason: cancelItemReason.trim(),
+            p_authorized_waiter_id: authorizedWaiterId,
+          }
+        : {
+            p_account_id: currentOrder.account_id || currentOrder.id,
+            p_item_index: itemIndex,
+            p_reason: cancelItemReason.trim(),
+            p_authorized_waiter_id: authorizedWaiterId,
+          };
+      const { data, error } = await (supabase as any).rpc(rpcName, rpcPayload);
       if (error) throw error;
       setCurrentOrder((previous) => previous ? {
         ...previous,
-        items: Array.isArray(data?.items) ? data.items : previous.items.filter((_, index) => index !== itemIndex),
+        items: previous.items.filter((_, index) => index !== itemIndex),
         total: Number(data?.total ?? previous.total),
       } : previous);
       setCancelItemOpen(false);

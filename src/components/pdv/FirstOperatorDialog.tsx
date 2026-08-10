@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { setLocalOperatorSession } from '@/services/operatorAuth'
 
 export default function FirstOperatorDialog(props: { open: boolean; onCreated: () => void }) {
   const { open, onCreated } = props
@@ -37,14 +38,13 @@ export default function FirstOperatorDialog(props: { open: boolean; onCreated: (
       }
       if (error) throw error
       const created: any = data
-      localStorage.setItem('operator_session', JSON.stringify({
+      setLocalOperatorSession({
         id: created.id,
         name: created.name,
         role: created.role || 'admin',
         permissions: created.permissions || {},
         user_id: user.id,
-        set_at: new Date().toISOString(),
-      }))
+      })
       toast({ title: 'Operador administrador criado', description: 'Você já pode abrir o caixa e vender.' })
       onCreated()
     } catch (e: any) {

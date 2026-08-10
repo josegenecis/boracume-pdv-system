@@ -338,7 +338,7 @@ export default function PixSetup() {
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <Card className="overflow-hidden border-emerald-200 bg-white shadow-xl shadow-emerald-950/5">
-        <CardHeader className="relative overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-orange-500 px-6 py-8 text-white sm:px-8">
+        <CardHeader className="relative overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-600 px-6 py-8 text-white sm:px-8">
           <div className="absolute -right-12 -top-16 h-52 w-52 rounded-full border-[28px] border-white/10" aria-hidden="true" />
           <div className="relative">
             <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wider"><ShieldCheck className="h-4 w-4" />Pagamentos protegidos</span>
@@ -452,7 +452,7 @@ export default function PixSetup() {
         }
       }}>
         <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto border-0 p-0">
-          <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-orange-500 p-6 text-white sm:p-8">
+          <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-600 p-6 text-white sm:p-8">
             <DialogHeader>
               <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15"><ShieldCheck className="h-6 w-6" /></span>
               <DialogTitle className="text-2xl font-black">{popPayConnected ? 'Ative o checkout completo do PopPay' : 'Antes de conectar o PopPay'}</DialogTitle>
@@ -544,7 +544,7 @@ export default function PixSetup() {
         if (!open) setCreditTermsAccepted(false);
       }}>
         <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto border-0 p-0">
-          <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-orange-500 p-6 text-white sm:p-8">
+          <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-600 p-6 text-white sm:p-8">
             <DialogHeader>
               <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15"><CreditCard className="h-6 w-6" /></span>
               <DialogTitle className="text-2xl font-black">Ativar crédito online</DialogTitle>

@@ -96,7 +96,7 @@ async function fetchMenuPayload(userId: string) {
       .maybeSingle(),
     supabase
       .from('product_categories')
-      .select('id,name,description,display_order')
+      .select('id,name,description,display_order,totem_image_url')
       .eq('user_id', userId)
       .eq('active', true)
       .order('display_order', { ascending: true }),

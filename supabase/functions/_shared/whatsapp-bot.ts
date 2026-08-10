@@ -1384,12 +1384,8 @@ function isActionableCustomerIntent(text: string) {
 }
 
 function isExplicitCustomerReactivationIntent(text: string) {
-  return wantsMenuLink(text) ||
-    wantsOrderTracking(text) ||
-    wantsPromotions(text) ||
-    wantsComplementsInfo(text) ||
-    wantsWhatsAppOrderFlow(text) ||
-    (wantsToOrder(text) && hasProductClue(text));
+  const value = normalizeIntentText(text);
+  return /(voltar|retomar|reativar|chamar).*(bot|robo|ia|atendimento automatico)|atendimento automatico.*(voltar|retomar|reativar)/i.test(value);
 }
 
 function getManualPauseMinutes() {
@@ -2050,7 +2046,7 @@ export async function processRestaurantBotMessage(params: {
     shouldAutoResumeManualPause() &&
     pauseState.paused &&
     pauseState.reason === 'manual' &&
-    actionableCustomerIntent;
+    explicitReactivationIntent;
   const shouldResumeTemporaryPauseForCustomer =
     pauseState.paused &&
     pauseState.reason === 'temporary' &&

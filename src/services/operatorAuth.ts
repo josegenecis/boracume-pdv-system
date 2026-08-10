@@ -8,9 +8,14 @@ export type OperatorSession = {
 
 export const getLocalOperatorSession = (): OperatorSession | null => {
   try {
-    const waiter = localStorage.getItem('waiter_session')
+    // Operator identity is scoped to the current window/session. Keeping it in
+    // localStorage would silently restore the previous employee after the PDV
+    // or browser was closed.
+    localStorage.removeItem('operator_session')
+    localStorage.removeItem('waiter_session')
+    const waiter = sessionStorage.getItem('waiter_session')
     if (waiter) return JSON.parse(waiter)
-    const op = localStorage.getItem('operator_session')
+    const op = sessionStorage.getItem('operator_session')
     if (op) return JSON.parse(op)
     return null
   } catch {
@@ -18,10 +23,19 @@ export const getLocalOperatorSession = (): OperatorSession | null => {
   }
 }
 
+export const setLocalOperatorSession = (session: OperatorSession) => {
+  sessionStorage.setItem('operator_session', JSON.stringify(session))
+  sessionStorage.removeItem('waiter_session')
+  localStorage.removeItem('operator_session')
+  localStorage.removeItem('waiter_session')
+}
+
 export const clearLocalOperatorSession = () => {
   try {
     localStorage.removeItem('operator_session')
     localStorage.removeItem('waiter_session')
+    sessionStorage.removeItem('operator_session')
+    sessionStorage.removeItem('waiter_session')
   } catch {}
 }
 
@@ -93,7 +107,7 @@ export type OperatorArea =
   | 'desktop'
   | 'agent'
   | 'security'
-  | 'nfce'
+  | 'fiscal'
   | 'pix'
 
 export const canAccessOperatorArea = (session: OperatorSession | null, area?: OperatorArea): boolean => {
@@ -119,7 +133,7 @@ export const canAccessOperatorArea = (session: OperatorSession | null, area?: Op
     desktop: ['settings_manage'],
     agent: ['settings_manage'],
     security: ['settings_manage'],
-    nfce: ['fiscal_manage', 'settings_manage'],
+    fiscal: ['fiscal_manage', 'settings_manage'],
     pix: ['financial_view', 'settings_manage'],
   }
 
@@ -158,7 +172,7 @@ const pathOperatorAreas: Array<{ area: OperatorArea; paths: string[] }> = [
   { area: 'desktop', paths: ['/desktop', '/downloads'] },
   { area: 'agent', paths: ['/agente'] },
   { area: 'security', paths: ['/security'] },
-  { area: 'nfce', paths: ['/nfce'] },
+  { area: 'fiscal', paths: ['/fiscal', '/nfce'] },
   { area: 'pix', paths: ['/pix', '/pagamentos'] },
 ]
 

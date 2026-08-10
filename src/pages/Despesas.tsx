@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter, ReceiptText } from 'lucide-react';
+import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter, ReceiptText, Download, Eye, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
@@ -20,6 +20,7 @@ import { useLocation } from 'react-router-dom';
 import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { ReverseExpenseDialog } from '@/components/finance/ReverseExpenseDialog';
 import { PageHero } from '@/components/layout/PageHero';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface Expense {
   id: string;
@@ -28,6 +29,9 @@ interface Expense {
   category: string;
   expense_date: string;
   receipt_url?: string;
+  receipt_path?: string | null;
+  receipt_name?: string | null;
+  receipt_mime_type?: string | null;
   user_id: string;
   created_at: string;
   is_active?: boolean;
@@ -52,6 +56,10 @@ interface SmartInvoiceItem {
   confidence: number;
   similar_to?: string | null;
   control_stock: boolean;
+  ingredient_id?: string | null;
+  product_id?: string | null;
+  stock_quantity_added?: number;
+  product_quantity_added?: number;
 }
 
 interface SmartInvoiceImport {
@@ -61,6 +69,20 @@ interface SmartInvoiceImport {
   invoice_date?: string | null;
   total_amount: number;
   expense_category: string;
+  status?: 'draft' | 'committed' | 'cancelled';
+  expense_id?: string | null;
+  attachment_path?: string | null;
+  attachment_name?: string | null;
+  attachment_mime_type?: string | null;
+  attachment_size_bytes?: number | null;
+  receipt_url?: string | null;
+  created_at?: string;
+  committed_at?: string | null;
+  reversed_at?: string | null;
+  reversal_reason?: string | null;
+  reversed_by_name?: string | null;
+  launch_expense?: boolean;
+  launch_stock?: boolean;
 }
 
 const getExpenseDateKey = (exp: any) => {
@@ -110,6 +132,12 @@ export default function Despesas() {
   const [smartInvoiceCommitting, setSmartInvoiceCommitting] = useState(false);
   const [smartLaunchExpense, setSmartLaunchExpense] = useState(true);
   const [smartLaunchStock, setSmartLaunchStock] = useState(true);
+  const [purchaseInvoices, setPurchaseInvoices] = useState<SmartInvoiceImport[]>([]);
+  const [attachmentBusyId, setAttachmentBusyId] = useState('');
+  const [purchaseStatusFilter, setPurchaseStatusFilter] = useState<'all' | 'draft' | 'committed' | 'cancelled'>('all');
+  const [purchaseDetails, setPurchaseDetails] = useState<{ invoice: SmartInvoiceImport; items: SmartInvoiceItem[] } | null>(null);
+  const [purchaseDetailsLoading, setPurchaseDetailsLoading] = useState(false);
+  const [purchaseToReverse, setPurchaseToReverse] = useState<SmartInvoiceImport | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -117,7 +145,7 @@ export default function Despesas() {
       setLoading(false);
       return;
     }
-    loadExpenses();
+    void Promise.all([loadExpenses(), loadPurchaseInvoices()]);
   }, [user]);
 
   useEffect(() => {
@@ -157,6 +185,21 @@ export default function Despesas() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadPurchaseInvoices = async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase
+      .from('smart_invoice_imports' as any)
+      .select('id,supplier_name,invoice_number,invoice_date,total_amount,expense_category,status,expense_id,attachment_path,attachment_name,attachment_mime_type,attachment_size_bytes,receipt_url,created_at,committed_at,reversed_at,reversal_reason,reversed_by_name,launch_expense,launch_stock')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) {
+      console.error('Error loading purchase invoices:', error);
+      return;
+    }
+    setPurchaseInvoices((data || []) as unknown as SmartInvoiceImport[]);
   };
 
   const filterExpenses = () => {
@@ -244,30 +287,27 @@ export default function Despesas() {
     setIsSubmitting(true);
 
     try {
-      let receiptUrl = undefined;
+      let receiptUrl: string | undefined;
+      let receiptPath: string | undefined;
+      let receiptName: string | undefined;
+      let receiptMimeType: string | undefined;
 
       // Upload receipt if provided
       if (receiptFile) {
         const fileExt = receiptFile.name.split('.').pop();
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-        const filePath = `receipts/${fileName}`;
+        const fileName = `${Date.now()}-${crypto.randomUUID()}.${fileExt}`;
+        const filePath = `${user.id}/manual/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-          .from('expense-receipts')
+          .from('purchase-invoice-attachments')
           .upload(filePath, receiptFile);
 
         if (uploadError) {
-          console.error('Error uploading receipt:', uploadError);
-          toast({
-            title: 'Aviso',
-            description: 'Comprovante não foi salvo, mas a despesa foi registrada.',
-            variant: 'destructive'
-          });
+          throw new Error(`Não foi possível salvar o comprovante: ${uploadError.message}`);
         } else {
-          const { data: { publicUrl } } = supabase.storage
-            .from('expense-receipts')
-            .getPublicUrl(filePath);
-          receiptUrl = publicUrl;
+          receiptPath = filePath;
+          receiptName = receiptFile.name;
+          receiptMimeType = receiptFile.type;
         }
       }
 
@@ -277,6 +317,9 @@ export default function Despesas() {
         amount: amountValue,
         category,
         receipt_url: receiptUrl,
+        receipt_path: receiptPath,
+        receipt_name: receiptName,
+        receipt_mime_type: receiptMimeType,
         user_id: user.id
       };
 
@@ -362,12 +405,13 @@ export default function Despesas() {
   const handleSmartInvoiceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-    const maxSize = 8 * 1024 * 1024;
-    if (!validTypes.includes(file.type)) {
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf', 'application/xml', 'text/xml'];
+    const isXml = file.name.toLowerCase().endsWith('.xml');
+    const maxSize = 10 * 1024 * 1024;
+    if (!validTypes.includes(file.type) && !isXml) {
       toast({
         title: 'Arquivo inválido',
-        description: 'Envie imagem JPG/PNG ou PDF da nota.',
+        description: 'Envie JPG, PNG, PDF ou o XML da nota.',
         variant: 'destructive'
       });
       return;
@@ -375,7 +419,7 @@ export default function Despesas() {
     if (file.size > maxSize) {
       toast({
         title: 'Arquivo muito grande',
-        description: 'A nota deve ter no máximo 8MB.',
+        description: 'A nota deve ter no máximo 10 MB.',
         variant: 'destructive'
       });
       return;
@@ -402,7 +446,10 @@ export default function Despesas() {
         body: {
           operation: 'analyze',
           fileBase64,
-          mimeType: smartInvoiceFile.type
+          mimeType: smartInvoiceFile.type || (smartInvoiceFile.name.toLowerCase().endsWith('.xml') ? 'application/xml' : 'application/octet-stream'),
+          fileName: smartInvoiceFile.name,
+          fileSize: smartInvoiceFile.size,
+          userId: user?.id,
         }
       });
       if (error) throw error;
@@ -444,13 +491,26 @@ export default function Despesas() {
   };
 
   const commitSmartInvoice = async () => {
-    if (!smartInvoiceImport?.id || smartInvoiceItems.length === 0) return;
+    if (!smartInvoiceImport?.id || smartInvoiceItems.length === 0) {
+      toast({ title: 'Nota não conferida', description: 'Processe ou abra uma nota em conferência antes de lançar.', variant: 'destructive' });
+      return;
+    }
+    if (!smartLaunchExpense && !smartLaunchStock) {
+      toast({ title: 'Escolha o destino', description: 'Ative o lançamento no financeiro, no estoque ou em ambos.', variant: 'destructive' });
+      return;
+    }
+    const invalidItem = smartInvoiceItems.find((item) => !item.normalized_name.trim() || Number(item.quantity) <= 0 || Number(item.unit_price) < 0);
+    if (invalidItem) {
+      toast({ title: 'Revise os itens', description: 'Todos os itens precisam de nome, quantidade positiva e custo válido.', variant: 'destructive' });
+      return;
+    }
     setSmartInvoiceCommitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('smart-invoice-import', {
         body: {
           operation: 'commit',
           importId: smartInvoiceImport.id,
+          userId: user?.id,
           launchExpense: smartLaunchExpense,
           launchStock: smartLaunchStock,
           items: smartInvoiceItems
@@ -465,7 +525,7 @@ export default function Despesas() {
       setSmartInvoiceFile(null);
       setSmartInvoiceImport(null);
       setSmartInvoiceItems([]);
-      loadExpenses();
+      await Promise.all([loadExpenses(), loadPurchaseInvoices()]);
     } catch (error: any) {
       toast({
         title: 'Erro ao lançar nota',
@@ -474,6 +534,152 @@ export default function Despesas() {
       });
     } finally {
       setSmartInvoiceCommitting(false);
+    }
+  };
+
+  const loadPurchaseDetails = async (purchase: SmartInvoiceImport, openEditor = false) => {
+    if (!user?.id) return;
+    setPurchaseDetailsLoading(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('smart_invoice_import_items')
+        .select('*')
+        .eq('import_id', purchase.id)
+        .eq('user_id', user.id)
+        .order('created_at');
+      if (error) throw error;
+      const items = ((data || []) as SmartInvoiceItem[]).map((item) => ({
+        ...item,
+        quantity: Number(item.quantity || 0), unit_price: Number(item.unit_price || 0),
+        total_price: Number(item.total_price || 0), confidence: Number(item.confidence || 0),
+        stock_quantity_added: Number(item.stock_quantity_added || 0),
+        product_quantity_added: Number(item.product_quantity_added || 0),
+      }));
+      if (openEditor) {
+        setSmartInvoiceImport(purchase);
+        setSmartInvoiceItems(items);
+        setSmartLaunchExpense(purchase.launch_expense !== false);
+        setSmartLaunchStock(purchase.launch_stock !== false);
+        window.setTimeout(() => smartInvoiceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+      } else {
+        setPurchaseDetails({ invoice: purchase, items });
+      }
+    } catch (error: any) {
+      toast({ title: 'Erro ao abrir nota', description: friendlyErrorMessage(error, 'Não foi possível carregar os itens.'), variant: 'destructive' });
+    } finally {
+      setPurchaseDetailsLoading(false);
+    }
+  };
+
+  const reversePurchaseInvoice = async (pin: string, reason: string) => {
+    if (!purchaseToReverse || !user?.id) return false;
+    try {
+      const { error } = await (supabase as any).rpc('reverse_purchase_invoice_authorized', {
+        p_import_id: purchaseToReverse.id,
+        p_store_user_id: user.id,
+        p_reason: reason,
+        p_admin_pin: pin,
+      });
+      if (error) throw error;
+      toast({ title: 'Nota estornada', description: 'A despesa e as entradas de estoque da nota foram desfeitas com auditoria.' });
+      setPurchaseToReverse(null);
+      setPurchaseDetails(null);
+      await Promise.all([loadPurchaseInvoices(), loadExpenses()]);
+      return true;
+    } catch (error: any) {
+      toast({ title: 'Erro ao estornar nota', description: friendlyErrorMessage(error, 'Não foi possível concluir o estorno.'), variant: 'destructive' });
+      return false;
+    }
+  };
+
+  const openAttachment = async (params: {
+    id: string;
+    path?: string | null;
+    legacyUrl?: string | null;
+    name?: string | null;
+    download?: boolean;
+  }) => {
+    const previewWindow = !params.download ? window.open('about:blank', '_blank') : null;
+    setAttachmentBusyId(params.id);
+    try {
+      let url = String(params.legacyUrl || '');
+      if (params.path) {
+        const options = params.download ? { download: params.name || true } : undefined;
+        const { data, error } = await supabase.storage
+          .from('purchase-invoice-attachments')
+          .createSignedUrl(params.path, 120, options as any);
+        if (error || !data?.signedUrl) throw error || new Error('URL do anexo não gerada.');
+        url = data.signedUrl;
+      }
+      if (!url) throw new Error('Este lançamento não possui arquivo anexado.');
+
+      if (params.download) {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = params.name || 'anexo-nota';
+        anchor.rel = 'noopener';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      } else if (previewWindow) {
+        previewWindow.location.href = url;
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (error: any) {
+      previewWindow?.close();
+      toast({ title: 'Erro ao abrir anexo', description: error?.message || 'Não foi possível acessar o arquivo.', variant: 'destructive' });
+    } finally {
+      setAttachmentBusyId('');
+    }
+  };
+
+  const attachFileToPurchase = async (purchase: SmartInvoiceImport, file?: File) => {
+    if (!file || !user?.id) return;
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf', 'application/xml', 'text/xml'];
+    if ((!validTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.xml')) || file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Anexo inválido', description: 'Use JPG, PNG, WEBP, PDF ou XML de até 10 MB.', variant: 'destructive' });
+      return;
+    }
+
+    setAttachmentBusyId(purchase.id);
+    try {
+      const extension = file.name.split('.').pop()?.toLowerCase() || (file.type === 'application/pdf' ? 'pdf' : 'jpg');
+      const effectiveMimeType = file.type || (extension === 'xml' ? 'application/xml' : 'application/octet-stream');
+      const path = `${user.id}/smart-invoices/${purchase.id}-${Date.now()}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from('purchase-invoice-attachments')
+        .upload(path, file, { contentType: effectiveMimeType, cacheControl: '3600', upsert: false });
+      if (uploadError) throw uploadError;
+
+      const attachmentPayload = {
+        attachment_path: path,
+        attachment_name: file.name,
+        attachment_mime_type: effectiveMimeType,
+        attachment_size_bytes: file.size,
+      };
+      const { error: importError } = await (supabase as any)
+        .from('smart_invoice_imports')
+        .update(attachmentPayload)
+        .eq('id', purchase.id)
+        .eq('user_id', user.id);
+      if (importError) throw importError;
+
+      if (purchase.expense_id) {
+        const { error: expenseError } = await (supabase as any)
+          .from('expenses')
+          .update({ receipt_path: path, receipt_name: file.name, receipt_mime_type: effectiveMimeType })
+          .eq('id', purchase.expense_id)
+          .eq('user_id', user.id);
+        if (expenseError) throw expenseError;
+      }
+
+      toast({ title: 'Anexo salvo', description: 'O arquivo foi vinculado à nota de compra e ao lançamento financeiro.' });
+      await Promise.all([loadPurchaseInvoices(), loadExpenses()]);
+    } catch (error: any) {
+      toast({ title: 'Erro ao anexar arquivo', description: error?.message || 'Não foi possível salvar o anexo.', variant: 'destructive' });
+    } finally {
+      setAttachmentBusyId('');
     }
   };
 
@@ -517,6 +723,7 @@ export default function Despesas() {
 
   const totalForCategoryShare = Math.max(getTotalExpenses(), 1);
   const smartInvoiceTotal = smartInvoiceItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
+  const filteredPurchaseInvoices = purchaseInvoices.filter((purchase) => purchaseStatusFilter === 'all' || purchase.status === purchaseStatusFilter);
   const reversedExpenses = expenses
     .filter((expense) => expense.is_active === false)
     .filter((expense) => !searchTerm || expense.description.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -548,21 +755,21 @@ export default function Despesas() {
         )}
       />
 
-      <Card ref={smartInvoiceRef} className="border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50">
+      <Card ref={smartInvoiceRef} className="border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/40">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-emerald-950">
             <Sparkles className="h-5 w-5 text-orange-600" />
             Nota inteligente para financeiro e estoque
           </CardTitle>
           <CardDescription>
-            Envie uma nota fiscal, cupom ou recibo. A IA lê os itens, classifica por categoria/subcategoria e prepara o lançamento de despesa e estoque.
+              Envie foto, PDF ou XML. O sistema lê os produtos, permite a conferência e lança financeiro e estoque em uma única operação segura.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
             <Input
               type="file"
-              accept=".jpg,.jpeg,.png,.pdf"
+              accept=".jpg,.jpeg,.png,.pdf,.xml,application/xml,text/xml"
               onChange={handleSmartInvoiceFile}
               className="h-11 bg-white"
             />
@@ -712,6 +919,110 @@ export default function Despesas() {
                   </TableBody>
                 </Table>
               </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="border-b bg-emerald-50/60">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-emerald-950"><Paperclip className="h-5 w-5" />Central de notas de compra</CardTitle>
+              <CardDescription>Conferência, anexos, lançamentos, estoque e estornos reunidos em um histórico auditável.</CardDescription>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center text-xs sm:flex">
+              <div className="rounded-xl border bg-white px-3 py-2"><strong className="block text-base text-emerald-800">{purchaseInvoices.filter((item) => item.status === 'committed').length}</strong>Lançadas</div>
+              <div className="rounded-xl border bg-white px-3 py-2"><strong className="block text-base text-amber-700">{purchaseInvoices.filter((item) => item.status === 'draft').length}</strong>Conferência</div>
+              <div className="rounded-xl border bg-white px-3 py-2"><strong className="block text-base text-red-700">{purchaseInvoices.filter((item) => item.status === 'cancelled').length}</strong>Estornadas</div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-5">
+          <Tabs value={purchaseStatusFilter} onValueChange={(value) => setPurchaseStatusFilter(value as typeof purchaseStatusFilter)} className="mb-5">
+            <TabsList className="h-auto flex-wrap justify-start">
+              <TabsTrigger value="all">Todas ({purchaseInvoices.length})</TabsTrigger>
+              <TabsTrigger value="draft">Em conferência</TabsTrigger>
+              <TabsTrigger value="committed">Lançadas</TabsTrigger>
+              <TabsTrigger value="cancelled">Estornadas</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {purchaseInvoices.length === 0 ? (
+            <div className="rounded-2xl border border-dashed py-10 text-center text-muted-foreground">
+              <FileText className="mx-auto mb-2 h-10 w-10 opacity-50" />
+              <p>Nenhuma nota de compra processada.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fornecedor / nota</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Anexo original</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPurchaseInvoices.map((purchase) => {
+                    const hasAttachment = Boolean(purchase.attachment_path || purchase.receipt_url);
+                    const isBusy = attachmentBusyId === purchase.id;
+                    return (
+                      <TableRow key={purchase.id}>
+                        <TableCell>
+                          <div className="font-semibold">{purchase.supplier_name || 'Fornecedor não identificado'}</div>
+                          <div className="text-xs text-muted-foreground">{purchase.invoice_number ? `Nota ${purchase.invoice_number}` : 'Sem número'} · processada em {purchase.created_at ? formatDate(purchase.created_at) : '-'}</div>
+                        </TableCell>
+                        <TableCell>{purchase.invoice_date ? formatDate(purchase.invoice_date) : '-'}</TableCell>
+                        <TableCell className="font-semibold">{formatCurrency(Number(purchase.total_amount || 0))}</TableCell>
+                        <TableCell>
+                          <Badge className={purchase.status === 'committed' ? 'bg-emerald-700' : purchase.status === 'cancelled' ? 'bg-red-600 text-white' : 'bg-amber-100 text-amber-900 hover:bg-amber-100'}>
+                            {purchase.status === 'committed' ? 'Lançada' : purchase.status === 'cancelled' ? 'Estornada' : 'Em conferência'}
+                          </Badge>
+                          {purchase.status === 'cancelled' && purchase.reversal_reason && <div className="mt-1 max-w-[220px] text-xs text-red-700">{purchase.reversal_reason}</div>}
+                        </TableCell>
+                        <TableCell>
+                          {hasAttachment ? (
+                            <div className="flex flex-wrap gap-2">
+                              <Button type="button" variant="outline" size="sm" disabled={isBusy} onClick={() => void openAttachment({ id: purchase.id, path: purchase.attachment_path, legacyUrl: purchase.receipt_url, name: purchase.attachment_name })}>
+                                <Eye className="mr-1.5 h-3.5 w-3.5" />Visualizar
+                              </Button>
+                              <Button type="button" variant="outline" size="sm" disabled={isBusy} onClick={() => void openAttachment({ id: purchase.id, path: purchase.attachment_path, legacyUrl: purchase.receipt_url, name: purchase.attachment_name, download: true })}>
+                                <Download className="mr-1.5 h-3.5 w-3.5" />Baixar
+                              </Button>
+                            </div>
+                          ) : (
+                            <label className="inline-flex h-9 cursor-pointer items-center rounded-md border border-orange-200 bg-orange-50 px-3 text-xs font-bold text-orange-800 hover:bg-orange-100">
+                              <Upload className="mr-1.5 h-3.5 w-3.5" />{isBusy ? 'Enviando...' : 'Anexar arquivo'}
+                              <input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.xml,application/xml,text/xml" className="sr-only" disabled={isBusy} onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) void attachFileToPurchase(purchase, file);
+                                event.target.value = '';
+                              }} />
+                            </label>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button type="button" variant="ghost" size="sm" disabled={purchaseDetailsLoading} onClick={() => void loadPurchaseDetails(purchase)}>
+                              <FileText className="mr-1.5 h-3.5 w-3.5" />Ver itens
+                            </Button>
+                            {purchase.status === 'draft' && (
+                              <Button type="button" size="sm" className="bg-emerald-800 hover:bg-emerald-900" onClick={() => void loadPurchaseDetails(purchase, true)}>
+                                <PackageCheck className="mr-1.5 h-3.5 w-3.5" />Continuar lançamento
+                              </Button>
+                            )}
+                            {purchase.status === 'committed' && (
+                              <Button type="button" variant="ghost" size="sm" className="text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => setPurchaseToReverse(purchase)}>
+                                <Undo2 className="mr-1.5 h-3.5 w-3.5" />Estornar nota
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
@@ -969,13 +1280,15 @@ export default function Despesas() {
                           </TableCell>
                           <TableCell className="font-medium">{formatCurrency(expense.amount)}</TableCell>
                           <TableCell>
-                            {expense.receipt_url ? (
-                              <Button variant="outline" size="sm" asChild>
-                                <a href={expense.receipt_url} target="_blank" rel="noopener noreferrer">
-                                  <Upload className="h-3 w-3 mr-1" />
-                                  Ver
-                                </a>
-                              </Button>
+                            {expense.receipt_path || expense.receipt_url ? (
+                              <div className="flex flex-wrap gap-2">
+                                <Button type="button" variant="outline" size="sm" disabled={attachmentBusyId === expense.id} onClick={() => void openAttachment({ id: expense.id, path: expense.receipt_path, legacyUrl: expense.receipt_url, name: expense.receipt_name })}>
+                                  <Eye className="mr-1 h-3 w-3" />Ver
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" disabled={attachmentBusyId === expense.id} onClick={() => void openAttachment({ id: expense.id, path: expense.receipt_path, legacyUrl: expense.receipt_url, name: expense.receipt_name, download: true })}>
+                                  <Download className="mr-1 h-3 w-3" />Baixar
+                                </Button>
+                              </div>
                             ) : (
                               <span className="text-muted-foreground text-sm">-</span>
                             )}
@@ -1125,6 +1438,61 @@ export default function Despesas() {
         onCancel={() => setExpenseToReverse(null)}
         onConfirm={reverseExpense}
       />
+
+      <ReverseExpenseDialog
+        open={Boolean(purchaseToReverse)}
+        title="Estornar nota de compra"
+        entityLabel="nota de compra"
+        description={purchaseToReverse ? `${purchaseToReverse.supplier_name || 'Fornecedor'}${purchaseToReverse.invoice_number ? ` · NF ${purchaseToReverse.invoice_number}` : ''}` : undefined}
+        amountLabel={purchaseToReverse ? formatCurrency(Number(purchaseToReverse.total_amount || 0)) : undefined}
+        auditMessage="A despesa vinculada e todas as entradas de estoque desta nota serão desfeitas. O registro permanecerá na aba Estornadas."
+        onCancel={() => setPurchaseToReverse(null)}
+        onConfirm={reversePurchaseInvoice}
+      />
+
+      <Dialog open={Boolean(purchaseDetails)} onOpenChange={(open) => !open && setPurchaseDetails(null)}>
+        <DialogContent className="max-h-[88vh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da nota de compra</DialogTitle>
+            <DialogDescription>
+              {purchaseDetails?.invoice.supplier_name || 'Fornecedor não identificado'}
+              {purchaseDetails?.invoice.invoice_number ? ` · Nota ${purchaseDetails.invoice.invoice_number}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {purchaseDetails && (
+            <div className="space-y-4">
+              <div className="grid gap-3 rounded-2xl bg-emerald-50 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div><span className="block text-xs text-muted-foreground">Status</span><strong>{purchaseDetails.invoice.status === 'committed' ? 'Lançada' : purchaseDetails.invoice.status === 'cancelled' ? 'Estornada' : 'Em conferência'}</strong></div>
+                <div><span className="block text-xs text-muted-foreground">Emissão</span><strong>{purchaseDetails.invoice.invoice_date ? formatDate(purchaseDetails.invoice.invoice_date) : '-'}</strong></div>
+                <div><span className="block text-xs text-muted-foreground">Total</span><strong>{formatCurrency(Number(purchaseDetails.invoice.total_amount || 0))}</strong></div>
+                <div><span className="block text-xs text-muted-foreground">Destinos</span><strong>{[purchaseDetails.invoice.launch_expense && 'Financeiro', purchaseDetails.invoice.launch_stock && 'Estoque'].filter(Boolean).join(' + ') || 'Pendente'}</strong></div>
+              </div>
+              {purchaseDetails.invoice.status === 'cancelled' && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                  <strong>Estornada{purchaseDetails.invoice.reversed_by_name ? ` por ${purchaseDetails.invoice.reversed_by_name}` : ''}:</strong> {purchaseDetails.invoice.reversal_reason || 'Motivo não informado'}
+                </div>
+              )}
+              <div className="overflow-x-auto rounded-2xl border">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Produto / insumo</TableHead><TableHead>Categoria</TableHead><TableHead>Quantidade</TableHead><TableHead>Custo unit.</TableHead><TableHead>Total</TableHead><TableHead>Entrada registrada</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {purchaseDetails.items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell><div className="font-medium">{item.normalized_name}</div><div className="text-xs text-muted-foreground">{item.description}</div></TableCell>
+                        <TableCell>{item.category}{item.subcategory ? ` / ${item.subcategory}` : ''}</TableCell>
+                        <TableCell>{Number(item.quantity).toLocaleString('pt-BR')} {item.unit}</TableCell>
+                        <TableCell>{formatCurrency(Number(item.unit_price || 0))}</TableCell>
+                        <TableCell className="font-semibold">{formatCurrency(Number(item.total_price || 0))}</TableCell>
+                        <TableCell>{item.control_stock ? `${Number(item.stock_quantity_added || 0).toLocaleString('pt-BR')} ${item.stock_unit}` : 'Sem controle'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,5 +1,11 @@
 const OWNER = 'josegenecis';
-const REPO = 'boracume-pdv-system';
+const REPO = 'PopSystem';
+
+const disableRedirectCache = (res: any) => {
+  res.setHeader('cache-control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('pragma', 'no-cache');
+  res.setHeader('expires', '0');
+};
 
 export default async function handler(req: any, res: any) {
   try {
@@ -15,7 +21,7 @@ export default async function handler(req: any, res: any) {
     if (!gh.ok) {
       res.statusCode = 302;
       res.setHeader('location', fallback);
-      res.setHeader('cache-control', 'public, s-maxage=300, stale-while-revalidate=3600');
+      disableRedirectCache(res);
       res.end();
       return;
     }
@@ -30,14 +36,13 @@ export default async function handler(req: any, res: any) {
     const url = String(setup?.browser_download_url || '') || fallback;
     res.statusCode = 302;
     res.setHeader('location', url);
-    res.setHeader('cache-control', 'public, s-maxage=300, stale-while-revalidate=3600');
+    disableRedirectCache(res);
     res.end();
   } catch {
     const fallback = `https://github.com/${OWNER}/${REPO}/releases/latest`;
     res.statusCode = 302;
     res.setHeader('location', fallback);
-    res.setHeader('cache-control', 'public, s-maxage=60, stale-while-revalidate=600');
+    disableRedirectCache(res);
     res.end();
   }
 }
-

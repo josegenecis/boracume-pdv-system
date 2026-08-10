@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, Wallet, ChevronLeft, ChevronRight, Scale, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, Wallet, ChevronLeft, ChevronRight, Scale, AlertTriangle, ScanLine } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -47,6 +47,10 @@ import {
   shouldCreateTableManagerOrder,
 } from '@/utils/tableOrderFlow';
 import { getOpenTableCount } from '@/services/openTables';
+import { getCashSessionDeadline } from '@/utils/cashSession';
+import FiscalRecipientsManager, { type FiscalCustomer } from '@/components/fiscal/FiscalRecipientsManager';
+import { pwaScaleService } from '@/services/ScaleService';
+import BarcodeCameraScanner from '@/components/devices/BarcodeCameraScanner';
 
 interface Product {
   id: string;
@@ -58,6 +62,8 @@ interface Product {
   category_id?: string;
   description?: string;
   weight_based?: boolean;
+  costing_mode?: 'automatic_recipe' | 'manual';
+  manual_unit_cost?: number | null;
   send_to_kds?: boolean;
   fiscal_ncm?: string | null;
   fiscal_cfop?: string | null;
@@ -169,6 +175,13 @@ const getPaymentMethodLabel = (method: PdvPaymentMethod | string) => {
 const normalizeProductLookupCode = (value: unknown) =>
   String(value || '').trim().replace(/\s+/g, '').toLowerCase();
 
+const formatFiscalDocument = (value: unknown) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length === 11) return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+  if (digits.length === 14) return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  return digits;
+};
+
 interface CashSession {
   id: string;
   opened_at: string;
@@ -218,6 +231,8 @@ const PDV = () => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [customerDocument, setCustomerDocument] = useState('');
+  const [selectedFiscalRecipient, setSelectedFiscalRecipient] = useState<FiscalCustomer | null>(null);
+  const [fiscalRecipientOpen, setFiscalRecipientOpen] = useState(false);
   const [deliveryCustomerFound, setDeliveryCustomerFound] = useState('');
   const [orderType, setOrderType] = useState<'delivery' | 'pickup' | 'dine_in' | 'counter'>('counter');
   const [selectedDeliveryZone, setSelectedDeliveryZone] = useState<string>('');
@@ -246,6 +261,7 @@ const PDV = () => {
   const [pixAmount, setPixAmount] = useState(0);
   const [mpPixCheckout, setMpPixCheckout] = useState<null | { correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string; paymentId?: string }>(null);
   const [cashSession, setCashSession] = useState<CashSession | null>(null);
+  const [cashSessionDeadline, setCashSessionDeadline] = useState<Date | null>(null);
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
   const [cashDialogMode, setCashDialogMode] = useState<'open' | 'close'>('open');
   const [cashAmountInput, setCashAmountInput] = useState('');
@@ -267,6 +283,7 @@ const PDV = () => {
   const [tableLaunchOpen, setTableLaunchOpen] = useState(false);
   const [tableLaunchId, setTableLaunchId] = useState('');
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
+  const [cameraScannerOpen, setCameraScannerOpen] = useState(false);
   const [pendingWeightProduct, setPendingWeightProduct] = useState<Product | null>(null);
   const [manualWeight, setManualWeight] = useState('');
   const [commandLookupOpen, setCommandLookupOpen] = useState(false);
@@ -456,31 +473,21 @@ const PDV = () => {
 
   const fetchOpenCashSession = async () => {
     try {
-      const { data, error } = await supabase
-        .from('cash_register_sessions' as any)
-        .select('id, opened_at, initial_amount, status')
-        .eq('user_id', user?.id)
-        .eq('status', 'open')
-        .order('opened_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const [{ data, error }, { data: profile }] = await Promise.all([
+        supabase.from('cash_register_sessions' as any).select('id, opened_at, initial_amount, status').eq('user_id', user?.id).eq('status', 'open').order('opened_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('profiles').select('opening_hours').eq('id', user?.id).maybeSingle(),
+      ]);
       if (error) throw error;
       setCashSession((data as any) || null);
+      setCashSessionDeadline(data?.opened_at ? getCashSessionDeadline(data.opened_at, profile?.opening_hours) : null);
     } catch {
       setCashSession(null);
+      setCashSessionDeadline(null);
     }
   };
 
   const getOperatorSession = () => {
-    try {
-      const waiter = localStorage.getItem('waiter_session');
-      if (waiter) return JSON.parse(waiter);
-      const op = localStorage.getItem('operator_session');
-      if (op) return JSON.parse(op);
-      return null;
-    } catch {
-      return null;
-    }
+    return getLocalOperatorSession();
   };
 
   const normalizeCustomerKey = (order: any) => {
@@ -566,7 +573,7 @@ const PDV = () => {
   const loadCashCloseSummary = async (session: CashSession, informedAmount?: number | null): Promise<CashCloseSummary> => {
     const operatorSession = getOperatorSession();
     const reportClosedAt = session.closed_at || new Date().toISOString();
-    const [{ data: orders }, { data: unlinkedOrders }, { data: moves }, { data: profile }, { data: fiscal }] = await Promise.all([
+    const [{ data: orders }, { data: unlinkedOrders }, { data: moves }, { data: profile }] = await Promise.all([
       (supabase as any)
         .from('orders')
         .select('*')
@@ -588,11 +595,6 @@ const PDV = () => {
         .from('profiles')
         .select('restaurant_name')
         .eq('id', user?.id)
-        .maybeSingle(),
-      supabase
-        .from('fiscal_settings')
-        .select('cnpj')
-        .eq('user_id', user?.id)
         .maybeSingle(),
     ]);
 
@@ -681,7 +683,7 @@ const PDV = () => {
       closedAt: new Date().toISOString(),
       operatorName: operatorSession?.name || 'Operador',
       companyName: String((profile as any)?.restaurant_name || 'PopSystem').trim() || 'PopSystem',
-      companyCnpj: String((fiscal as any)?.cnpj || '').trim() || '--',
+      companyCnpj: '--',
       boxLabel: 'CAIXA 01',
     };
   };
@@ -1285,18 +1287,23 @@ const PDV = () => {
   const handleWeightedProductClick = async (product: Product) => {
     const api = (window as any)?.electronAPI;
     const scalePort = localStorage.getItem('hw.scale.port') || '';
-    if (!api?.readWeight || !scalePort) {
-      openManualWeightDialog(product);
-      return;
-    }
-
     try {
-      const resp = await api.readWeight(scalePort, 1800);
-      if (!resp?.success) throw new Error(resp?.error || resp?.message || 'Balança não identificada');
-      const weightKg = normalizeScaleWeightToKg(Number(resp.weight || 0), resp.unit);
+      let reading: { weight: number; unit?: string };
+      if (api?.readWeight && scalePort) {
+        const resp = await api.readWeight(scalePort, 1800);
+        if (!resp?.success) throw new Error(resp?.error || resp?.message || 'Balança não identificada');
+        reading = { weight: Number(resp.weight || 0), unit: resp.unit };
+      } else if (pwaScaleService.isConnected()) {
+        reading = await pwaScaleService.getReading(1800);
+      } else {
+        openManualWeightDialog(product);
+        return;
+      }
+      const weightKg = normalizeScaleWeightToKg(reading.weight, reading.unit);
       if (!weightKg) throw new Error('Peso zerado');
       addWeightedProductToCart(product, weightKg);
-    } catch {
+    } catch (error: any) {
+      toast({ title: 'Leitura automática indisponível', description: error?.message || 'Digite o peso manualmente.' });
       openManualWeightDialog(product);
     }
   };
@@ -1657,6 +1664,8 @@ const PDV = () => {
     setCustomerPhone('');
     setCustomerAddress('');
     setCustomerDocument('');
+    setSelectedFiscalRecipient(null);
+    setFiscalRecipientOpen(false);
     setSelectedDeliveryZone('');
     setSelectedTable('');
     setTableLaunchId('');
@@ -1757,6 +1766,7 @@ const PDV = () => {
         price: item.price,
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
+        sale_unit: item.weight_based ? 'kg' : 'un',
         options,
         variations: variationLines,
         notes: item.notes || '',
@@ -1908,65 +1918,101 @@ const PDV = () => {
     setCheckoutOpen(true);
   };
 
-  const isFiscalEmissionActive = async () => {
+  const isFiscalEmissionActive = async (modelCode: '55' | '65' = '65') => {
     if (!user?.id) return false;
 
-    try {
-      const { data, error } = await supabase
-        .from('fiscal_settings')
-        .select('ativo')
-        .eq('user_id', user.id)
-        .maybeSingle();
+    const { data, status } = await invokeEdgeFunction<any>('nfce-operations', {
+      operation: 'politica_emissao',
+      model_code: modelCode,
+    }, { timeoutMs: 15000 });
 
-      if (error) throw error;
-      return Boolean(data?.ativo);
-    } catch (error) {
-      console.warn('Não foi possível verificar se a NFC-e está ativa:', error);
-      return false;
+    if (status < 200 || status >= 300 || !data?.success) {
+      throw new Error(
+        data?.error || data?.message ||
+        'Não foi possível confirmar a configuração fiscal. A venda não será finalizada como não fiscal.',
+      );
     }
+
+    return data.enabled === true;
+  };
+
+  const runNonBlockingSaleTasks = (params: {
+    created: any;
+    orderNumber: string;
+    selectedTableId: string | null;
+    notifyCustomer: boolean;
+  }) => {
+    const tasks: Promise<unknown>[] = [];
+
+    if (params.notifyCustomer) {
+      tasks.push(notifyOrderCreatedById(params.created?.id));
+    }
+    if (params.selectedTableId) {
+      tasks.push(
+        Promise.resolve(supabase.from('tables').update({ status: 'occupied' }).eq('id', params.selectedTableId))
+          .then(({ error }) => { if (error) throw error; }),
+      );
+    }
+    tasks.push(
+      Promise.resolve(supabase.from('security_logs').insert({
+        user_id: user?.id,
+        event_type: 'order_finalize',
+        description: `Pedido ${params.orderNumber} finalizado por ${params.created?.variations?.operator?.name || 'Conta do restaurante'}`,
+        severity: 'info',
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+      } as any)).then(({ error }) => { if (error) throw error; }),
+    );
+
+    void Promise.allSettled(tasks).then((results) => {
+      results.forEach((result) => {
+        if (result.status === 'rejected') console.warn('Tarefa posterior à venda não concluída:', result.reason);
+      });
+    });
   };
 
   const emitNfceForOrder = async (order: any) => {
     if (!order?.id) throw new Error('Pedido inválido para emissão fiscal.');
+    const recipient = order?.variations?.fiscal_recipient || null;
+    const modelCode: '55' | '65' = recipient ? '55' : '65';
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData.session?.access_token;
+    const { data, status } = await invokeEdgeFunction<any>('nfce-operations', {
+      operation: 'emitir',
+      order_id: order.id,
+      model_code: modelCode,
+      consumer_data: recipient || order.customer_name || order.customer_document || customerDocument
+        ? {
+            nome: recipient?.name || order.customer_name || null,
+            cpf_cnpj: String(recipient?.cpf_cnpj || order.customer_document || customerDocument || '').replace(/\D/g, '') || null,
+            email: recipient?.email || null,
+            state_registration: recipient?.state_registration || null,
+            state_registration_indicator: recipient?.state_registration_indicator || 9,
+            address: recipient?.address || null,
+            address_number: recipient?.address_number || null,
+            address_complement: recipient?.address_complement || null,
+            neighborhood: recipient?.neighborhood || null,
+            city: recipient?.city || null,
+            state: recipient?.state || null,
+            postal_code: recipient?.postal_code || null,
+            city_code: recipient?.city_code || null,
+            final_consumer: recipient?.final_consumer !== false,
+          }
+        : null,
+      observacoes: '',
+    }, { timeoutMs: 120000 });
 
-    if (!accessToken) {
-      throw new Error('Login não confirmado. Saia e entre novamente antes de emitir a NFC-e.');
-    }
-
-    const response = await fetch('/api/nfce/emit', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        order_id: order.id,
-        consumer_data: order.customer_name || customerDocument
-          ? {
-              nome: order.customer_name || null,
-              cpf_cnpj: customerDocument.replace(/\D/g, '') || null,
-            }
-          : null,
-        observacoes: '',
-      }),
-    });
-
-    const data = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(data?.error || data?.message || 'Erro ao emitir cupom fiscal.');
+    if (status < 200 || status >= 300) {
+      throw new Error(data?.error || data?.message || `Erro ao emitir documento fiscal modelo ${modelCode}.`);
     }
     if (!data?.success) {
-      throw new Error(data?.motivo || data?.error || 'A NFC-e foi rejeitada pela Sefaz.');
+      throw new Error(data?.motivo || data?.error || `O documento fiscal modelo ${modelCode} foi rejeitado pela Sefaz.`);
     }
 
     return data;
   };
 
   const printOrderAfterSale = async (order: any, fiscalActive?: boolean) => {
-    const shouldEmitFiscal = typeof fiscalActive === 'boolean' ? fiscalActive : await isFiscalEmissionActive();
+    const modelCode: '55' | '65' = order?.variations?.fiscal_recipient ? '55' : '65';
+    const shouldEmitFiscal = typeof fiscalActive === 'boolean' ? fiscalActive : await isFiscalEmissionActive(modelCode);
 
     if (!shouldEmitFiscal) {
       await PrinterService.printOrder(order, {
@@ -1976,8 +2022,8 @@ const PDV = () => {
     }
 
     toast({
-      title: 'Emitindo NFC-e',
-      description: 'Fiscal ativo: o cupom fiscal será emitido e impresso automaticamente.',
+      title: modelCode === '55' ? 'Emitindo NF-e' : 'Emitindo NFC-e',
+      description: modelCode === '55' ? 'A nota fiscal modelo 55 será transmitida à Sefaz.' : 'O cupom fiscal modelo 65 será emitido e impresso automaticamente.',
     });
 
     const nfceData = await emitNfceForOrder(order);
@@ -2095,7 +2141,7 @@ const PDV = () => {
     const paymentRemaining = getPaymentRemaining();
     const cashPaymentPortion = getCashPaymentPortion();
     const cashReceivedValue = getCashReceivedValue();
-    const hasSplitPayment = paymentLines.length > 1 || hasManualPaymentSplit();
+    const hasSplitPayment = new Set(paymentLines.map((line) => line.method)).size > 1;
     const primaryPaymentMethod = paymentLines.reduce((winner, line) => (
       line.amount > Number(winner?.amount || 0) ? line : winner
     ), paymentLines[0])?.method || paymentMethod;
@@ -2153,6 +2199,7 @@ const PDV = () => {
         price: item.price,
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
+        sale_unit: item.weight_based ? 'kg' : 'un',
         fiscal_ncm: item.fiscal_ncm || null,
         fiscal_cfop: item.fiscal_cfop || null,
         fiscal_csosn: item.fiscal_csosn || null,
@@ -2191,6 +2238,16 @@ const PDV = () => {
         return;
       }
 
+      if (cashSessionDeadline && Date.now() > cashSessionDeadline.getTime()) {
+        toast({
+          title: 'Limite do caixa encerrado',
+          description: `Este caixa deveria ter sido fechado até ${cashSessionDeadline.toLocaleString('pt-BR')}. Feche e abra um novo caixa para continuar.`,
+          variant: 'destructive',
+        });
+        navigate('/caixa?acao=fechar&motivo=limite');
+        return;
+      }
+
       if (parseBRL(discountAmount) > 0 && !canGiveDiscount(operatorSession)) {
         toast({
           title: 'Sem permissão para desconto',
@@ -2201,6 +2258,7 @@ const PDV = () => {
       }
 
       const resolvedCustomerName = (() => {
+        if (selectedFiscalRecipient?.name) return selectedFiscalRecipient.name;
         const informedName = customerName.trim();
         if (informedName) return informedName;
         if (orderType === 'dine_in') {
@@ -2214,8 +2272,10 @@ const PDV = () => {
 
       const orderData: any = {
         customer_name: resolvedCustomerName,
-        customer_phone: orderType === 'delivery' || orderType === 'pickup' ? customerPhone.trim() || null : null,
+        customer_phone: selectedFiscalRecipient?.phone || (orderType === 'delivery' || orderType === 'pickup' ? customerPhone.trim() || null : null),
         customer_address: orderType === 'delivery' ? customerAddress.trim() : null,
+        customer_id: selectedFiscalRecipient?.id || null,
+        customer_document: String(selectedFiscalRecipient?.cpf_cnpj || customerDocument || '').replace(/\D/g, '') || null,
         order_type: orderType,
         delivery_zone_id: orderType === 'delivery' ? selectedDeliveryZone || null : null,
         table_id: orderType === 'dine_in' ? selectedTable || null : null,
@@ -2261,6 +2321,23 @@ const PDV = () => {
                 notes: receivableNotes.trim() || null,
               }
             : null,
+          fiscal_recipient: selectedFiscalRecipient ? {
+            customer_id: selectedFiscalRecipient.id,
+            name: selectedFiscalRecipient.name,
+            cpf_cnpj: String(selectedFiscalRecipient.cpf_cnpj || '').replace(/\D/g, ''),
+            email: selectedFiscalRecipient.email || null,
+            state_registration: selectedFiscalRecipient.state_registration || null,
+            state_registration_indicator: selectedFiscalRecipient.state_registration_indicator || 9,
+            address: selectedFiscalRecipient.address || null,
+            address_number: selectedFiscalRecipient.address_number || null,
+            address_complement: selectedFiscalRecipient.address_complement || null,
+            neighborhood: selectedFiscalRecipient.neighborhood || null,
+            city: selectedFiscalRecipient.city || null,
+            state: selectedFiscalRecipient.state || null,
+            postal_code: selectedFiscalRecipient.postal_code || null,
+            city_code: selectedFiscalRecipient.city_code || null,
+            final_consumer: selectedFiscalRecipient.final_consumer_default !== false,
+          } : null,
           environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
           tef: (paymentMethod === 'cartao_credito' || paymentMethod === 'cartao_debito') && cardProcessingMode === 'tef' ? (tefData || null) : null
         }
@@ -2331,6 +2408,10 @@ const PDV = () => {
 
       console.log('Criando pedido:', orderData);
 
+      // Consulta o valor fiscal atual em toda venda, mas inicia em paralelo com
+      // a gravação para não adicionar uma espera sequencial ao checkout.
+      const fiscalActivePromise = isFiscalEmissionActive(selectedFiscalRecipient ? '55' : '65');
+
       const { data, error } = await supabase
         .from('orders')
         .insert([orderData])
@@ -2361,35 +2442,37 @@ const PDV = () => {
         }
       }
 
-      if (!isCounterPdvSale) {
-        try {
-          await notifyOrderCreatedById(created?.id);
-        } catch (waErr) {
-          console.warn('Falha ao notificar pedido via WhatsApp:', waErr);
-        }
+      const fiscalActiveForSale = await fiscalActivePromise;
+      runNonBlockingSaleTasks({
+        created,
+        orderNumber,
+        selectedTableId: orderType === 'dine_in' ? selectedTable || null : null,
+        notifyCustomer: !isCounterPdvSale,
+      });
+
+      if (!fiscalActiveForSale) {
+        // A venda já foi persistida e contabilizada. Libera o operador agora;
+        // impressão e enriquecimento do cupom continuam sem bloquear o próximo atendimento.
+        toast({
+          title: 'Venda finalizada!',
+          description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
+        });
+        setMobileCartOpen(false);
+        setCheckoutOpen(false);
+        resetCurrentSale(getNextSaleOrderType());
+        setProcessing(false);
+
+        void printOrderAfterSale(created, false).catch((e: any) => {
+          console.warn('Falha ao imprimir após a venda:', e);
+          toast({
+            title: 'Venda registrada, mas não imprimiu',
+            description: e?.message || 'Verifique as configurações da impressora.',
+            variant: 'destructive',
+          });
+        });
+        return;
       }
 
-      if (orderType === 'dine_in' && selectedTable) {
-        try {
-          await supabase
-            .from('tables')
-            .update({ status: 'occupied' })
-            .eq('id', selectedTable);
-        } catch (error) {
-          console.warn('Não foi possível atualizar status da mesa:', error);
-        }
-      }
-
-      try {
-        await supabase.from('security_logs').insert({
-          user_id: user?.id,
-          event_type: 'order_finalize',
-          description: `Pedido ${orderNumber} finalizado por ${orderData.variations?.operator?.name || 'Conta do restaurante'}`,
-          severity: 'info',
-          user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
-        } as any);
-      } catch {}
-      const fiscalActiveForSale = await isFiscalEmissionActive();
       let printResult: { fiscal: boolean; nfce: any | null } = { fiscal: fiscalActiveForSale, nfce: null };
       try {
         printResult = await printOrderAfterSale(created, fiscalActiveForSale);
@@ -2488,6 +2571,16 @@ const PDV = () => {
                     className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/90 pl-9 text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
                   />
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 rounded-xl"
+                  title="Ler código pela câmera"
+                  onClick={() => setCameraScannerOpen(true)}
+                >
+                  <ScanLine className="h-4 w-4" />
+                </Button>
                 {(categories.length > 0 || categoryOptions.hasUncategorized) && (
                   <div className="flex min-w-0 flex-1 items-center gap-1.5">
                     <button
@@ -3218,6 +3311,28 @@ const PDV = () => {
                 value={manualWeight}
                 onChange={(event) => setManualWeight(event.target.value)}
               />
+              {pwaScaleService.isSupported() && !pwaScaleService.isConnected() && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={async () => {
+                    const connected = await pwaScaleService.connectToScale();
+                    if (!connected) {
+                      toast({ title: 'Balança não conectada', description: 'Permita o acesso à porta USB/serial no navegador.', variant: 'destructive' });
+                      return;
+                    }
+                    try {
+                      const reading = await pwaScaleService.getReading(2500);
+                      setManualWeight(normalizeScaleWeightToKg(reading.weight, reading.unit).toFixed(3).replace('.', ','));
+                    } catch (error: any) {
+                      toast({ title: 'Aguardando peso', description: error?.message || 'Coloque o produto na balança.' });
+                    }
+                  }}
+                >
+                  <Scale className="mr-2 h-4 w-4" /> Conectar balança ao PWA
+                </Button>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -3237,6 +3352,11 @@ const PDV = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BarcodeCameraScanner
+        open={cameraScannerOpen}
+        onOpenChange={setCameraScannerOpen}
+        onDetected={(code) => { void addProductByScannedCode(code); }}
+      />
 
       <Dialog open={commandQueryOpen} onOpenChange={setCommandQueryOpen}>
         <DialogContent className="max-w-sm">
@@ -3303,6 +3423,12 @@ const PDV = () => {
         modeVariant={checkoutSettings.mode}
         cpfValue={customerDocument}
         onCpfChange={setCustomerDocument}
+        fiscalRecipient={selectedFiscalRecipient ? {
+          name: selectedFiscalRecipient.name,
+          document: formatFiscalDocument(selectedFiscalRecipient.cpf_cnpj),
+        } : null}
+        onFiscalRecipientClick={() => setFiscalRecipientOpen(true)}
+        onFiscalRecipientClear={() => setSelectedFiscalRecipient(null)}
         inlineContent={paymentMethod === 'pagar_depois' ? (
           <div className="space-y-3">
             <ReceivableContactSelect
@@ -3427,6 +3553,24 @@ const PDV = () => {
         )}
       />
 
+      <Dialog open={fiscalRecipientOpen} onOpenChange={setFiscalRecipientOpen}>
+        <DialogContent className="max-h-[94vh] w-[min(96vw,1100px)] max-w-none overflow-y-auto p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Informar cliente para NF-e modelo 55</DialogTitle>
+          </DialogHeader>
+          <FiscalRecipientsManager
+            onRecipientSelected={(customer) => {
+              setSelectedFiscalRecipient(customer);
+              setFiscalRecipientOpen(false);
+              toast({
+                title: 'Cliente informado para a NF-e',
+                description: `${customer.name} será vinculado à venda com os dados fiscais atuais.`,
+              });
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={tableLaunchOpen} onOpenChange={setTableLaunchOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -3506,7 +3650,7 @@ const PDV = () => {
                     customer_name: customerName,
                   } as any);
 
-                const fiscalActiveForSale = await isFiscalEmissionActive();
+                const fiscalActiveForSale = await isFiscalEmissionActive(selectedFiscalRecipient ? '55' : '65');
                 let printResult: { fiscal: boolean; nfce: any | null } = { fiscal: fiscalActiveForSale, nfce: null };
                 try {
                   printResult = await printOrderAfterSale(resolvedOrder, fiscalActiveForSale);

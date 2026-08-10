@@ -163,7 +163,7 @@ export function AgentDashboard() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950 via-emerald-900 to-orange-600 p-6 text-white shadow-xl">
+      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-700 p-6 text-white shadow-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <Badge className="mb-3 border-white/20 bg-white/10 text-lime-100 hover:bg-white/10">Pop Agente</Badge>

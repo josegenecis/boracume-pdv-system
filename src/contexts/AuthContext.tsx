@@ -53,6 +53,11 @@ interface Subscription {
   billing_amount?: number;
   installment_count?: number;
   asaas_environment?: 'sandbox' | 'production';
+  billing_exempt?: boolean;
+  access_override_until?: string | null;
+  access_override_granted_at?: string | null;
+  access_override_granted_for_period_end?: string | null;
+  access_override_granted_by?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -320,18 +325,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     debugLogger.auth('initialization_started', { timestamp: Date.now() });
 
-    // Timeout de segurança para garantir que o loading não fique travado para sempre
+    // A inicialização nunca deve bloquear o caixa por causa de uma chamada remota
+    // lenta. A sessão local costuma estar disponível imediatamente; este limite
+    // mantém o aplicativo utilizável mesmo durante instabilidade do Auth/RPC.
     const safetyTimeout = setTimeout(() => {
       if (isMountedRef.current && loading) {
         debugLogger.auth('safety_timeout_triggered', { 
-          timeout: 12000,
+          timeout: 4000,
           loading,
           mounted: isMountedRef.current 
         }, 'warn');
         setLoading(false);
         initializationInProgress = false;
       }
-    }, 12000);
+    }, 4000);
 
     initializationPromise = (async () => {
       try {
@@ -344,10 +351,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.warn('⚠️ [AUTH] Falha ao verificar/atualizar token:', e?.message || e);
         }
         
-        // Verificação de sessão com timeout AUMENTADO para 10 segundos para evitar falsos negativos
+        // Não deixe a tela inteira presa aguardando o cliente de autenticação.
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout na verificação de sessão')), 10000)
+          setTimeout(() => reject(new Error('Timeout na verificação de sessão')), 3000)
         );
         
         let sessionData: any = null;
@@ -356,7 +363,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sessionData = await Promise.race([sessionPromise, timeoutPromise]);
         } catch (timeoutError) {
           debugLogger.auth('session_check_timeout', { 
-            timeout: 10000,
+              timeout: 3000,
             error: timeoutError.message 
           }, 'error');
         }
@@ -376,10 +383,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
             setAccountUser(session.user);
             setSession(session);
-            const selectedStore = await loadStoreAccess(session.user);
-
-            // Carregar perfil da unidade e assinatura da conta principal.
-            loadUserDataInBackground(selectedStore.store_user_id, selectedStore.billing_owner_id);
+            // A sessão já é suficiente para renderizar o painel. Loja, perfil e
+            // assinatura continuam carregando sem segurar a interface inteira.
+            setLoading(false);
+            void loadStoreAccess(session.user).then((selectedStore) => {
+              if (!isMountedRef.current) return;
+              void loadUserDataInBackground(selectedStore.store_user_id, selectedStore.billing_owner_id);
+            });
           } else {
             console.log('ℹ️ [AUTH] Nenhuma sessão encontrada via getSession');
           }
@@ -579,6 +589,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       localStorage.removeItem('operator_session');
       localStorage.removeItem('waiter_session');
+      sessionStorage.removeItem('operator_session');
+      sessionStorage.removeItem('waiter_session');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -674,6 +686,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       localStorage.removeItem('operator_session');
       localStorage.removeItem('waiter_session');
+      sessionStorage.removeItem('operator_session');
+      sessionStorage.removeItem('waiter_session');
       await supabase.auth.signOut({ scope: 'local' });
       
       // Limpar cache
@@ -715,6 +729,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(`popsystem_active_store_${accountUser.id}`, selected.store_user_id);
     localStorage.removeItem('operator_session');
     localStorage.removeItem('waiter_session');
+    sessionStorage.removeItem('operator_session');
+    sessionStorage.removeItem('waiter_session');
     setProfile(null);
     setActiveStoreId(selected.store_user_id);
     setBillingOwnerId(selected.billing_owner_id || accountUser.id);

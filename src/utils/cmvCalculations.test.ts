@@ -56,3 +56,26 @@ test('prefere fotografia histórica do custo quando ela existe', () => {
   assert.equal(report.realizedCmv, 4);
   assert.equal(report.ordersWithSnapshot, 1);
 });
+
+test('reconhece custo direto e unidade em kg para produto vendido por peso', () => {
+  const report = buildCmvReport(
+    [{
+      id: 'acai',
+      name: 'Açaí peso',
+      price: 44.9,
+      weight_based: true,
+      costing_mode: 'manual',
+      manual_unit_cost: 15.9,
+    }],
+    [],
+    [{
+      id: 'order-weight',
+      total: 22.45,
+      items: [{ product_id: 'acai', product_name: 'Açaí peso', quantity: 0.5, subtotal: 22.45 }],
+    }],
+  );
+
+  assert.equal(report.products[0].saleUnit, 'kg');
+  assert.equal(report.products[0].costSource, 'manual');
+  assert.equal(report.products[0].realizedCost, 7.95);
+});

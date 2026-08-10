@@ -245,8 +245,25 @@ function isTrialStatus(status: string) {
 
 function isDelinquentStatus(status: string, subscription: any, nowMs: number) {
   if (["past_due", "unpaid", "overdue", "inadimplente", "blocked", "suspended"].includes(status)) return true;
+  const trialEnd = dateMs(subscription?.trial_end);
+  if (isTrialStatus(status) && (!trialEnd || trialEnd < nowMs)) return true;
   const periodEnd = dateMs(subscription?.current_period_end);
   if (periodEnd && periodEnd < nowMs && !isTrialStatus(status)) return true;
+  return false;
+}
+
+function billingPeriodEnd(subscription: any) {
+  const status = normalizeStatus(subscription?.status);
+  return isTrialStatus(status) ? subscription?.trial_end || null : subscription?.current_period_end || null;
+}
+
+function hasSubscriptionAccess(subscription: any, nowMs = Date.now()) {
+  if (!subscription) return false;
+  if (subscription.billing_exempt === true) return true;
+  if (dateMs(subscription.access_override_until) > nowMs) return true;
+  const status = normalizeStatus(subscription.status);
+  if (isTrialStatus(status)) return dateMs(subscription.trial_end) > nowMs;
+  if (isPaidStatus(status)) return dateMs(subscription.current_period_end) > nowMs;
   return false;
 }
 
@@ -285,6 +302,8 @@ function toClientRow(params: {
     planPrice: numeric(params.plan?.price),
     trialEnd: params.subscription?.trial_end || null,
     currentPeriodEnd: params.subscription?.current_period_end || null,
+    accessOverrideUntil: params.subscription?.access_override_until || null,
+    accessAllowed: hasSubscriptionAccess(params.subscription),
     ordersMonth: params.monthOrders.length,
     lastOrderAt: lastOrderAt ? new Date(lastOrderAt).toISOString() : null,
     productsCount: params.productsCount,
@@ -349,6 +368,74 @@ serve(async (req) => {
       });
     }
 
+    if (body?.action === "grant_subscription_access_24h") {
+      const restaurantId = cleanText(body?.restaurantId);
+      if (!restaurantId) return json({ ok: false, error: "Restaurante não informado." }, 400);
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id,restaurant_name,email")
+        .eq("id", restaurantId)
+        .maybeSingle();
+      if (profileError || !profile?.id) return json({ ok: false, error: "Restaurante não encontrado." }, 404);
+
+      const { data: subscription, error: subscriptionError } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("user_id", profile.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (subscriptionError || !subscription?.id) return json({ ok: false, error: "Assinatura não encontrada." }, 404);
+      if (hasSubscriptionAccess(subscription)) {
+        return json({ ok: false, error: "Esta conta já possui acesso liberado." }, 409);
+      }
+
+      const periodEnd = billingPeriodEnd(subscription);
+      const grantedForPeriod = subscription.access_override_granted_for_period_end;
+      const sameOverduePeriod = periodEnd
+        ? dateMs(grantedForPeriod) === dateMs(periodEnd)
+        : Boolean(subscription.access_override_granted_at);
+      if (sameOverduePeriod) {
+        return json({
+          ok: false,
+          error: "A liberação de 24 horas já foi usada neste vencimento. Agora é necessário confirmar o pagamento.",
+        }, 409);
+      }
+
+      const grantedAt = new Date();
+      const accessUntil = addDays(grantedAt, 1);
+      const { data: updated, error: updateError } = await supabase
+        .from("subscriptions")
+        .update({
+          access_override_until: accessUntil.toISOString(),
+          access_override_granted_at: grantedAt.toISOString(),
+          access_override_granted_for_period_end: periodEnd,
+          access_override_granted_by: user.email,
+          updated_at: grantedAt.toISOString(),
+        })
+        .eq("id", subscription.id)
+        .select("id,access_override_until")
+        .maybeSingle();
+      if (updateError || !updated) return json({ ok: false, error: "Não foi possível liberar a conta." }, 500);
+
+      await supabase.from("subscription_access_events").insert({
+        subscription_id: subscription.id,
+        user_id: profile.id,
+        event_type: "temporary_release",
+        actor: user.email,
+        period_end: periodEnd,
+        access_until: accessUntil.toISOString(),
+        metadata: { restaurant_name: profile.restaurant_name, restaurant_email: profile.email },
+      });
+
+      return json({
+        ok: true,
+        restaurant: profile.restaurant_name || profile.email,
+        accessUntil: accessUntil.toISOString(),
+      });
+    }
+
     const now = new Date();
     const nowMs = now.getTime();
     const today = startOfDay(now);
@@ -371,7 +458,7 @@ serve(async (req) => {
     ] = await Promise.all([
       listAuthUsers(supabase),
       supabase.from("profiles").select("id, restaurant_name, email, phone, address, created_at, updated_at").order("created_at", { ascending: false }).limit(5000),
-      supabase.from("subscriptions").select("id, user_id, status, plan_id, trial_start, trial_end, current_period_start, current_period_end, created_at, updated_at").limit(5000),
+      supabase.from("subscriptions").select("id, user_id, status, plan_id, trial_start, trial_end, current_period_start, current_period_end, billing_exempt, access_override_until, access_override_granted_at, access_override_granted_for_period_end, created_at, updated_at").limit(5000),
       supabase.from("subscription_plans").select("id, name, price").limit(100),
       supabase.from("orders").select("id, user_id, status, created_at, order_type").gte("created_at", thirtyDaysAgo.toISOString()).limit(20000),
       supabase.from("products").select("id, user_id, available").limit(50000),

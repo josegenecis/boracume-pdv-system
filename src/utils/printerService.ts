@@ -171,12 +171,15 @@ function getOrderTypeLabel(order: any) {
 function getPaymentSplitLines(order: any) {
   const lines = order?.variations?.payment_split?.lines;
   if (!Array.isArray(lines)) return [];
-  return lines
+  const normalized = lines
     .map((line: any) => ({
       label: normalizeSingleLine(line?.method ? formatPaymentMethodLabel(line.method, order) : line?.label),
       amount: Number(line?.amount || 0),
     }))
     .filter((line) => line.label && Number.isFinite(line.amount) && line.amount > 0);
+  const totals = new Map<string, number>();
+  normalized.forEach((line) => totals.set(line.label, (totals.get(line.label) || 0) + line.amount));
+  return Array.from(totals, ([label, amount]) => ({ label, amount }));
 }
 
 function formatPaymentMethodLabel(method: any, order?: any) {
@@ -939,6 +942,9 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             if (splitLines.length === 0) {
               return `<div style="margin-top: 5px;">Pagamento: ${formatPaymentMethodLabel(order.payment_method, order)}</div>`;
             }
+            if (splitLines.length === 1) {
+              return `<div style="margin-top: 5px;">Pagamento: ${splitLines[0].label}</div>`;
+            }
             return `
               <div style="margin-top: 5px;">Pagamento: MISTO</div>
               ${splitLines.map((line) => `<div>${line.label}: ${formatCurrencyValue(line.amount)}</div>`).join('')}
@@ -1409,7 +1415,15 @@ export const PrinterService = {
       }
     }
 
-    const config = normalizePrintConfig(settings);
+    // O DANFE NFC-e exige o layout térmico completo de 80 mm. Alguns clientes
+    // antigos ficaram com paper_width=58mm nas configurações e, quando o bloco
+    // fiscal era acrescentado, todo o cupom passava a ser renderizado em apenas
+    // 32 colunas. Para documento fiscal usamos sempre 48 colunas; o cupom
+    // operacional sem fiscal continua respeitando a preferência cadastrada.
+    const baseConfig = normalizePrintConfig(settings);
+    const config: NormalizedPrintConfig = normalizeNfcePrintData(order)
+      ? { ...baseConfig, paper_width: '80mm' }
+      : baseConfig;
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -1417,11 +1431,15 @@ export const PrinterService = {
       .eq('id', order.user_id)
       .maybeSingle();
 
-    const { data: fiscal } = await supabase
-      .from('fiscal_settings')
-      .select('cnpj,nome_fantasia,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_municipio,endereco_uf,endereco_cep')
-      .eq('user_id', order.user_id)
-      .maybeSingle();
+    // Dados fiscais pertencem exclusivamente ao DANFE. Recibos operacionais
+    // comuns nunca dependem de fiscal_settings.
+    const { data: fiscal } = normalizeNfcePrintData(order)
+      ? await supabase
+          .from('fiscal_settings')
+          .select('cnpj,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_municipio,endereco_uf,endereco_cep')
+          .eq('user_id', order.user_id)
+          .maybeSingle()
+      : { data: null as any };
 
     const { data: deliveryZone } = order?.delivery_zone_id
       ? await supabase
@@ -1431,18 +1449,17 @@ export const PrinterService = {
           .maybeSingle()
       : { data: null as any };
 
-    const fiscalAddressParts = [
-      fiscal?.endereco_logradouro,
-      fiscal?.endereco_numero,
-      fiscal?.endereco_complemento,
-      fiscal?.endereco_bairro,
-      fiscal?.endereco_municipio,
-      fiscal?.endereco_uf,
-      fiscal?.endereco_cep
-    ]
-      .map((v: any) => String(v || '').trim())
-      .filter(Boolean);
-    const fiscalAddress = fiscalAddressParts.length > 0 ? fiscalAddressParts.join(', ') : '';
+    const fiscalAddress = fiscal
+      ? [
+          fiscal.endereco_logradouro,
+          fiscal.endereco_numero,
+          fiscal.endereco_complemento,
+          fiscal.endereco_bairro,
+          fiscal.endereco_municipio,
+          fiscal.endereco_uf,
+          fiscal.endereco_cep,
+        ].map((value: any) => String(value || '').trim()).filter(Boolean).join(', ')
+      : '';
 
     const store = profile
       ? {
@@ -1454,7 +1471,7 @@ export const PrinterService = {
           phone: profile.phone || '',
           address: fiscalAddress || profile.address || '',
           website: profile.website || '',
-          cnpj: String(fiscal?.cnpj || '').trim() || ''
+          cnpj: String(fiscal?.cnpj || '').trim()
         }
       : null;
 
@@ -1565,16 +1582,11 @@ export const PrinterService = {
     let config = normalizePrintConfig(null);
     if (userId) {
       try {
-        const [{ data: profile }, { data: fiscal }, { data: settings }] = await Promise.all([
+        const [{ data: profile }, { data: settings }] = await Promise.all([
           supabase
             .from('profiles')
             .select('restaurant_name,description,logo_url,phone,address,website')
             .eq('id', userId)
-            .maybeSingle(),
-          supabase
-            .from('fiscal_settings')
-            .select('cnpj,nome_fantasia,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_municipio,endereco_uf,endereco_cep')
-            .eq('user_id', userId)
             .maybeSingle(),
           (supabase as any)
             .from('printer_settings')
@@ -1584,19 +1596,6 @@ export const PrinterService = {
         ]);
         config = normalizePrintConfig(settings);
 
-        const fiscalAddressParts = [
-          (fiscal as any)?.endereco_logradouro,
-          (fiscal as any)?.endereco_numero,
-          (fiscal as any)?.endereco_complemento,
-          (fiscal as any)?.endereco_bairro,
-          (fiscal as any)?.endereco_municipio,
-          (fiscal as any)?.endereco_uf,
-          (fiscal as any)?.endereco_cep
-        ]
-          .map((v: any) => String(v || '').trim())
-          .filter(Boolean);
-        const fiscalAddress = fiscalAddressParts.length > 0 ? fiscalAddressParts.join(', ') : '';
-
         store = profile
           ? {
               name: (profile as any).restaurant_name || '',
@@ -1604,9 +1603,9 @@ export const PrinterService = {
               description: (profile as any).description || '',
               logo_url: (profile as any).logo_url || '',
               phone: (profile as any).phone || '',
-              address: fiscalAddress || (profile as any).address || '',
+              address: (profile as any).address || '',
               website: (profile as any).website || '',
-              cnpj: String((fiscal as any)?.cnpj || '').trim() || ''
+              cnpj: ''
             }
           : null;
       } catch {}
@@ -1775,13 +1774,15 @@ export const PrinterService = {
     bold(true);
     
     const splitLines = getPaymentSplitLines(order);
-    if (splitLines.length > 0) {
+    if (splitLines.length > 1) {
       commands += text('Pagamento: MISTO');
       splitLines.forEach((line) => {
         formatColumns(line.label, formatCurrencyValue(line.amount), lineWidth).forEach((value) => {
           commands += text(value);
         });
       });
+    } else if (splitLines.length === 1) {
+      commands += text(`Pagamento: ${splitLines[0].label}`);
     } else {
       commands += text(`Pagamento: ${formatPaymentMethodLabel(order.payment_method, order)}`);
     }

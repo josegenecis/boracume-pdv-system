@@ -34,9 +34,10 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', {
   currency: 'BRL',
 }).format(value);
 
-const formatQuantity = (value: number) => new Intl.NumberFormat('pt-BR', {
+const formatQuantity = (value: number, unit: 'un' | 'kg') => `${new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: unit === 'kg' ? 3 : 0,
   maximumFractionDigits: 3,
-}).format(value);
+}).format(value)} ${unit}`;
 
 const dateInputValue = (date: Date) => {
   const year = date.getFullYear();
@@ -97,7 +98,7 @@ export default function InteligenciaCMV() {
         }
 
         const [productsResult, recipesResult] = await Promise.all([
-          supabase.from('products').select('id,name,price').eq('user_id', user.id).order('name'),
+          supabase.from('products').select('id,name,price,weight_based,costing_mode,manual_unit_cost').eq('user_id', user.id).order('name'),
           // Generated database types are updated after the new migration is regenerated.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from('product_recipes') as any)
@@ -129,6 +130,9 @@ export default function InteligenciaCMV() {
             id: product.id,
             name: product.name,
             price: Number(product.price || 0),
+            weight_based: Boolean(product.weight_based),
+            costing_mode: product.costing_mode,
+            manual_unit_cost: product.manual_unit_cost == null ? null : Number(product.manual_unit_cost),
           })),
           ((recipesResult.data || []) as RecipeQueryRow[]).map(recipe => ({
             product_id: String(recipe.product_id),
@@ -160,7 +164,7 @@ export default function InteligenciaCMV() {
   const snapshotCoverage = report.totalOrders > 0
     ? report.ordersWithSnapshot / report.totalOrders * 100
     : 100;
-  const productsWithoutRecipe = report.products.filter(product => !product.hasRecipe).length;
+  const productsWithoutCost = report.products.filter(product => !product.hasCost).length;
   const alertProducts = report.products.filter(product => product.hasSales && product.cmvPercentage > 35).length;
 
   return (
@@ -222,7 +226,7 @@ export default function InteligenciaCMV() {
         </Card>
       </section>
 
-      {(snapshotCoverage < 100 || productsWithoutRecipe > 0 || alertProducts > 0) ? (
+      {(snapshotCoverage < 100 || productsWithoutCost > 0 || alertProducts > 0) ? (
         <section className="grid gap-3 lg:grid-cols-3" aria-label="Alertas de qualidade do CMV">
           {snapshotCoverage < 100 ? (
             <div className="flex gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
@@ -230,10 +234,10 @@ export default function InteligenciaCMV() {
               <p><strong>Histórico em transição:</strong> pedidos anteriores à atualização usam o custo atual da ficha. As novas vendas ficam congeladas no custo do dia.</p>
             </div>
           ) : null}
-          {productsWithoutRecipe > 0 ? (
+          {productsWithoutCost > 0 ? (
             <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
               <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
-              <p><strong>{productsWithoutRecipe} produto(s) sem ficha:</strong> complete a receita para evitar custo zerado.</p>
+              <p><strong>{productsWithoutCost} produto(s) sem custo:</strong> cadastre uma ficha técnica ou informe o custo direto.</p>
             </div>
           ) : null}
           {alertProducts > 0 ? (
@@ -276,12 +280,14 @@ export default function InteligenciaCMV() {
                   <TableRow key={product.key}>
                     <TableCell className="pl-5">
                       <div className="font-semibold text-emerald-950">{product.name}</div>
-                      {!product.hasRecipe ? <span className="text-xs font-medium text-amber-600">Ficha técnica pendente</span> : null}
+                      {product.costSource === 'recipe' ? <span className="text-xs font-medium text-emerald-700">Custo pela ficha técnica</span> : null}
+                      {product.costSource === 'manual' ? <span className="text-xs font-medium text-blue-700">Custo direto informado</span> : null}
+                      {!product.hasCost ? <span className="text-xs font-medium text-amber-600">Custo pendente</span> : null}
                     </TableCell>
                     <TableCell><Badge className={abcBadgeClass(product.abcClass)}>Curva {product.abcClass}</Badge></TableCell>
-                    <TableCell className="text-right">{product.hasSales ? formatQuantity(product.quantitySold) : '—'}</TableCell>
+                    <TableCell className="text-right">{product.hasSales ? formatQuantity(product.quantitySold, product.saleUnit) : '—'}</TableCell>
                     <TableCell className="text-right font-medium">{product.hasSales ? formatCurrency(product.netRevenue) : '—'}</TableCell>
-                    <TableCell className="text-right">{product.hasRecipe ? formatCurrency(product.theoreticalUnitCost) : '—'}</TableCell>
+                    <TableCell className="text-right">{product.hasCost ? `${formatCurrency(product.theoreticalUnitCost)}/${product.saleUnit}` : '—'}</TableCell>
                     <TableCell className="text-right text-orange-700">{product.hasSales ? formatCurrency(product.realizedCost) : '—'}</TableCell>
                     <TableCell className={`text-right font-semibold ${product.grossContribution >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{product.hasSales ? formatCurrency(product.grossContribution) : '—'}</TableCell>
                     <TableCell className="pr-5 text-right"><Badge variant="outline" className={cmvBadgeClass(product.cmvPercentage)}>{product.cmvPercentage > 0 ? `${product.cmvPercentage.toFixed(1)}%` : '—'}</Badge></TableCell>

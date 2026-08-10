@@ -34,6 +34,7 @@ interface NFCeCupom {
   protocolo_autorizacao?: string;
   contingencia: boolean;
   order_id?: string;
+  sale_order_number?: string;
 }
 
 const NFCeManager: React.FC = () => {
@@ -69,7 +70,14 @@ const NFCeManager: React.FC = () => {
         .order('data_hora_emissao', { ascending: false });
 
       if (error) throw error;
-      setCupons(data || []);
+      const coupons = (data || []) as NFCeCupom[];
+      const orderIds = Array.from(new Set(coupons.map((coupon) => coupon.order_id).filter(Boolean))) as string[];
+      let orderNumbers = new Map<string, string>();
+      if (orderIds.length > 0) {
+        const { data: orders } = await supabase.from('orders').select('id,order_number').in('id', orderIds).eq('user_id', user?.id);
+        orderNumbers = new Map((orders || []).map((order: any) => [String(order.id), String(order.order_number || '')]));
+      }
+      setCupons(coupons.map((coupon) => ({ ...coupon, sale_order_number: coupon.order_id ? orderNumbers.get(coupon.order_id) || '' : '' })));
     } catch (error: any) {
       console.error('Erro ao carregar cupons:', error);
       toast({
@@ -90,7 +98,8 @@ const NFCeManager: React.FC = () => {
         cupom.numero.toString().includes(searchQuery) ||
         cupom.chave_acesso?.includes(searchQuery) ||
         cupom.consumidor_nome?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cupom.consumidor_cpf_cnpj?.includes(searchQuery)
+        cupom.consumidor_cpf_cnpj?.includes(searchQuery) ||
+        cupom.sale_order_number?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -290,7 +299,7 @@ const NFCeManager: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `NFCe_${numero}.xml`;
+      a.download = `NFCe_${numero}_processada.xml`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -298,13 +307,13 @@ const NFCeManager: React.FC = () => {
 
       toast({
         title: "Download concluído",
-        description: "XML da NFC-e foi baixado com sucesso.",
+        description: "XML processado da venda autorizada foi baixado com sucesso.",
       });
     } catch (error: any) {
       console.error('Erro ao baixar XML:', error);
       toast({
         title: "Erro",
-        description: "Erro ao baixar XML do cupom.",
+        description: error?.message || "Erro ao baixar o XML processado da nota.",
         variant: "destructive"
       });
     }
@@ -419,7 +428,7 @@ const NFCeManager: React.FC = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Buscar por número, chave ou consumidor..."
+                  placeholder="Buscar por documento, venda, chave ou consumidor..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -473,6 +482,9 @@ const NFCeManager: React.FC = () => {
                     </CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
                       Emitida em {format(new Date(cupom.data_hora_emissao), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-primary">
+                      {cupom.sale_order_number ? `Venda #${cupom.sale_order_number}` : 'Venda não vinculada'}
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">

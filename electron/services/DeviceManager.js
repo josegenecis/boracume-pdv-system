@@ -1,7 +1,24 @@
-const { SerialPort } = require('serialport');
 const EventEmitter = require('events');
 const fs = require('fs').promises;
 const path = require('path');
+
+let SerialPort = null;
+let serialPortLoadError = null;
+
+const getSerialPort = () => {
+  if (SerialPort) return SerialPort;
+  if (serialPortLoadError) throw serialPortLoadError;
+
+  try {
+    SerialPort = require('serialport').SerialPort;
+    return SerialPort;
+  } catch (error) {
+    serialPortLoadError = new Error(
+      `O driver de dispositivos seriais não pôde ser carregado: ${error?.message || error}`
+    );
+    throw serialPortLoadError;
+  }
+};
 
 // Configuração de dispositivos conhecidos
 const KNOWN_DEVICES = {
@@ -81,6 +98,7 @@ class DeviceManager extends EventEmitter {
 
   async scanForDevices() {
     try {
+      const SerialPort = getSerialPort();
       const ports = await SerialPort.list();
       const detectedDevices = [];
       
@@ -112,6 +130,7 @@ class DeviceManager extends EventEmitter {
 
   async listSerialPorts() {
     try {
+      const SerialPort = getSerialPort();
       const ports = await SerialPort.list();
       return ports.map((p) => {
         const recognized = this.identifyDevice(p);
@@ -193,6 +212,7 @@ class DeviceManager extends EventEmitter {
 
   async connectDevice(deviceId, deviceType, options = {}) {
     try {
+      const SerialPort = getSerialPort();
       if (this.connectedDevices.has(deviceId)) {
         return { success: true, message: 'Dispositivo já conectado' };
       }

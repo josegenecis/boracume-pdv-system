@@ -22,7 +22,7 @@ import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 
 import ProductImageUpload from './ProductImageUpload';
-import ProductRecipeManager from './ProductRecipeManager';
+import ProductRecipeManager, { type ProductRecipeManagerHandle } from './ProductRecipeManager';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { IntegerInput } from '@/components/ui/integer-input';
 import { buildCategoryDescriptionWithMetadata, enrichCategoryWithMetadata } from '@/lib/category-metadata';
@@ -35,6 +35,8 @@ interface ProductItem {
   barcode?: string;
   description?: string; 
   price: number;
+  costing_mode?: 'automatic_recipe' | 'manual';
+  manual_unit_cost?: number | null;
   category: string;
   category_id?: string;
   image_url?: string;
@@ -60,7 +62,18 @@ interface ProductItem {
   fiscal_cest?: string;
   fiscal_beneficio?: string;
   fiscal_observacao?: string;
+  fiscal_ibs_cbs_cst?: string;
+  fiscal_cclass_trib?: string;
+  fiscal_reducao_ibs?: number;
+  fiscal_reducao_cbs?: number;
 }
+
+const RTC_TAX_PRESETS = [
+  { value: '000001', cst: '000', ibsReduction: 0, cbsReduction: 0, label: '000001 - Tributação integral' },
+  { value: '200047', cst: '200', ibsReduction: 40, cbsReduction: 40, label: '200047 - Bares e restaurantes (redução de 40%)' },
+  { value: '200034', cst: '200', ibsReduction: 60, cbsReduction: 60, label: '200034 - Alimentos do Anexo VII (redução de 60%)' },
+  { value: '200003', cst: '200', ibsReduction: 100, cbsReduction: 100, label: '200003 - Cesta básica do Anexo I (redução de 100%)' },
+] as const;
 
 interface ProductVariant {
   id?: string;
@@ -128,6 +141,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     barcode: '',
     description: '',
     price: 0,
+    costing_mode: 'automatic_recipe',
+    manual_unit_cost: null,
     category: '',
     image_url: '',
     available: true,
@@ -152,6 +167,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     fiscal_cest: '',
     fiscal_beneficio: '',
     fiscal_observacao: '',
+    fiscal_ibs_cbs_cst: '000',
+    fiscal_cclass_trib: '000001',
+    fiscal_reducao_ibs: 0,
+    fiscal_reducao_cbs: 0,
     ...product
   });
   const [categories, setCategories] = useState([]);
@@ -178,6 +197,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
   const createdProductIdRef = useRef<string | null>(product?.id || null);
   const autoSaveInFlightRef = useRef(false);
+  const recipeManagerRef = useRef<ProductRecipeManagerHandle | null>(null);
   const [stockSchemaSupported, setStockSchemaSupported] = useState(true);
   const [stockSchemaError, setStockSchemaError] = useState<string | null>(null);
   const [unsupportedColumns, setUnsupportedColumns] = useState<string[]>([]);
@@ -796,6 +816,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       name: formData.name.trim(),
       description: formData.description?.trim() || null,
       price: formData.price,
+      costing_mode: formData.costing_mode || 'automatic_recipe',
+      manual_unit_cost: formData.costing_mode === 'manual'
+        ? Math.max(0, Number(formData.manual_unit_cost) || 0)
+        : null,
       category_id: formData.category_id,
       category: formData.category,
       available: formData.available,
@@ -822,6 +846,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (!isUnsupported('fiscal_cest')) baseData.fiscal_cest = formData.fiscal_cest?.replace(/\D/g, '').slice(0, 7) || null;
     if (!isUnsupported('fiscal_beneficio')) baseData.fiscal_beneficio = formData.fiscal_beneficio?.trim() || null;
     if (!isUnsupported('fiscal_observacao')) baseData.fiscal_observacao = formData.fiscal_observacao?.trim() || null;
+    if (!isUnsupported('fiscal_ibs_cbs_cst')) baseData.fiscal_ibs_cbs_cst = formData.fiscal_ibs_cbs_cst?.replace(/\D/g, '').slice(0, 3) || '000';
+    if (!isUnsupported('fiscal_cclass_trib')) baseData.fiscal_cclass_trib = formData.fiscal_cclass_trib?.replace(/\D/g, '').slice(0, 6) || '000001';
+    if (!isUnsupported('fiscal_reducao_ibs')) baseData.fiscal_reducao_ibs = Math.min(100, Math.max(0, Number(formData.fiscal_reducao_ibs) || 0));
+    if (!isUnsupported('fiscal_reducao_cbs')) baseData.fiscal_reducao_cbs = Math.min(100, Math.max(0, Number(formData.fiscal_reducao_cbs) || 0));
 
     if (stockSchemaSupported && !isUnsupported('track_stock') && !isUnsupported('stock_quantity') && !isUnsupported('low_stock_threshold')) {
       baseData.track_stock = formData.track_stock;
@@ -1433,6 +1461,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             // Check if we need to clear existing variants if switching back to simple?
             // Maybe optional, but cleaner.
         }
+
+        // Se o usuario preencheu uma linha da ficha e clicou no botao principal
+        // do produto, persiste a linha antes de fechar o formulario.
+        await recipeManagerRef.current?.savePendingItem();
       }
 
       toast({
@@ -1544,7 +1576,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }, 800);
     setAutoSaveTimer(timer);
     return () => clearTimeout(timer);
-  }, [user?.id, loading, createdProductId, formData.name, formData.barcode, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.receipt_ingredients_enabled, formData.receipt_ingredients, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, formData.fiscal_ncm, formData.fiscal_cfop, formData.fiscal_csosn, formData.fiscal_cst_pis, formData.fiscal_cst_cofins, formData.fiscal_origem, formData.fiscal_cest, formData.fiscal_beneficio, formData.fiscal_observacao, stockSchemaSupported]);
+  }, [user?.id, loading, createdProductId, formData.name, formData.barcode, formData.price, formData.costing_mode, formData.manual_unit_cost, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.receipt_ingredients_enabled, formData.receipt_ingredients, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, formData.fiscal_ncm, formData.fiscal_cfop, formData.fiscal_csosn, formData.fiscal_cst_pis, formData.fiscal_cst_cofins, formData.fiscal_origem, formData.fiscal_cest, formData.fiscal_beneficio, formData.fiscal_observacao, formData.fiscal_ibs_cbs_cst, formData.fiscal_cclass_trib, formData.fiscal_reducao_ibs, formData.fiscal_reducao_cbs, stockSchemaSupported]);
 
 
   const onDragEnd = (result: DropResult) => {
@@ -2140,6 +2172,50 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </Tabs>
         </div>
 
+        <div className="space-y-4 rounded-2xl border border-[#003223]/10 bg-white p-4 shadow-sm">
+          <div>
+            <div className="text-sm font-semibold text-boracume-dark-green">Custo do produto</div>
+            <p className="mt-1 text-xs text-[#003223]/60">
+              Usado no CMV, lucro bruto e margem. O custo fica congelado em cada venda.
+            </p>
+          </div>
+          <Select
+            value={formData.costing_mode || 'automatic_recipe'}
+            onValueChange={(value: 'automatic_recipe' | 'manual') => setFormData(prev => ({
+              ...prev,
+              costing_mode: value,
+              manual_unit_cost: value === 'manual' ? (prev.manual_unit_cost ?? 0) : null,
+            }))}
+          >
+            <SelectTrigger className="h-11 rounded-xl bg-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="automatic_recipe">Automático pela ficha técnica</SelectItem>
+              <SelectItem value="manual">Custo direto informado</SelectItem>
+            </SelectContent>
+          </Select>
+          {formData.costing_mode === 'manual' && (
+            <div className="space-y-2">
+              <Label htmlFor="manual_unit_cost" className="font-semibold text-boracume-dark-green">
+                Custo por {formData.weight_based ? 'kg' : 'unidade'} (R$)
+              </Label>
+              <CurrencyInput
+                id="manual_unit_cost"
+                value={Number(formData.manual_unit_cost) || 0}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, manual_unit_cost: Math.max(0, value) }))}
+                placeholder="R$ 0,00"
+                className="h-11 rounded-xl bg-white font-semibold"
+              />
+              <p className="text-xs text-[#003223]/60">
+                {formData.weight_based
+                  ? 'Informe quanto custa 1 kg deste produto.'
+                  : 'Informe quanto custa cada unidade vendida.'}
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 gap-3 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light mt-3">
           <div className="space-y-1">
             <Label htmlFor="stock_quantity" className="text-boracume-dark-green font-semibold">Estoque</Label>
@@ -2350,6 +2426,52 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                     className="h-11 rounded-xl bg-[#FFFDF9] font-semibold"
                   />
                 </div>
+                <div className="space-y-2 rounded-xl border border-[#003223]/10 bg-[#F7FBF5] p-3 sm:col-span-2">
+                  <div>
+                    <Label htmlFor="fiscal_cclass_trib" className="text-boracume-dark-green font-semibold">
+                      IBS/CBS — classificação tributária
+                    </Label>
+                    <p className="mt-1 text-xs text-[#003223]/65">
+                      Selecione conforme o produto e a operação. A classificação fica gravada no item da nota.
+                    </p>
+                  </div>
+                  <Select
+                    value={formData.fiscal_cclass_trib || '000001'}
+                    onValueChange={(value) => {
+                      const preset = RTC_TAX_PRESETS.find((option) => option.value === value);
+                      if (!preset) return;
+                      setFormData(prev => ({
+                        ...prev,
+                        fiscal_ibs_cbs_cst: preset.cst,
+                        fiscal_cclass_trib: preset.value,
+                        fiscal_reducao_ibs: preset.ibsReduction,
+                        fiscal_reducao_cbs: preset.cbsReduction,
+                      }));
+                    }}
+                  >
+                    <SelectTrigger id="fiscal_cclass_trib" className="h-11 rounded-xl bg-[#FFFDF9] font-semibold">
+                      <SelectValue placeholder="Selecione o cClassTrib" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RTC_TAX_PRESETS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="grid gap-2 text-xs font-medium text-[#003223]/75 sm:grid-cols-3">
+                    <span>CST: {formData.fiscal_ibs_cbs_cst || '000'}</span>
+                    <span>Redução IBS: {Number(formData.fiscal_reducao_ibs || 0).toLocaleString('pt-BR')}%</span>
+                    <span>Redução CBS: {Number(formData.fiscal_reducao_cbs || 0).toLocaleString('pt-BR')}%</span>
+                  </div>
+                  <a
+                    href={`https://dfe-portal.svrs.rs.gov.br/CFF/ClassificacaoTributariaNcm?dfeTypes=NFCE&ncm=${formData.fiscal_ncm || ''}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex text-xs font-semibold text-[#2767D9] underline underline-offset-2"
+                  >
+                    Conferir este NCM no classificador oficial da SVRS
+                  </a>
+                </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label htmlFor="fiscal_observacao" className="text-boracume-dark-green font-semibold">Observação fiscal interna</Label>
                   <Textarea
@@ -2376,7 +2498,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
         {/* Ficha Técnica (Receita) */}
         {createdProductId && (
-          <ProductRecipeManager productId={createdProductId} />
+          <ProductRecipeManager ref={recipeManagerRef} productId={createdProductId} />
         )}
         {!createdProductId && (
           <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 flex items-center justify-center gap-2">

@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PrinterService } from '@/utils/printerService';
 import { updateOrderStatus } from '@/utils/updateOrderStatus';
 import { POPSYSTEM_ORDER_SOUND_TYPE, soundNotifications } from '@/utils/soundUtils';
+import { useLocation } from 'react-router-dom';
 
 const getAutoAcceptKey = (userId?: string) => `orders_auto_accept:${userId || 'local'}`;
 
@@ -46,6 +47,8 @@ const playTwoAlerts = async () => {
 
 export const useGlobalOrderAutoAccept = () => {
   const { user } = useAuth();
+  const { pathname } = useLocation();
+  const isStandaloneOrderingScreen = pathname.startsWith('/totem') || pathname.startsWith('/menu') || pathname.startsWith('/track');
   const [enabled, setEnabled] = useState(false);
   const processingRef = useRef<Set<string>>(new Set());
   const pollingRef = useRef<number | null>(null);
@@ -116,7 +119,7 @@ export const useGlobalOrderAutoAccept = () => {
   }, [sendToKitchenOnce]);
 
   const scanPendingOrders = useCallback(async () => {
-    if (!user?.id || localStorage.getItem(getAutoAcceptKey(user.id)) !== 'true') return;
+    if (!user?.id || isStandaloneOrderingScreen || localStorage.getItem(getAutoAcceptKey(user.id)) !== 'true') return;
 
     const { data, error } = await supabase
       .from('orders')
@@ -134,7 +137,7 @@ export const useGlobalOrderAutoAccept = () => {
     for (const order of data || []) {
       await acceptOrder(order);
     }
-  }, [acceptOrder, user?.id]);
+  }, [acceptOrder, isStandaloneOrderingScreen, user?.id]);
 
   useEffect(() => {
     loadEnabled();
@@ -157,7 +160,7 @@ export const useGlobalOrderAutoAccept = () => {
   }, [loadEnabled, scanPendingOrders, user?.id]);
 
   useEffect(() => {
-    if (!user?.id || !enabled) return;
+    if (!user?.id || !enabled || isStandaloneOrderingScreen) return;
 
     void scanPendingOrders();
     const channel = supabase
@@ -187,5 +190,5 @@ export const useGlobalOrderAutoAccept = () => {
       }
       supabase.removeChannel(channel);
     };
-  }, [acceptOrder, enabled, scanPendingOrders, user?.id]);
+  }, [acceptOrder, enabled, isStandaloneOrderingScreen, scanPendingOrders, user?.id]);
 };

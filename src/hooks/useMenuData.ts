@@ -29,6 +29,7 @@ interface Category {
   name: string;
   description?: string;
   display_order: number;
+  totem_image_url?: string;
   is_pizza?: boolean;
   pizza_half_price_mode?: 'highest' | 'split_halves';
 }
@@ -79,7 +80,7 @@ interface UseMenuDataOptions {
   cacheTTL?: number;
 }
 
-const CACHE_PREFIX = 'boracume_menu_data_v4';
+const CACHE_PREFIX = 'boracume_menu_data_v5';
 
 function safeParse<T>(value: string | null): T | null {
   if (!value) return null;
@@ -154,7 +155,7 @@ async function fetchMenuDataDirect(userId: string): Promise<MenuPayload> {
           .limit(1) as any,
         supabase
           .from('product_categories')
-          .select('id, name, description, display_order')
+          .select('id, name, description, display_order, totem_image_url')
           .eq('user_id', userId)
           .eq('active', true)
           .order('display_order', { ascending: true }) as any,

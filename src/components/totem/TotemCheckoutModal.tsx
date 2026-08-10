@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Trash2, Minus, Plus, CreditCard, Banknote, Smartphone, CheckCircle2, Printer } from 'lucide-react';
+import { Trash2, Minus, Plus, CreditCard, Smartphone, CheckCircle2 } from 'lucide-react';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { supabase } from '@/integrations/supabase/client';
 import TotemPixCheckoutModal from '@/components/totem/TotemPixCheckoutModal';
@@ -37,14 +35,15 @@ interface TotemCheckoutModalProps {
   onRemoveItem: (uniqueId: string) => void;
   onClearCart: () => void;
   total: number;
+  orderType: 'dine_in' | 'pickup';
+  onNewSession: () => void;
 }
 
-type Payment = 'pix' | 'cartao_credito' | 'cartao_debito' | 'dinheiro';
+type Payment = 'pix' | 'cartao_credito' | 'cartao_debito';
 
 export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
-  const { isOpen, onClose, userId, cart, onUpdateQuantity, onRemoveItem, onClearCart, total } = props;
+  const { isOpen, onClose, userId, cart, onUpdateQuantity, onRemoveItem, onClearCart, total, orderType, onNewSession } = props;
   const [payment, setPayment] = useState<Payment>('pix');
-  const [changeAmount, setChangeAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pixCheckout, setPixCheckout] = useState<{ correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string } | null>(null);
   const [successOrder, setSuccessOrder] = useState<any | null>(null);
@@ -72,23 +71,16 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
   }, [cart]);
 
   const canSubmit = useMemo(() => {
-    if (!userId || cart.length === 0) return false;
-    if (payment === 'dinheiro' && changeAmount) {
-      const ca = Number(changeAmount);
-      if (!Number.isFinite(ca) || ca < total) return false;
-    }
-    return true;
-  }, [userId, cart.length, payment, changeAmount, total]);
+    return Boolean(userId && cart.length > 0);
+  }, [userId, cart.length]);
 
   const resetToNewOrder = () => {
     setPixCheckout(null);
     setSuccessOrder(null);
     setIsSubmitting(false);
     setPayment('pix');
-    setChangeAmount('');
     setOrderNumber(`TOT${Date.now().toString().slice(-6)}`);
-    onClearCart();
-    onClose();
+    onNewSession();
   };
 
   const printCoupon = async (order: any) => {
@@ -104,19 +96,19 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
     try {
       const orderData: any = {
         user_id: userId,
-        customer_name: `Totem`,
+        customer_name: orderType === 'dine_in' ? 'Totem - Consumir no local' : 'Totem - Para levar',
         customer_phone: null,
         customer_address: null,
-        order_type: 'pickup',
+        order_type: orderType,
         items: cartItems,
         total: total,
         delivery_fee: 0,
         payment_method: payment,
-        change_amount: payment === 'dinheiro' && changeAmount ? Number(changeAmount) : null,
+        change_amount: null,
         status: 'pending',
         acceptance_status: 'pending_acceptance',
         order_number: orderNumber,
-        variations: { source: 'TOTEM' }
+        variations: { source: 'TOTEM', fulfillment_label: orderType === 'dine_in' ? 'Consumir no local' : 'Para viagem' }
       };
 
       const { data, error } = await (supabase as any)
@@ -147,10 +139,10 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
     try {
       const orderData: any = {
         user_id: userId,
-        customer_name: `Totem`,
+        customer_name: orderType === 'dine_in' ? 'Totem - Consumir no local' : 'Totem - Para levar',
         customer_phone: null,
         customer_address: null,
-        order_type: 'pickup',
+        order_type: orderType,
         items: cartItems,
         total: total,
         delivery_fee: 0,
@@ -159,7 +151,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
         status: 'pending',
         acceptance_status: 'awaiting_pix_payment',
         order_number: orderNumber,
-        variations: { source: 'TOTEM' }
+        variations: { source: 'TOTEM', fulfillment_label: orderType === 'dine_in' ? 'Consumir no local' : 'Para viagem' }
       };
 
       const { data, status } = await invokeEdgeFunction('pix-start-checkout', {
@@ -243,6 +235,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
               <div className="mt-3 text-base font-semibold text-white/90">
                 Pedido {successOrder?.order_number ? `#${successOrder.order_number}` : ''}
               </div>
+              <div className="mt-1 text-sm font-black text-white/90">{orderType === 'dine_in' ? 'COMER AQUI' : 'PARA LEVAR'}</div>
             </Card>
 
             <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center text-sm font-bold leading-6 text-emerald-800">
@@ -251,12 +244,8 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                 : 'Dirija-se ao caixa ou à maquininha com esta senha para concluir o pagamento.'}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <Button variant="outline" className="h-14 rounded-lg text-base font-bold" onClick={() => printCoupon(successOrder)}>
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimir novamente
-              </Button>
-              <Button className="h-14 rounded-lg bg-boracume-orange text-base font-bold hover:bg-boracume-orange/90" onClick={resetToNewOrder}>
+            <div>
+              <Button className="h-14 w-full rounded-lg bg-boracume-orange text-base font-bold hover:bg-boracume-orange/90" onClick={resetToNewOrder}>
                 Novo pedido
               </Button>
             </div>
@@ -340,7 +329,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
 
             <div className="space-y-2">
               <div className="text-base font-black">Forma de pagamento</div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Button
                   type="button"
                   variant={payment === 'pix' ? 'default' : 'outline'}
@@ -350,16 +339,6 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                 >
                   <Smartphone className="mr-2 h-4 w-4" />
                   PIX
-                </Button>
-                <Button
-                  type="button"
-                  variant={payment === 'dinheiro' ? 'default' : 'outline'}
-                  className={`h-16 rounded-lg text-base font-black ${payment === 'dinheiro' ? 'bg-sky-600 hover:bg-sky-700' : ''}`}
-                  onClick={() => setPayment('dinheiro')}
-                  disabled={isSubmitting}
-                >
-                  <Banknote className="mr-2 h-4 w-4" />
-                  Dinheiro
                 </Button>
                 <Button
                   type="button"
@@ -384,26 +363,10 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
               </div>
               {payment !== 'pix' ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-5 text-amber-900">
-                  O pagamento será concluído no caixa ou na maquininha do restaurante. A integração direta com o terminal será habilitada no aplicativo dedicado para totens.
+                  O pagamento será concluído na maquininha integrada ao atendimento. O Totem aceita somente meios eletrônicos.
                 </div>
               ) : null}
             </div>
-
-            {payment === 'dinheiro' ? (
-              <div className="space-y-2">
-                <Label>Troco para</Label>
-                <Input
-                  type="number"
-                  value={changeAmount}
-                  onChange={(e) => setChangeAmount(e.target.value)}
-                  placeholder="0,00"
-                  disabled={isSubmitting}
-                />
-                <div className="text-xs text-muted-foreground">
-                  Deixe em branco se não precisa de troco
-                </div>
-              </div>
-            ) : null}
           </div>
         </div>
 

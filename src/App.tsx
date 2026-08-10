@@ -46,7 +46,7 @@ import Garcons from '@/pages/Garcons';
 import ControlePonto from '@/pages/ControlePonto';
 import Ingredientes from '@/pages/Ingredientes';
 import InteligenciaCMV from '@/pages/InteligenciaCMV';
-import NFCe from '@/pages/NFCe';
+import Fiscal from '@/pages/Fiscal';
 import Financeiro from '@/pages/Financeiro';
 import Despesas from '@/pages/Despesas';
 import SecurityDashboard from '@/pages/SecurityDashboard';
@@ -88,6 +88,7 @@ import './App.css';
 import './styles/responsive.css';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '@/integrations/supabase/client';
+import { getCashSessionDeadline, isCashSessionOverdue } from '@/utils/cashSession';
 
 const queryClient = new QueryClient();
 
@@ -135,6 +136,7 @@ function AppContent() {
       <Route path="/termos" element={<LegalPage />} />
       <Route path="/privacidade" element={<LegalPage />} />
       <Route path="/lgpd" element={<LegalPage />} />
+      <Route path="/exclusao-de-dados" element={<LegalPage />} />
       
       {/* KDS e TV Standalone (Sem Menu Lateral) */}
       <Route path="/kds-view" element={
@@ -155,6 +157,7 @@ function AppContent() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/lojas/convite" element={<StoreInvitation />} />
       <Route path="/operator-login" element={<RouteGuard><OperatorLogin /></RouteGuard>} />
+      <Route path="/subscription" element={<RouteGuard><Subscription /></RouteGuard>} />
       
       {/* Rota específica para o aplicativo desktop - sem layout padrão */}
       <Route element={<RouteGuard><OperatorGate><Outlet /></OperatorGate></RouteGuard>}>
@@ -177,7 +180,6 @@ function AppContent() {
           <Route path="/mesas/regras" element={<OperatorRoute area="tables"><FeatureRoute feature="tables"><div className="space-y-4"><h1 className="text-2xl font-bold tracking-tight">Regras de Mesa/Comanda</h1><TableOrderFlowSettings /></div></FeatureRoute></OperatorRoute>} />
           <Route path="/relatorios" element={<OperatorRoute area="reports"><FeatureRoute feature="reports"><Relatorios /></FeatureRoute></OperatorRoute>} />
           <Route path="/configuracoes" element={<OperatorRoute area="settings"><FeatureRoute feature="settings"><Configuracoes /></FeatureRoute></OperatorRoute>} />
-          <Route path="/subscription" element={<Subscription />} />
           <Route path="/lojas" element={<FeatureRoute feature="multiStore"><Stores /></FeatureRoute>} />
           <Route path="/multilojas" element={<Navigate to="/lojas" replace />} />
           <Route path="/rede" element={<Navigate to="/lojas" replace />} />
@@ -187,7 +189,8 @@ function AppContent() {
           <Route path="/motoboys" element={<Navigate to="/entregadores" replace />} />
           <Route path="/garcons" element={<OperatorRoute area="team"><FeatureRoute feature="team"><Garcons /></FeatureRoute></OperatorRoute>} />
           <Route path="/ponto" element={<OperatorRoute area="team"><FeatureRoute feature="team"><ControlePonto /></FeatureRoute></OperatorRoute>} />
-          <Route path="/nfce" element={<OperatorRoute area="nfce"><FeatureRoute feature="nfce"><NFCe /></FeatureRoute></OperatorRoute>} />
+          <Route path="/fiscal" element={<OperatorRoute area="fiscal"><FeatureRoute feature="fiscal"><Fiscal /></FeatureRoute></OperatorRoute>} />
+          <Route path="/nfce" element={<Navigate to="/fiscal" replace />} />
           <Route path="/caixa" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />
           <Route path="/financeiro" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />
           <Route path="/financeiro/despesas" element={<Navigate to="/despesas" replace />} />
@@ -299,6 +302,44 @@ function CashDrawerShortcut() {
   return null;
 }
 
+function DesktopCashSessionGuard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.isElectron || !api.setCashSessionStatus) return;
+    let active = true;
+    let lastOverdueNotice = '';
+
+    const refresh = async () => {
+      if (!user?.id) {
+        api.setCashSessionStatus?.({ open: false });
+        return;
+      }
+      const [{ data: session }, { data: profile }] = await Promise.all([
+        (supabase as any).from('cash_register_sessions').select('id,opened_at,status').eq('user_id', user.id).eq('status', 'open').order('opened_at', { ascending: false }).limit(1).maybeSingle(),
+        (supabase as any).from('profiles').select('opening_hours').eq('id', user.id).maybeSingle(),
+      ]);
+      if (!active) return;
+      const overdue = Boolean(session?.opened_at && isCashSessionOverdue(session.opened_at, profile?.opening_hours));
+      api.setCashSessionStatus?.({ open: Boolean(session?.id), overdue });
+      if (overdue && lastOverdueNotice !== session.id) {
+        lastOverdueNotice = session.id;
+        const deadline = getCashSessionDeadline(session.opened_at, profile?.opening_hours);
+        toast.error(`O limite deste caixa venceu em ${deadline.toLocaleString('pt-BR')}. Feche-o antes de continuar as vendas.`, { duration: 12000 });
+        navigate('/caixa?acao=fechar&motivo=limite');
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 30000);
+    const unsubscribe = api.onNavigateToCashClose?.(() => navigate('/caixa?acao=fechar'));
+    return () => { active = false; window.clearInterval(timer); unsubscribe?.(); };
+  }, [navigate, user?.id]);
+
+  return null;
+}
+
 function GlobalOrderAutoAccept() {
   useGlobalOrderAutoAccept();
   return null;
@@ -368,6 +409,7 @@ function App() {
                       <HardwareAutoConnect />
                       <DesktopOAuthCallbackBridge />
                       <CashDrawerShortcut />
+                      <DesktopCashSessionGuard />
                       <GlobalOrderAutoAccept />
                       <LicenseExpiredLock />
                       <AppContent />

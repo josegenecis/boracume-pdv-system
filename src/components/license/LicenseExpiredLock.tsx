@@ -1,12 +1,17 @@
-import React from 'react';
-import { MessageCircle, ShieldAlert } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
-import { useLocation } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, Clock3, CreditCard, Loader2, ShieldAlert } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
-const BLOCKED_EMAILS: string[] = [];
-const SUPPORT_PHONE = '5585992918273';
-const SUPPORT_MESSAGE = 'Ola, preciso regularizar a licenca do PopSystem.';
+interface SubscriptionAccessState {
+  allowed: boolean;
+  reason: string;
+  trial_end?: string | null;
+  current_period_end?: string | null;
+  access_override_until?: string | null;
+}
 
 const PUBLIC_PREFIXES = [
   '/login',
@@ -14,6 +19,7 @@ const PUBLIC_PREFIXES = [
   '/reset-password',
   '/landing',
   '/auth/callback',
+  '/subscription',
   '/menu',
   '/menu-digital',
   '/checklist',
@@ -25,6 +31,7 @@ const PUBLIC_PREFIXES = [
   '/waiter-session',
   '/funcionario-login',
   '/funcionario-ponto',
+  '/operator-login',
 ];
 
 const isPublicRoute = (pathname: string) => {
@@ -33,15 +40,82 @@ const isPublicRoute = (pathname: string) => {
 };
 
 const LicenseExpiredLock: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { accountUser, loading, subscription, refreshSubscription } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [accessState, setAccessState] = useState<SubscriptionAccessState | null>(null);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState('');
 
-  const email = String(user?.email || '').trim().toLowerCase();
-  const shouldBlock = !loading && BLOCKED_EMAILS.includes(email) && !isPublicRoute(location.pathname);
+  const refreshAccess = useCallback(async () => {
+    if (!accountUser) {
+      setAccessState(null);
+      return;
+    }
+    const { data, error } = await (supabase as any).rpc('get_my_subscription_access_state');
+    if (error) {
+      console.error('[LICENSE] Não foi possível validar a assinatura:', error);
+      return;
+    }
+    setAccessState(data as SubscriptionAccessState);
+  }, [accountUser]);
+
+  useEffect(() => {
+    void refreshAccess();
+    if (!accountUser) return;
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refreshAccess();
+    };
+    const interval = window.setInterval(() => void refreshAccess(), 15_000);
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [accountUser, refreshAccess, subscription?.status, subscription?.trial_end, subscription?.current_period_end, subscription?.access_override_until]);
+
+  const shouldBlock = !loading
+    && Boolean(accountUser)
+    && accessState?.allowed === false
+    && !isPublicRoute(location.pathname);
 
   if (!shouldBlock) return null;
 
-  const supportUrl = `https://wa.me/${SUPPORT_PHONE}?text=${encodeURIComponent(SUPPORT_MESSAGE)}`;
+  const releaseFor24Hours = async () => {
+    if (releasing) return;
+    try {
+      setReleasing(true);
+      setReleaseError('');
+      const { data, error } = await (supabase as any).rpc('request_my_subscription_temporary_release');
+      if (error) throw error;
+      if (!data?.ok) throw new Error('Não foi possível confirmar a liberação temporária.');
+      setAccessState((current) => ({
+        ...(current || { reason: 'temporary_release' }),
+        allowed: true,
+        reason: 'temporary_release',
+        access_override_until: data.access_until || current?.access_override_until || null,
+      }));
+      await Promise.all([refreshAccess(), refreshSubscription()]);
+      toast({
+        title: 'Sistema liberado por 24 horas',
+        description: 'Aproveite este período para realizar o pagamento e evitar um novo bloqueio.',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Realize o pagamento para continuar.';
+      setReleaseError(message);
+      toast({
+        title: 'Não foi possível liberar por 24 horas',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setReleasing(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[9999] flex min-h-screen items-center justify-center bg-[#062d22]/95 px-4 py-6 backdrop-blur-sm">
@@ -51,35 +125,49 @@ const LicenseExpiredLock: React.FC = () => {
             <ShieldAlert className="h-8 w-8" />
           </div>
           <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#bdeaa3]">Acesso temporariamente bloqueado</p>
-          <h1 className="mt-3 text-3xl font-black leading-tight">Licenca expirada</h1>
+          <h1 className="mt-3 text-3xl font-black leading-tight">Pagamento necessário</h1>
           <p className="mt-3 text-base font-medium leading-relaxed text-white/86">
-            Para continuar usando o PopSystem, regularize a licenca desta conta com o suporte.
+            O período desta conta terminou. Regularize a mensalidade para continuar usando o PopSystem.
           </p>
         </div>
 
         <div className="space-y-5 px-7 py-7">
           <div className="rounded-2xl border border-[#e7dfd2] bg-[#fffaf2] p-4 text-sm font-semibold leading-relaxed text-[#234438]">
-            Esta tela aparece apenas para esta conta. O sistema sera liberado assim que a regularizacao for confirmada.
-          </div>
-
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#e5eee8] bg-[#f7fbf8] p-5">
-            <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-[#dfe9e2]">
-              <QRCodeSVG value={supportUrl} size={164} />
-            </div>
-            <p className="text-center text-sm font-semibold text-[#55746a]">
-              Escaneie ou toque no botao abaixo para falar com o suporte.
-            </p>
+            Escolha um plano e realize o pagamento agora ou use a liberação única de 24 horas disponível para este vencimento.
           </div>
 
           <a
-            href={supportUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#18a957] px-5 text-base font-black text-white shadow-lg shadow-[#18a957]/25 transition hover:bg-[#118847] focus:outline-none focus:ring-4 focus:ring-[#18a957]/30"
+            href="/subscription?choosePlan=1#planos"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate('/subscription?choosePlan=1#planos');
+            }}
+            className="flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#8acb35] px-5 text-base font-black text-[#103b2d] shadow-lg shadow-[#8acb35]/25 transition hover:bg-[#9bdc47] focus:outline-none focus:ring-4 focus:ring-[#8acb35]/30"
           >
-            <MessageCircle className="h-5 w-5" />
-            Falar com o suporte
+            <CreditCard className="h-5 w-5" />
+            Realizar pagamento
           </a>
+
+          <button
+            type="button"
+            onClick={() => void releaseFor24Hours()}
+            disabled={releasing}
+            className="flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#087a55] px-5 text-base font-black text-white shadow-lg shadow-[#087a55]/25 transition hover:bg-[#096b4d] focus:outline-none focus:ring-4 focus:ring-[#087a55]/30 disabled:cursor-wait disabled:opacity-70"
+          >
+            {releasing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Clock3 className="h-5 w-5" />}
+            {releasing ? 'Liberando sistema...' : 'Liberar sistema por 24h'}
+          </button>
+
+          {releaseError && (
+            <div role="alert" className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold leading-relaxed text-red-800">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>{releaseError}</span>
+            </div>
+          )}
+
+          <p className="text-center text-xs font-semibold leading-relaxed text-[#6b7f78]">
+            A liberação temporária pode ser utilizada somente uma vez por vencimento.
+          </p>
         </div>
       </div>
     </div>

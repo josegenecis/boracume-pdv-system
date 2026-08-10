@@ -161,6 +161,33 @@ function normalizeHistory(history: any[]) {
     .filter(Boolean);
 }
 
+function normalizeComparableText(value: unknown) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function removeDuplicatedCurrentMessage(history: any[], currentMessage: string) {
+  if (!Array.isArray(history) || history.length === 0) return [];
+  const normalizedCurrent = normalizeComparableText(currentMessage);
+  const copy = [...history];
+  const last = copy[copy.length - 1];
+  if (last?.role === 'user' && normalizeComparableText(last?.content) === normalizedCurrent) {
+    copy.pop();
+  }
+  return copy;
+}
+
+function sanitizeAssistantReply(value: unknown) {
+  const reply = String(value || '').trim();
+  if (!reply) return '';
+  if (/erro interno|internal server error|stack trace|supabase|openai|system prompt|prompt interno/i.test(reply)) return '';
+  return reply.replace(/^(["'])|(["'])$/g, '').trim();
+}
+
 function extractResponseText(payload: any) {
   if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
     return payload.output_text.trim();
@@ -216,10 +243,16 @@ function buildSystemPrompt(context: {
     `Você é ${settings.assistantName || 'o assistente oficial do PopSystem'} para atendimento de restaurante no WhatsApp.`,
     'Responda em português do Brasil, de forma humana, objetiva, cordial e natural.',
     'Atue como um atendente vendedor de alto nível: entenda a intenção, conduza a compra e reduza atrito para o cliente pedir.',
+    'Converse como uma pessoa da equipe: não repita saudação, apresentação ou link se isso já apareceu no histórico recente.',
+    'Responda primeiro exatamente ao que foi perguntado. Faça no máximo uma pergunta por mensagem e peça somente o próximo dado necessário.',
+    'Considere mensagens curtas como "sim", "esse", "retirada" e "pix" no contexto da última pergunta, nunca de forma isolada.',
+    'Tolere abreviações, erros de digitação e fala informal. Quando houver duas opções plausíveis, apresente as opções e peça confirmação.',
     'Priorize ajudar o cliente com cardápio, pedido, acompanhamento, dúvidas, promoções, recomendações reais e orientação de compra.',
     'Na primeira interação ou quando o cliente mandar apenas saudação, cumprimente e envie o link do cardápio com a frase "Clique aqui e faça seu pedido:".',
     'Se o cliente pedir cardápio, link, menu, catálogo ou demonstrar vontade de escolher, envie o link do cardápio de forma direta.',
     'Nunca invente pedidos, produtos, preços ou políticas que não estejam no contexto.',
+    'Produto fora da lista ativa não está confirmado. Diga que não o encontrou e ofereça apenas alternativas reais da lista.',
+    'Não afirme que um pedido foi criado, confirmado, pago ou cancelado apenas por conversa; isso só pode ser dito quando o contexto trouxer esse estado real.',
     'Quando o cliente demonstrar intenção de comprar, confirme o produto desejado e peça apenas o próximo dado essencial que faltar.',
     'Se o pedido estiver claro, responda com uma confirmação curta e oriente que o atendimento automatico vai coletar os dados finais.',
     'Use o link do cardápio quando o cliente pedir menu, quiser escolher sabores/opções, mandar mensagem genérica ou quando não houver produto suficiente no contexto.',
@@ -228,7 +261,8 @@ function buildSystemPrompt(context: {
     context.storeAvailability?.configured && !context.storeAvailability?.isOpen
       ? 'A loja está fechada agora. Não diga que está aberta, não incentive finalizar pedido e informe a próxima abertura disponível no contexto.'
       : '',
-    'Não envie textos longos. Use no máximo 5 linhas na maioria das respostas.',
+    'Não envie textos longos, menus gigantes ou várias perguntas juntas. Use no máximo 5 linhas na maioria das respostas.',
+    'Evite frases robóticas como "não compreendi sua solicitação". Diga de modo simples o que entendeu e o que precisa confirmar.',
     'Se faltar dado essencial, responda de forma útil e honesta, sem mencionar detalhes técnicos.',
     'Não mencione OpenAI, modelo, prompt, JSON, contexto interno ou Supabase.',
     'Retorne somente o texto final que deve ser enviado ao WhatsApp.',
@@ -352,9 +386,6 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => null);
     const safeBody = body && typeof body === 'object' ? body : {};
     const receivedKey = pickApiKey(req, safeBody);
-    console.log('Headers recebidos:', JSON.stringify(Object.fromEntries(req.headers.entries())));
-    console.log('Body recebido:', JSON.stringify(safeBody));
-
     const message = pickText(safeBody);
     const customerPhone = pickPhone(safeBody);
     const instanceName = pickInstanceName(safeBody);
@@ -362,10 +393,6 @@ Deno.serve(async (req: Request) => {
     const internalKey = getEnv('BORACUME_INTERNAL_KEY', getEnv('BOT_WEBHOOK_SECRET'));
     const openAiKey = getEnv('OPENAI_API_KEY');
     const openAiModel = getEnv('OPENAI_BOT_MODEL', getEnv('OPENAI_MODEL', 'gpt-4.1-mini'));
-    console.log('instanceName:', instanceName);
-    console.log('customerPhone:', customerPhone);
-    console.log('message:', message);
-    console.log('receivedKey:', receivedKey ? 'present' : 'missing');
     if (internalKey && receivedKey !== internalKey) {
       return json({ error: 'unauthorized' }, 401);
     }
@@ -418,18 +445,24 @@ Deno.serve(async (req: Request) => {
       storeAvailability: getStoreAvailability(profileResult?.data?.opening_hours)
     }) + '\n\nSe a mensagem indicar pedido complexo, ajude a coletar dados sem inventar itens. Seja curto, vendedor e profissional.';
 
-    const reply = await openAiAssistantReply({
+    const conversationHistory = removeDuplicatedCurrentMessage(
+      Array.isArray(safeBody?.conversationHistory) ? safeBody.conversationHistory : [],
+      effectiveMessage
+    );
+    const reply = sanitizeAssistantReply(await openAiAssistantReply({
       apiKey: openAiKey,
       model: openAiModel,
       system,
       userPrompt: buildUserPrompt(effectiveMessage, restaurantName),
-      history: Array.isArray(safeBody?.conversationHistory) ? safeBody.conversationHistory.slice(-aiSettings.maxHistoryMessages) : [],
+      history: conversationHistory.slice(-aiSettings.maxHistoryMessages),
       media
-    });
+    }));
 
     return json({ message: reply, transcription });
   } catch (error) {
     console.error('Erro na function:', error);
-    return json({ message: 'Erro interno no bot' });
+    // Uma falha técnica nunca deve virar mensagem para o cliente. O chamador
+    // aplica o fallback comercial configurado e registra a ocorrência.
+    return json({ message: '', error: 'assistant_unavailable' }, 503);
   }
 });

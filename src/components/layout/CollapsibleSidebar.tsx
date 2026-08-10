@@ -15,11 +15,9 @@ import { canAccessOperatorArea, getLocalOperatorSession, OperatorArea } from '@/
 
 import { useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, 
   ShoppingBag, 
   FileText, 
   Settings, 
-  Users, 
   MapPin, 
   CreditCard,
   BarChart3,
@@ -104,9 +102,7 @@ const CollapsibleSidebar = () => {
     area?: OperatorArea;
   };
 
-  const mainLinks: SidebarLink[] = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Painel Inicial', feature: 'dashboard', area: 'dashboard' },
-  ];
+  const mainLinks: SidebarLink[] = [];
 
   const groups = [
     {
@@ -141,11 +137,16 @@ const CollapsibleSidebar = () => {
       ]
     },
     {
-      id: 'inteligencia',
+      id: 'gerencial',
       icon: BarChart3,
-      label: 'Análise do Negócio',
+      label: 'Gerencial',
       items: [
-        { to: '/inteligencia/cmv', label: 'Produtos mais lucrativos', feature: 'cmv', area: 'stock' },
+        { to: '/dashboard', label: 'Visão geral', feature: 'dashboard', area: 'dashboard' },
+        { to: '/relatorios', label: 'Relatórios de vendas', feature: 'reports', area: 'reports' },
+        { to: '/inteligencia/cmv', label: 'CMV e rentabilidade', feature: 'cmv', area: 'stock' },
+        { to: '/configuracoes?tab=users', label: 'Usuários e permissões', feature: 'team', area: 'team' },
+        { to: '/garcons', label: 'Equipe operacional', feature: 'team', area: 'team' },
+        { to: '/ponto', label: 'Controle de ponto', feature: 'team', area: 'team' },
       ]
     },
     {
@@ -196,11 +197,8 @@ const CollapsibleSidebar = () => {
         { to: '/configuracoes?tab=whatsapp', label: 'Conectar WhatsApp', feature: 'whatsapp', area: 'settings' },
         { to: '/configuracoes?tab=delivery', label: 'Delivery', feature: 'delivery', area: 'delivery' },
         { to: '/entregadores', label: 'Motoboys & Entregas', feature: 'deliveryTeam', area: 'delivery' },
-        { to: '/nfce', label: 'Cupons fiscais', feature: 'nfce', area: 'nfce' },
-        { to: '/configuracoes?tab=fiscal', label: 'Configuração fiscal', feature: 'fiscal', area: 'nfce' },
+        { to: '/fiscal', label: 'Configurações fiscais', feature: 'fiscal', area: 'fiscal' },
         { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div>, title: 'iFood', feature: 'ifood', area: 'settings' },
-        { to: '/configuracoes?tab=users', label: 'Usuários e Equipe', feature: 'team', area: 'team' },
-        { to: '/ponto', label: 'Controle de Ponto', feature: 'team', area: 'team' },
         { to: '/configuracoes?tab=support', label: 'Suporte', feature: 'settings', area: 'settings' },
       ]
     },
@@ -295,12 +293,9 @@ const CollapsibleSidebar = () => {
     return true;
   };
 
-  const groupForCurrentPath = useMemo(() => {
-    for (const group of visibleGroups) {
-      if (group.items.some(i => i.to.split('?')[0] === location.pathname)) return group.id;
-    }
-    return '';
-  }, [visibleGroups, location.pathname]);
+  const groupForCurrentPath = visibleGroups.find(group =>
+    group.items.some(item => isActivePath(item.to))
+  )?.id || '';
 
   const [openGroup, setOpenGroup] = useState<string>(groupForCurrentPath);
 

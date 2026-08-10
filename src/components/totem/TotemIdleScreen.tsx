@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Download, Expand, ShoppingBag, Wifi, WifiOff } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowRight, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import AutoplayVideo from '@/components/media/AutoplayVideo';
@@ -26,14 +26,8 @@ interface TotemIdleScreenProps {
   restaurantId: string;
   profile: IdleProfile | null;
   featuredProducts: IdleProduct[];
-  isOnline: boolean;
-  isFullscreen: boolean;
-  isInstalled: boolean;
-  canInstall: boolean;
   settings?: TotemThemeSettings;
   onStart: () => void;
-  onInstall: () => void;
-  onToggleFullscreen: () => void;
 }
 
 interface IdleSlide {
@@ -43,6 +37,7 @@ interface IdleSlide {
   imageUrl: string;
   eyebrow: string;
   price?: number;
+  mediaType: 'image' | 'video';
 }
 
 const isDateActive = (start?: string | null, end?: string | null) => {
@@ -59,14 +54,8 @@ export default function TotemIdleScreen({
   restaurantId,
   profile,
   featuredProducts,
-  isOnline,
-  isFullscreen,
-  isInstalled,
-  canInstall,
   settings = DEFAULT_TOTEM_THEME,
   onStart,
-  onInstall,
-  onToggleFullscreen,
 }: TotemIdleScreenProps) {
   const [banners, setBanners] = useState<TotemBanner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -88,7 +77,7 @@ export default function TotemIdleScreen({
     const loadBanners = async () => {
       const { data } = await supabase
         .from('totem_banners')
-        .select('id,user_id,title,description,media_url,orientation,active,display_order,start_date,end_date')
+        .select('id,user_id,title,description,media_url,media_type,orientation,active,display_order,start_date,end_date')
         .eq('user_id', restaurantId)
         .eq('active', true)
         .order('display_order', { ascending: true });
@@ -112,6 +101,7 @@ export default function TotemIdleScreen({
       title: banner.title || 'Uma experiência feita para você',
       description: banner.description || 'Toque na tela, escolha seus favoritos e faça seu pedido.',
       imageUrl: normalizeImageUrlForDisplay(banner.media_url) || '',
+      mediaType: banner.media_type || 'image',
       eyebrow: 'Oferta em destaque',
       }));
     if (promotionalSlides.length > 0) return promotionalSlides;
@@ -125,6 +115,7 @@ export default function TotemIdleScreen({
         imageUrl: normalizeImageUrlForDisplay(product.image_url) || '',
         eyebrow: 'Experimente hoje',
         price: product.price,
+        mediaType: 'image' as const,
       }));
 
     if (productSlides.length > 0) return productSlides;
@@ -135,16 +126,22 @@ export default function TotemIdleScreen({
       description: profile?.description || 'Escolha, personalize e pague direto no autoatendimento.',
       imageUrl: normalizeImageUrlForDisplay(profile?.banner_url) || '',
       eyebrow: 'Autoatendimento',
+      mediaType: 'image',
     }];
   }, [banners, featuredProducts, orientation, profile]);
 
+  const showNextSlide = useCallback(() => {
+    if (slides.length <= 1) return;
+    setCurrentIndex((index) => (index + 1) % slides.length);
+  }, [slides.length]);
+
   useEffect(() => {
     if (slides.length <= 1) return;
-    const timer = window.setInterval(() => {
-      setCurrentIndex((index) => (index + 1) % slides.length);
-    }, settings.banner_interval_seconds * 1000);
-    return () => window.clearInterval(timer);
-  }, [settings.banner_interval_seconds, slides.length]);
+    const activeSlide = slides[currentIndex % slides.length];
+    if (activeSlide?.mediaType === 'video') return;
+    const timer = window.setTimeout(showNextSlide, settings.banner_interval_seconds * 1000);
+    return () => window.clearTimeout(timer);
+  }, [currentIndex, settings.banner_interval_seconds, showNextSlide, slides]);
 
   useEffect(() => {
     setCurrentIndex(0);
@@ -156,8 +153,8 @@ export default function TotemIdleScreen({
     <section className="fixed inset-0 z-50 overflow-hidden text-white" style={{ backgroundColor: settings.secondary_color }}>
       <button type="button" className="absolute inset-0 block h-full w-full text-left" onClick={onStart} aria-label="Tocar para iniciar pedido">
         {slide.imageUrl ? (
-          isVideoAsset(slide.imageUrl) ? (
-            <AutoplayVideo key={slide.id} src={slide.imageUrl} className="h-full w-full object-cover" loop />
+          slide.mediaType === 'video' || isVideoAsset(slide.imageUrl) ? (
+            <AutoplayVideo key={slide.id} src={slide.imageUrl} className="h-full w-full object-cover" loop={slides.length === 1} onEnded={showNextSlide} onError={showNextSlide} />
           ) : (
             <img key={slide.id} src={slide.imageUrl} alt="" className="h-full w-full animate-in fade-in duration-700 object-cover" />
           )
@@ -181,15 +178,6 @@ export default function TotemIdleScreen({
           <div className="totem-idle-brand truncate text-lg font-black">{profile?.restaurant_name || 'PopSystem Totem'}</div>
         </div>
 
-        <div className="pointer-events-auto flex items-center gap-2">
-          <div className={`hidden h-12 items-center gap-2 rounded-full border px-4 text-sm font-bold backdrop-blur sm:flex ${isOnline ? 'border-white/15 bg-black/25 text-white' : 'border-red-300/30 bg-red-500/30 text-red-50'}`}>
-            {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-            {isOnline ? 'Online' : 'Sem conexão'}
-          </div>
-          <Button type="button" variant="ghost" size="icon" onClick={onToggleFullscreen} className="h-12 w-12 rounded-full border border-white/15 bg-black/25 text-white backdrop-blur hover:bg-white/20 hover:text-white" aria-label={isFullscreen ? 'Sair da tela cheia' : 'Abrir em tela cheia'}>
-            <Expand className="h-5 w-5" />
-          </Button>
-        </div>
       </div>
 
       <div className="totem-idle-content pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col justify-end px-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
@@ -206,12 +194,6 @@ export default function TotemIdleScreen({
               {settings.cta_text}
               <ArrowRight className="totem-idle-arrow ml-3 h-7 w-7" />
             </Button>
-            {!isInstalled ? (
-              <button type="button" onClick={onInstall} className="mt-3 flex w-full items-center justify-center gap-2 py-2 text-sm font-bold text-white/70 hover:text-white">
-                <Download className="h-4 w-4" />
-                {canInstall ? 'Instalar aplicativo do totem' : 'Como instalar neste equipamento'}
-              </button>
-            ) : null}
           </div>
         </div>
 

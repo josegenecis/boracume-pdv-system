@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -24,12 +24,21 @@ interface ProductRecipeManagerProps {
   productId: string;
 }
 
-export default function ProductRecipeManager({ productId }: ProductRecipeManagerProps) {
+export interface ProductRecipeManagerHandle {
+  savePendingItem: () => Promise<void>;
+}
+
+const ProductRecipeManager = forwardRef<ProductRecipeManagerHandle, ProductRecipeManagerProps>(function ProductRecipeManager(
+  { productId },
+  ref,
+) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [ingredients, setIngredients] = useState<any[]>([]);
   const [recipeItems, setRecipeItems] = useState<RecipeItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
   // Novo item form
@@ -39,8 +48,14 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
 
   useEffect(() => {
     if (user && productId && isOpen) {
-      loadIngredients();
-      loadRecipe();
+      void Promise.all([loadIngredients(), loadRecipe()]).catch((error: any) => {
+        setLoading(false);
+        toast({
+          title: 'Erro ao carregar ficha técnica',
+          description: error?.message || 'Não foi possível consultar os insumos vinculados.',
+          variant: 'destructive',
+        });
+      });
     }
   }, [user, productId, isOpen]);
 
@@ -54,7 +69,7 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
   };
 
   const loadRecipe = async () => {
-    const { data } = await (supabase
+    const { data, error } = await (supabase
       .from('product_recipes') as any)
       .select(`
         id, 
@@ -64,47 +79,76 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
         ingredient:ingredients(name, unit, cost_price)
       `)
       .eq('product_id', productId);
-    setRecipeItems(data || []);
+    if (error) throw error;
+    const rows = (data || []) as RecipeItem[];
+    setRecipeItems(rows);
     setLoading(false);
+    return rows;
   };
 
-  const handleAddItem = async () => {
+  const persistPendingItem = async (notifySuccess: boolean) => {
+    if (!selectedIngredient && !quantity.trim()) return;
+
     const parsedQuantity = Number(quantity);
     const parsedWaste = Number(wastePercentage);
     if (!selectedIngredient || !Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
-      toast({ title: 'Quantidade inválida', description: 'Selecione um insumo e informe uma quantidade maior que zero.', variant: 'destructive' });
-      return;
+      throw new Error('Selecione um insumo e informe uma quantidade maior que zero.');
     }
     if (!Number.isFinite(parsedWaste) || parsedWaste < 0 || parsedWaste > 100) {
-      toast({ title: 'Perda inválida', description: 'A perda deve ficar entre 0% e 100%.', variant: 'destructive' });
-      return;
+      throw new Error('A perda deve ficar entre 0% e 100%.');
     }
     if (recipeItems.some(item => item.ingredient_id === selectedIngredient)) {
-      toast({ title: 'Insumo já cadastrado', description: 'Remova ou ajuste o item existente para evitar custo duplicado.', variant: 'destructive' });
-      return;
+      throw new Error('Este insumo já está cadastrado na ficha técnica.');
     }
 
+    setSaving(true);
+    setSaveError(null);
     try {
-      const { error } = await (supabase
-        .from('product_recipes') as any)
-        .insert({
-          product_id: productId,
-          ingredient_id: selectedIngredient,
-          quantity: parsedQuantity,
-          waste_percentage: parsedWaste,
-        });
+      const { error } = await (supabase as any).rpc('save_product_recipe', {
+        p_product_id: productId,
+        p_ingredient_id: selectedIngredient,
+        p_quantity: parsedQuantity,
+        p_waste_percentage: parsedWaste,
+      });
 
       if (error) throw error;
-      
+      const savedRows = await loadRecipe();
+      if (!savedRows.some(item => item.ingredient_id === selectedIngredient)) {
+        throw new Error('O vínculo foi enviado, mas não apareceu ao conferir a ficha técnica.');
+      }
+
       setSelectedIngredient('');
       setQuantity('');
       setWastePercentage('0');
-      loadRecipe();
-      toast({ title: 'Adicionado', description: 'Insumo adicionado à ficha técnica.' });
-    } catch (error) {
-      toast({ title: 'Erro', description: 'Não foi possível adicionar o insumo.', variant: 'destructive' });
+      if (notifySuccess) {
+        toast({ title: 'Ficha técnica salva', description: 'O insumo foi gravado e conferido com sucesso.' });
+      }
+    } catch (error: any) {
+      const message = error?.message || 'Confira a loja do produto e do insumo e tente novamente.';
+      setSaveError(message);
+      throw new Error(message);
+    } finally {
+      setSaving(false);
     }
   };
+
+  const handleAddItem = async () => {
+    try {
+      await persistPendingItem(true);
+    } catch (error: any) {
+      toast({
+        title: 'Não foi possível salvar a ficha técnica',
+        description: error?.message || 'Confira os dados e tente novamente.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    savePendingItem: async () => {
+      await persistPendingItem(false);
+    },
+  }));
 
   const handleRemoveItem = async (id: string) => {
     try {
@@ -179,10 +223,22 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
                 aria-label="Percentual de perda do insumo"
               />
             </div>
-            <Button type="button" onClick={handleAddItem} className="bg-boracume-green hover:bg-boracume-green/90">
+            <Button
+              type="button"
+              onClick={handleAddItem}
+              disabled={saving}
+              className="bg-boracume-green hover:bg-boracume-green/90 sm:min-w-40"
+            >
               <Plus className="h-4 w-4" />
+              {saving ? 'Salvando...' : 'Adicionar e salvar'}
             </Button>
           </div>
+
+          {saveError ? (
+            <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+              {saveError}
+            </div>
+          ) : null}
 
           {loading ? (
             <div className="text-center text-sm text-gray-500 py-4">Carregando ficha técnica...</div>
@@ -222,4 +278,6 @@ export default function ProductRecipeManager({ productId }: ProductRecipeManager
       )}
     </div>
   );
-}
+});
+
+export default ProductRecipeManager;

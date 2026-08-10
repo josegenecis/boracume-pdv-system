@@ -306,6 +306,12 @@ body.waiter-app-active #root {
   }
 }
 
+@media (orientation: portrait) and (min-width: 768px) {
+  .totem-product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (orientation: landscape) {
   .totem-variation-dialog {
     width: min(94dvw, 1500px);

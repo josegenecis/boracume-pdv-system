@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") || "v23.0";
+const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") || "v25.0";
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
 function json(data: Record<string, unknown>, status = 200) {
@@ -617,15 +617,26 @@ async function buildKnowledge(serviceClient: any, restaurantId: string, input: a
     product = data;
   }
   if (!product && input.productFocus) {
-    const { data } = await serviceClient.from("products").select("id,name,description,price,category,image_url,available").eq("user_id", restaurantId).ilike("name", `%${input.productFocus}%`).eq("available", true).limit(1);
+    const focus = String(input.productFocus).trim();
+    const { data } = await serviceClient
+      .from("products")
+      .select("id,name,description,price,category,image_url,available")
+      .eq("user_id", restaurantId)
+      .eq("available", true)
+      .or(`name.ilike.%${focus.replace(/[,%()]/g, " ")}%,category.ilike.%${focus.replace(/[,%()]/g, " ")}%`)
+      .not("image_url", "is", null)
+      .limit(1);
     product = data?.[0] || null;
   }
   if (product) {
     const rawImageUrl = product.image_url;
     const normalizedImageUrl = publicProductImageUrl(serviceClient, rawImageUrl);
     product.original_image_url = rawImageUrl || null;
-    product.image_url = await isUsablePublicImage(normalizedImageUrl) ? normalizedImageUrl : null;
-    product.image_status = product.image_url ? "valid" : normalizedImageUrl ? "broken" : "missing";
+    // Some restaurant image CDNs reject HEAD/range probes from Edge runtimes even
+    // though the public image loads normally in the browser and renderer. Keep a
+    // normalized HTTPS URL here and let the renderer perform the definitive read.
+    product.image_url = /^https?:\/\//i.test(String(normalizedImageUrl || "")) ? normalizedImageUrl : null;
+    product.image_status = product.image_url ? "ready_for_render" : "missing";
   }
   const { data: products } = await serviceClient.from("products").select("id,name,price,category,available").eq("user_id", restaurantId).eq("available", true).order("name").limit(80);
   return {

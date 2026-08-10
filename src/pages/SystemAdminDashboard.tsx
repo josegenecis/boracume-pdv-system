@@ -59,6 +59,8 @@ interface AdminClientRow {
   planPrice?: number;
   trialEnd?: string | null;
   currentPeriodEnd?: string | null;
+  accessOverrideUntil?: string | null;
+  accessAllowed?: boolean;
   ordersMonth?: number;
   lastOrderAt?: string | null;
   productsCount?: number;
@@ -219,12 +221,16 @@ function ClientList({
   clients,
   emptyText,
   showWhatsAppAction = false,
+  onRelease24h,
+  releasingClientId,
 }: {
   title: string;
   description: string;
   clients: AdminClientRow[];
   emptyText: string;
   showWhatsAppAction?: boolean;
+  onRelease24h?: (client: AdminClientRow) => void;
+  releasingClientId?: string;
 }) {
   return (
     <Card className="rounded-lg border-slate-200 shadow-sm">
@@ -250,6 +256,18 @@ function ClientList({
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {onRelease24h && client.accessAllowed === false && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={releasingClientId === client.id}
+                      onClick={() => onRelease24h(client)}
+                      className="h-8 rounded-lg border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-900 hover:bg-amber-100"
+                    >
+                      <CalendarClock className={`mr-1.5 h-3.5 w-3.5 ${releasingClientId === client.id ? 'animate-spin' : ''}`} />
+                      Liberar 24h
+                    </Button>
+                  )}
                   {showWhatsAppAction && whatsappLink(client) && (
                     <a href={whatsappLink(client)} target="_blank" rel="noreferrer">
                       <Button size="sm" className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold hover:bg-emerald-700">
@@ -269,6 +287,11 @@ function ClientList({
                 <span>{formatNumber(client.productsCount)} produtos</span>
                 <span>Último pedido: {formatDateTime(client.lastOrderAt)}</span>
               </div>
+              {client.accessOverrideUntil && new Date(client.accessOverrideUntil).getTime() > Date.now() && (
+                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                  Cortesia ativa até {formatDateTime(client.accessOverrideUntil)}
+                </p>
+              )}
               {client.reasons && client.reasons.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {client.reasons.map((reason) => (
@@ -367,6 +390,7 @@ export default function SystemAdminDashboard() {
   const [popPayRestaurantEmail, setPopPayRestaurantEmail] = useState('');
   const [popPayCreditFee, setPopPayCreditFee] = useState('0.50');
   const [popPayFeeSaving, setPopPayFeeSaving] = useState(false);
+  const [releasingClientId, setReleasingClientId] = useState('');
 
   const metrics = data?.metrics || {};
   const lists = data?.lists;
@@ -444,6 +468,32 @@ export default function SystemAdminDashboard() {
       toast.error(error?.message || 'Não foi possível atualizar a tarifa.');
     } finally {
       setPopPayFeeSaving(false);
+    }
+  };
+
+  const releaseClientFor24Hours = async (client: AdminClientRow) => {
+    const confirmed = window.confirm(
+      `Liberar ${client.restaurantName} por 24 horas? Esta cortesia só poderá ser usada uma vez neste vencimento.`,
+    );
+    if (!confirmed) return;
+
+    setReleasingClientId(client.id);
+    try {
+      const { data: response, error } = await supabase.functions.invoke('admin-dashboard', {
+        body: {
+          action: 'grant_subscription_access_24h',
+          token,
+          restaurantId: client.id,
+        },
+      });
+      if (error) throw error;
+      if (!response?.ok) throw new Error(response?.error || 'Não foi possível liberar a conta.');
+      toast.success(`${response.restaurant} liberado até ${formatDateTime(response.accessUntil)}.`);
+      await loadDashboard(token);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível liberar a conta por 24 horas.');
+    } finally {
+      setReleasingClientId('');
     }
   };
 
@@ -693,6 +743,8 @@ export default function SystemAdminDashboard() {
             clients={lists?.attention || []}
             emptyText="Nenhum alerta crítico agora."
             showWhatsAppAction
+            onRelease24h={releaseClientFor24Hours}
+            releasingClientId={releasingClientId}
           />
 
           <Card className="rounded-lg border-slate-200 shadow-sm">
@@ -744,6 +796,8 @@ export default function SystemAdminDashboard() {
             description="Base para cobrança e acompanhamento financeiro."
             clients={lists?.delinquent || []}
             emptyText="Nenhum cliente inadimplente encontrado."
+            onRelease24h={releaseClientFor24Hours}
+            releasingClientId={releasingClientId}
           />
           <ClientList
             title="Testes vencendo"

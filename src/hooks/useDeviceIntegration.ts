@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { PrinterService, PrinterDevice } from '@/services/PrinterService';
-import { ScaleService, ScaleDevice } from '@/services/ScaleService';
+import { pwaScaleService, ScaleDevice } from '@/services/ScaleService';
 import { WebSocketPrinterFallback } from '@/services/hardwareFallback';
 import { ElectronDeviceService, ElectronDevice } from '@/services/ElectronDeviceService';
 import { loadPrinterConfig, savePrinterConfig, type PrinterTransport } from '@/services/printerConfig';
@@ -23,7 +23,7 @@ export const useDeviceIntegration = () => {
 
   // Initialize services
   const printerService = useMemo(() => new PrinterService(), []);
-  const scaleService = useMemo(() => new ScaleService(), []);
+  const scaleService = pwaScaleService;
   const initialCfg = useMemo(() => loadPrinterConfig(), []);
   const [bridgeConfig, setBridgeConfig] = useState<{ websocketUrl: string; transport: PrinterTransport; address?: string }>(() => ({
     websocketUrl: initialCfg.bridge.websocketUrl,
@@ -103,7 +103,7 @@ export const useDeviceIntegration = () => {
             id: scale.id,
             name: scale.name,
             type: 'scale' as const,
-            connectionType: scale.type as any,
+            connectionType: 'usb' as const,
             status: scale.connected ? 'connected' as const : 'disconnected' as const,
             address: scale.address
           }))
@@ -280,6 +280,14 @@ export const useDeviceIntegration = () => {
     }
   }, [devices, isElectron]);
 
+  const getScaleReading = useCallback(async () => {
+    if (isElectron) {
+      const weight = await electronService.readWeight();
+      return { weight, unit: 'kg' as const, stable: true };
+    }
+    return scaleService.getReading();
+  }, [isElectron]);
+
   const printReceipt = useCallback(async (orderData: any, opts?: { transport?: 'network' | 'usb' | 'bluetooth' | 'system', address?: string }): Promise<void> => {
     const connectedPrinter = devices.find(d => d.type === 'printer' && d.status === 'connected');
     
@@ -335,6 +343,7 @@ export const useDeviceIntegration = () => {
     connectDevice,
     disconnectDevice,
     getWeight,
+    getScaleReading,
     printReceipt,
     bridgeConfig,
     setBridgeConfig,

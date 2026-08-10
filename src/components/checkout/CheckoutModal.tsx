@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Banknote, ChevronDown, Clock3, CreditCard, QrCode, Split, X } from 'lucide-react';
+import { Banknote, Building2, CheckCircle2, ChevronDown, Clock3, CreditCard, QrCode, Split, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,6 +92,9 @@ interface CheckoutModalProps {
   pixStatus?: 'idle' | 'waiting' | 'paid';
   cpfValue?: string;
   onCpfChange?: (value: string) => void;
+  fiscalRecipient?: { name: string; document: string } | null;
+  onFiscalRecipientClick?: () => void;
+  onFiscalRecipientClear?: () => void;
   modeVariant?: 'express' | 'complete';
   inlineContent?: React.ReactNode;
   extraFields?: React.ReactNode;
@@ -123,6 +126,9 @@ export function CheckoutModal({
   pixStatus = 'idle',
   cpfValue = '',
   onCpfChange,
+  fiscalRecipient,
+  onFiscalRecipientClick,
+  onFiscalRecipientClear,
   modeVariant = 'complete',
   inlineContent,
   extraFields,
@@ -341,6 +347,14 @@ export function CheckoutModal({
                 value={cpfValue}
                 onOpenChange={setCpfOpen}
                 onChange={onCpfChange}
+              />
+            )}
+
+            {onFiscalRecipientClick && (
+              <FiscalRecipientSection
+                recipient={fiscalRecipient}
+                onSelect={onFiscalRecipientClick}
+                onClear={onFiscalRecipientClear}
               />
             )}
 
@@ -662,6 +676,42 @@ function CpfSection({
           <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder="000.000.000-00" className="mt-1 h-11" />
         </div>
       )}
+    </div>
+  );
+}
+
+function FiscalRecipientSection({
+  recipient,
+  onSelect,
+  onClear,
+}: {
+  recipient?: { name: string; document: string } | null;
+  onSelect: () => void;
+  onClear?: () => void;
+}) {
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${recipient ? 'border-emerald-200 bg-emerald-50/70' : 'border-blue-200 bg-blue-50/70'}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className={`rounded-xl p-2 ${recipient ? 'bg-emerald-700 text-white' : 'bg-blue-700 text-white'}`}>
+            {recipient ? <CheckCircle2 className="h-5 w-5" /> : <Building2 className="h-5 w-5" />}
+          </span>
+          <div className="min-w-0">
+            <div className="font-black text-[#003223]">Cliente para NF-e • Modelo 55</div>
+            {recipient ? (
+              <><p className="truncate text-sm font-semibold text-emerald-900">{recipient.name}</p><p className="text-xs text-emerald-700">CPF/CNPJ: {recipient.document}</p></>
+            ) : (
+              <p className="text-sm text-slate-600">Informe ou cadastre o destinatário da nota fiscal completa.</p>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {recipient && onClear && <Button type="button" variant="ghost" size="sm" onClick={onClear}>Remover</Button>}
+          <Button type="button" size="sm" className={recipient ? 'bg-emerald-800 hover:bg-emerald-900' : 'bg-blue-700 hover:bg-blue-800'} onClick={onSelect}>
+            {recipient ? 'Alterar cliente' : 'Informar ou cadastrar cliente'}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Bot, CheckCircle2, ImageIcon, Loader2, Paperclip, Send, Sparkles, StopCircle, User, Wand2, X } from 'lucide-react';
+import { BarChart3, Bot, CheckCircle2, FileSpreadsheet, ImageIcon, Loader2, Paperclip, Send, Sparkles, StopCircle, User, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -9,7 +9,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { cancelAgentBackgroundJob, processAgentCommand, type SupportChatHistoryMessage } from '@/services/agentService';
 import { supabase } from '@/integrations/supabase/client';
-import { getLocalOperatorSession } from '@/services/operatorAuth';
+import { canAccessOperatorArea, canManageMenu, getLocalOperatorSession } from '@/services/operatorAuth';
+import MenuImportModal from '@/components/products/MenuImportModal';
+import DataMigrationModal from '@/components/products/DataMigrationModal';
+import { AgentReportModal } from '@/components/agent/AgentReportModal';
+import type { AgentReportType } from '@/services/agentReportService';
 
 interface ConsoleMessage {
   id: string;
@@ -27,12 +31,24 @@ interface AgentConsoleProps {
 }
 
 const quickCommands = [
+  'Gerar relatório em PDF',
+  'Importar cardápio por foto, planilha ou link',
   'Me explique onde encontro uma função do sistema',
   'Gere imagens para produtos sem imagem',
   'Crie uma promoção para hoje com os produtos mais vendidos',
   'Liste produtos sem imagem e sem descrição',
   'Lance esta nota fiscal como despesa e organize por categoria',
 ];
+
+const getReportIntent = (command: string): { type: AgentReportType; preset: 'today' | 'yesterday' | '7days' | 'month' | 'custom' } | null => {
+  const text = String(command || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (!/(relatorio|pdf|imprimir).{0,45}(venda|produto|cmv|lucro|pagamento)|(?:gerar|gerar um|fazer|baixar|trazer).{0,40}(relatorio|pdf)/.test(text)) return null;
+  const type: AgentReportType = /cmv|custo|lucro|margem/.test(text) ? 'cmv'
+    : /pagamento|pix|dinheiro|cartao/.test(text) ? 'payments'
+      : /produto|item|quilo|peso/.test(text) ? 'products' : 'sales';
+  const preset = /ontem/.test(text) ? 'yesterday' : /7 dias|semana/.test(text) ? '7days' : /mes/.test(text) ? 'month' : /hoje/.test(text) ? 'today' : 'custom';
+  return { type, preset };
+};
 
 const thinkingMessages = [
   'Pensando e consultando o sistema...',
@@ -135,6 +151,14 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedDataFile, setSelectedDataFile] = useState<File | null>(null);
+  const [menuImportOpen, setMenuImportOpen] = useState(false);
+  const [menuImportUrl, setMenuImportUrl] = useState('');
+  const [menuImportImage, setMenuImportImage] = useState('');
+  const [dataMigrationOpen, setDataMigrationOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportType, setReportType] = useState<AgentReportType>('sales');
+  const [reportPreset, setReportPreset] = useState<'today' | 'yesterday' | '7days' | 'month' | 'custom'>('today');
   const [storageHydrated, setStorageHydrated] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -341,28 +365,53 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
     });
   };
 
-  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    const isImage = file.type.startsWith('image/');
+    const isSupportedImage = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type.toLowerCase());
+    const isDataFile = /\.(csv|xlsx?|json|sqlite3?|db3?|fdb|gdb|fbk)$/i.test(file.name);
+    if (!isImage && !isDataFile) {
       toast({
         title: 'Arquivo inválido',
-        description: 'Selecione uma imagem.',
+        description: 'Envie uma foto, planilha, JSON ou banco SQLite.',
         variant: 'destructive'
       });
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (loadEvent) => setSelectedImage(loadEvent.target?.result as string);
-    reader.readAsDataURL(file);
+    if (isImage) {
+      if (!isSupportedImage) {
+        toast({
+          title: 'Formato de imagem não suportado',
+          description: 'Envie a foto em JPEG, PNG ou WebP.',
+          variant: 'destructive'
+        });
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        toast({
+          title: 'Imagem muito grande',
+          description: 'A foto do produto deve possuir no máximo 8 MB.',
+          variant: 'destructive'
+        });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (loadEvent) => setSelectedImage(loadEvent.target?.result as string);
+      reader.readAsDataURL(file);
+      setSelectedDataFile(null);
+    } else {
+      setSelectedDataFile(file);
+      setSelectedImage(null);
+    }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const submitCommand = async (command: string) => {
     const text = command.trim();
-    if ((!text && !selectedImage) || isProcessing) return;
+    if ((!text && !selectedImage && !selectedDataFile) || isProcessing) return;
 
     if (!user?.id) {
       toast({
@@ -370,6 +419,56 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
         description: 'Entre no sistema para usar o Pop Agente.',
         variant: 'destructive'
       });
+      return;
+    }
+
+    const normalizedText = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const reportIntent = getReportIntent(text);
+    if (reportIntent) {
+      const operator = getLocalOperatorSession();
+      if (operator && !canAccessOperatorArea(operator, 'reports')) {
+        addMessage({ type: 'agent', content: 'Seu operador não possui permissão para visualizar relatórios financeiros.', status: 'error' });
+        toast({ title: 'Acesso não autorizado', description: 'Solicite a permissão de relatórios ao administrador.', variant: 'destructive' });
+        return;
+      }
+      addMessage({ type: 'user', content: text, status: 'success' });
+      setReportType(reportIntent.type); setReportPreset(reportIntent.preset); setReportOpen(true); setInput('');
+      addMessage({ type: 'agent', content: 'Abri o gerador de relatórios. Escolha o tipo e o período; depois você poderá visualizar, baixar ou imprimir o PDF.', status: 'success', metadata: { report_builder: true } });
+      return;
+    }
+    const menuImportIntent = /(import|migr|cadastr|cri).{0,35}(cardapio|menu)|(cardapio|menu).{0,35}(import|migr|cadastr|cri)/.test(normalizedText);
+    if (selectedDataFile || menuImportIntent) {
+      const operator = getLocalOperatorSession();
+      if (operator && !canManageMenu(operator)) {
+        addMessage({ type: 'agent', content: 'Seu operador não possui permissão para alterar ou importar o cardápio.', status: 'error' });
+        toast({ title: 'Acesso não autorizado', description: 'Solicite a permissão de gerenciamento do cardápio.', variant: 'destructive' });
+        return;
+      }
+      const attachment = selectedDataFile;
+      const image = selectedImage || '';
+      const url = text.match(/https?:\/\/[^\s]+/i)?.[0]?.replace(/[),.;]+$/, '') || '';
+      addMessage({
+        type: 'user',
+        content: text || `Importar cardápio do arquivo ${attachment?.name || 'anexado'}.`,
+        status: 'success',
+        imageUrl: image || undefined,
+      });
+      if (attachment) {
+        setDataMigrationOpen(true);
+      } else {
+        setMenuImportUrl(url);
+        setMenuImportImage(image);
+        setMenuImportOpen(true);
+      }
+      addMessage({
+        type: 'agent',
+        content: attachment
+          ? 'Abri o analisador de planilha ou banco offline. Vou mostrar uma prévia antes de gravar produtos, clientes ou vendas.'
+          : 'Abri o importador de cardápio. Ele aceita foto, link, texto e JSON e sempre mostra o conteúdo antes de aplicar.',
+        status: 'success',
+      });
+      setInput('');
+      if (!attachment) setSelectedImage(null);
       return;
     }
 
@@ -479,10 +578,15 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
       minute: '2-digit'
     });
 
+  const handleImportComplete = () => {
+    addMessage({ type: 'agent', content: 'Importação concluída. O cardápio e os dados já foram atualizados no restaurante selecionado.', status: 'success' });
+  };
+
   return (
+    <>
     <Card className={`flex min-h-0 flex-col overflow-hidden border-0 bg-[#f7f8f3] shadow-xl ${className || ''}`}>
       <div
-        className={`shrink-0 border-b bg-gradient-to-br from-emerald-950 via-emerald-900 to-[#ff5b05] text-white ${
+        className={`shrink-0 border-b bg-[#00523a] text-white ${
           compact ? 'p-4' : 'p-5'
         }`}
       >
@@ -594,6 +698,11 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
                             concluído
                           </div>
                         )}
+                        {message.metadata?.report_builder && !isUser && (
+                          <Button type="button" size="sm" className="mt-3 rounded-full bg-[#0f7a55] font-bold hover:bg-[#096443]" onClick={() => setReportOpen(true)}>
+                            <BarChart3 className="mr-1.5 h-4 w-4" /> Abrir relatórios
+                          </Button>
+                        )}
                       </div>
                       <span className="px-2 text-xs text-slate-500">{formatTime(message.timestamp)}</span>
                     </div>
@@ -625,9 +734,16 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
                 </button>
               </div>
             )}
+            {selectedDataFile && (
+              <div className="inline-flex items-center gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm">
+                <FileSpreadsheet className="h-6 w-6 text-emerald-700" />
+                <div><p className="max-w-64 truncate text-sm font-bold text-slate-800">{selectedDataFile.name}</p><p className="text-xs text-slate-500">Pronto para analisar</p></div>
+                <button type="button" onClick={() => setSelectedDataFile(null)} className="rounded-full bg-red-600 p-1 text-white" aria-label="Remover arquivo"><X className="h-3 w-3" /></button>
+              </div>
+            )}
 
             <div className="flex items-end gap-2 rounded-3xl border bg-white p-2 shadow-lg shadow-emerald-950/5 focus-within:border-orange-300">
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,.csv,.xlsx,.xls,.json,.sqlite,.sqlite3,.db,.db3,.fdb,.gdb,.fbk" className="hidden" onChange={handleAttachmentUpload} />
               <Button
                 type="button"
                 variant="ghost"
@@ -635,7 +751,7 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
                 className="h-11 w-11 rounded-2xl text-slate-600"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isProcessing}
-                title="Anexar imagem"
+                title="Anexar foto, planilha ou banco SQLite"
               >
                 <Paperclip className="h-5 w-5" />
               </Button>
@@ -655,7 +771,7 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
               />
               <Button
                 type="submit"
-                disabled={isProcessing || (!input.trim() && !selectedImage)}
+                disabled={isProcessing || (!input.trim() && !selectedImage && !selectedDataFile)}
                 className="h-11 rounded-2xl bg-orange-600 px-5 font-bold hover:bg-orange-700"
               >
                 {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
@@ -664,11 +780,33 @@ export function AgentConsole({ className, compact = false }: AgentConsoleProps) 
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <ImageIcon className="h-4 w-4" />
-              Agora a geração por IA usa OpenAI e salva a imagem direto no produto.
+              Anexe a foto junto do pedido para o agente salvar no produto; também aceita planilha, SQLite ou link de cardápio.
             </div>
           </div>
         </form>
       </div>
     </Card>
+    <MenuImportModal
+      isOpen={menuImportOpen}
+      onClose={() => { setMenuImportOpen(false); setMenuImportUrl(''); setMenuImportImage(''); }}
+      onImportComplete={handleImportComplete}
+      initialUrl={menuImportUrl}
+      initialImageDataUrl={menuImportImage}
+    />
+    <DataMigrationModal
+      isOpen={dataMigrationOpen}
+      onClose={() => { setDataMigrationOpen(false); setSelectedDataFile(null); }}
+      onImportComplete={handleImportComplete}
+      initialFile={selectedDataFile}
+    />
+    {user?.id && <AgentReportModal
+      open={reportOpen}
+      userId={user.id}
+      initialType={reportType}
+      initialPreset={reportPreset}
+      onOpenChange={setReportOpen}
+      onGenerated={(description) => addMessage({ type: 'agent', content: `${description}\n\nO PDF está pronto para visualizar, baixar ou imprimir.`, status: 'success', metadata: { report_builder: true } })}
+    />}
+    </>
   );
 }

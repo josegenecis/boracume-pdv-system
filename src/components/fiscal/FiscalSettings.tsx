@@ -341,7 +341,10 @@ const isRegistrationCompatibleWithCertificate = (
   return true;
 };
 
-const FiscalSettings: React.FC = () => {
+const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocumentsVisible?: boolean }> = ({
+  modelSettingsVisible = true,
+  recentDocumentsVisible = true,
+}) => {
   const [settings, setSettings] = useState<FiscalConfig>({
     cnpj: '',
     inscricao_estadual: '',
@@ -800,7 +803,7 @@ const FiscalSettings: React.FC = () => {
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
             )}
             <div>
-              <h3 className="text-lg font-medium">Diagnóstico NFC-e por estado</h3>
+              <h3 className="text-lg font-medium">Diagnóstico do modelo NFC-e (65)</h3>
               <p className="mt-1 text-sm text-slate-700">
                 Valida cadastro, certificado A1, endpoints e requisitos técnicos da UF selecionada antes do teste na SEFAZ.
               </p>
@@ -858,23 +861,23 @@ const FiscalSettings: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Receipt className="w-5 h-5" />
-            Configurações Fiscais - NFC-e
+            Configuração do Emissor Fiscal
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center space-x-2">
+          {modelSettingsVisible && <div className="flex items-center space-x-2">
             <Switch
               id="fiscal-enabled"
               checked={settings.ativo}
               onCheckedChange={(checked) => setSettings(prev => ({ ...prev, ativo: checked }))}
             />
-            <Label htmlFor="fiscal-enabled">Ativar emissão de NFC-e</Label>
-          </div>
+            <Label htmlFor="fiscal-enabled">Ativar emissão automática de NFC-e (modelo 65)</Label>
+          </div>}
 
-          {settings.ativo && (
+          {(modelSettingsVisible ? settings.ativo : true) && (
             <>
               {renderCertificateImportSection()}
-              {renderCeReadinessSection()}
+              {modelSettingsVisible && renderCeReadinessSection()}
 
               {/* Dados da Empresa */}
               <div className="space-y-4">
@@ -1037,8 +1040,19 @@ const FiscalSettings: React.FC = () => {
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <Label>Regime tributário</Label>
+                <Select value={settings.regime_tributario.toString()} onValueChange={(value) => setSettings(prev => ({ ...prev, regime_tributario: parseInt(value) }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Simples Nacional</SelectItem>
+                    <SelectItem value="3" disabled>Regime Normal (aguardando homologação)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Configurações NFC-e */}
-              <div className="space-y-4">
+              {modelSettingsVisible && <div className="space-y-4">
                 <h3 className="text-lg font-medium">Configurações NFC-e</h3>
                 
                 <div className="grid grid-cols-3 gap-4">
@@ -1099,10 +1113,10 @@ const FiscalSettings: React.FC = () => {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
+              </div>}
 
               {/* CSC legado - opcional no QR Code v3 online */}
-              <div className="space-y-4">
+              {modelSettingsVisible && <div className="space-y-4">
                 <div>
                   <h3 className="text-lg font-medium">CSC legado (opcional)</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
@@ -1135,13 +1149,13 @@ const FiscalSettings: React.FC = () => {
                     />
                   </div>
                 </div>
-              </div>
+              </div>}
 
               <div className="flex gap-2">
-                <Button onClick={testConnection} disabled={loading} variant="outline">
+                {modelSettingsVisible && <Button onClick={testConnection} disabled={loading} variant="outline">
                   <Settings className="w-4 h-4 mr-2" />
                   Testar Conexão
-                </Button>
+                </Button>}
                 <Button onClick={saveSettings} disabled={loading}>
                   {loading ? 'Salvando...' : 'Salvar Configurações'}
                 </Button>
@@ -1151,7 +1165,7 @@ const FiscalSettings: React.FC = () => {
         </CardContent>
       </Card>
 
-      {settings.ativo && (
+      {recentDocumentsVisible && settings.ativo && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">

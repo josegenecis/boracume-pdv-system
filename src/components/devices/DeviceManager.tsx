@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Scale, Printer, Bluetooth, Wifi, Usb, Search, Power, PowerOff, Link as LinkIcon } from 'lucide-react';
+import { Scale, Printer, Bluetooth, Wifi, Usb, Search, Power, PowerOff, Link as LinkIcon, ScanBarcode } from 'lucide-react';
 import { useDeviceIntegration, Device } from '@/hooks/useDeviceIntegration';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,6 +16,7 @@ import { createPrintAgentToken, enqueuePrintJob } from '@/services/printRelay';
 import { supabase } from '@/integrations/supabase/client';
 import { claimBridgePairing } from '@/services/printPairing';
 import { getLatestBridgeWindowsExe } from '@/services/bridgeDownload';
+import { PrinterService as PdvPrinterService } from '@/utils/printerService';
 
 const DeviceManager = () => {
   const { user } = useAuth();
@@ -26,6 +27,7 @@ const DeviceManager = () => {
     scanForDevices, 
     connectDevice, 
     disconnectDevice,
+    getScaleReading,
     printReceipt,
     bridgeConfig,
     setBridgeConfig,
@@ -43,6 +45,8 @@ const DeviceManager = () => {
   const [pairingCode, setPairingCode] = React.useState('');
   const [claimingPairing, setClaimingPairing] = React.useState(false);
   const [downloadingBridge, setDownloadingBridge] = React.useState(false);
+  const [scaleReading, setScaleReading] = React.useState<string>('');
+  const [webUsbPrinterConnected, setWebUsbPrinterConnected] = React.useState(false);
 
   React.useEffect(() => {
     if (!user?.id) return;
@@ -174,6 +178,9 @@ const DeviceManager = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                No Chrome ou Edge instalado como PWA, conecte a porta USB/serial da balança. A autorização fica salva no navegador.
+              </p>
               {scales.length === 0 ? (
                 <p className="text-muted-foreground text-center py-4">
                   Nenhuma balança encontrada
@@ -219,6 +226,23 @@ const DeviceManager = () => {
                   </div>
                 ))
               )}
+              {scales.some(device => device.status === 'connected') && (
+                <div className="flex items-center gap-3 rounded-lg border bg-emerald-50 p-3">
+                  <div className="flex-1">
+                    <div className="text-xs text-muted-foreground">Leitura atual</div>
+                    <div className="text-2xl font-bold text-emerald-800">{scaleReading || '—'}</div>
+                  </div>
+                  <Button variant="outline" onClick={async () => {
+                    try {
+                      const reading = await getScaleReading();
+                      const kg = reading.unit === 'g' ? reading.weight / 1000 : reading.weight;
+                      setScaleReading(`${kg.toFixed(3)} kg`);
+                    } catch (error: any) {
+                      toast({ title: 'Sem leitura da balança', description: error?.message || 'Verifique o cabo e o protocolo.', variant: 'destructive' });
+                    }
+                  }}>Testar peso</Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -233,6 +257,21 @@ const DeviceManager = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              {'usb' in navigator && (
+                <div className="rounded-lg border bg-blue-50 p-3">
+                  <div className="mb-2 font-medium">Impressora USB direta no PWA</div>
+                  <p className="mb-3 text-sm text-muted-foreground">Pareia uma impressora térmica compatível com ESC/POS sem instalar programa adicional.</p>
+                  <Button size="sm" variant="outline" onClick={async () => {
+                    const connected = await PdvPrinterService.connectUsb();
+                    setWebUsbPrinterConnected(connected);
+                    toast({
+                      title: connected ? 'Impressora USB conectada' : 'Não foi possível conectar',
+                      description: connected ? 'As próximas impressões usarão a conexão direta do PWA.' : 'Confirme a permissão e se a impressora é compatível com WebUSB.',
+                      variant: connected ? 'default' : 'destructive',
+                    });
+                  }}>{webUsbPrinterConnected ? 'USB conectada' : 'Conectar impressora USB'}</Button>
+                </div>
+              )}
               {/* Configuração da Bridge */}
               <div className="p-3 border rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
@@ -544,6 +583,19 @@ const DeviceManager = () => {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ScanBarcode size={22} /> Leitor de código de barras</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <Badge className="bg-green-600">Pronto para uso</Badge>
+          <p className="text-muted-foreground">
+            Leitores USB que funcionam como teclado não precisam de pareamento: conecte, leia o código e finalize com Enter. O PDV identifica produtos e comandas automaticamente.
+          </p>
+          <p className="text-xs text-muted-foreground">Configure o leitor para enviar Enter após cada leitura e layout numérico padrão.</p>
+        </CardContent>
+      </Card>
     </div>
   );
 };

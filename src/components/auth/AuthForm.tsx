@@ -230,23 +230,26 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
     try {
       const { data, error } = await supabase.functions.invoke('auth-recovery-email', {
         body: {
-          email: loginData.email,
-          redirectTo: `${window.location.origin}/reset-password`,
+          email: loginData.email.trim().toLowerCase(),
+          redirectTo: 'https://popsystem.com.br/reset-password',
         },
       });
-      
+
       if (error) throw error;
-      if ((data as any)?.error) throw new Error(String((data as any).error));
-      
+      if (data?.error) throw new Error(String(data.error));
+
       toast({
         title: "Email enviado",
-        description: "Enviamos um link seguro da PopSystem para redefinir sua senha.",
+        description: "Enviamos um link seguro para redefinir sua senha. Verifique também a caixa de spam.",
       });
     } catch (error: any) {
       console.error('Erro ao enviar email de recuperação:', error);
+      const isRateLimit = error?.status === 429 || /rate|seconds|segundos|security purposes/i.test(String(error?.message || ''));
       toast({
-        title: "Erro",
-        description: "Não foi possível enviar o email de recuperação. Tente novamente.",
+        title: isRateLimit ? "Aguarde um momento" : "Não foi possível concluir",
+        description: isRateLimit
+          ? "O link já foi solicitado. Aguarde cerca de 1 minuto antes de tentar novamente."
+          : "Não foi possível enviar o email de recuperação. Tente novamente.",
         variant: "destructive",
       });
     }

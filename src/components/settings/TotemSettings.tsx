@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Copy, ExternalLink, ImagePlus, Monitor, MonitorUp, Palette, QrCode, Settings2, ShieldCheck, Smartphone } from 'lucide-react';
+import { CheckCircle2, Copy, ExternalLink, ImagePlus, LayoutGrid, Monitor, MonitorUp, Palette, QrCode, Settings2, ShieldCheck, ShoppingBasket, Smartphone } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import TotemAppearanceSettings from '@/components/settings/TotemAppearanceSettings';
 import TotemBannerSettings from '@/components/settings/TotemBannerSettings';
+import TotemCategorySettings from '@/components/settings/TotemCategorySettings';
+import UpsellManager from '@/components/marketing/UpsellManager';
 
 export default function TotemSettings() {
   const { user } = useAuth();
@@ -38,7 +40,13 @@ export default function TotemSettings() {
             <Palette className="mr-2 h-4 w-4" />Cores e aparência
           </TabsTrigger>
           <TabsTrigger value="banners" className="h-11 rounded-xl px-5 font-black data-[state=active]:bg-[#073a2d] data-[state=active]:text-white">
-            <ImagePlus className="mr-2 h-4 w-4" />Banners do Totem
+            <ImagePlus className="mr-2 h-4 w-4" />Mídias e anúncios
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="h-11 rounded-xl px-5 font-black data-[state=active]:bg-[#073a2d] data-[state=active]:text-white">
+            <LayoutGrid className="mr-2 h-4 w-4" />Categorias
+          </TabsTrigger>
+          <TabsTrigger value="upsell" className="h-11 rounded-xl px-5 font-black data-[state=active]:bg-[#073a2d] data-[state=active]:text-white">
+            <ShoppingBasket className="mr-2 h-4 w-4" />Venda adicional
           </TabsTrigger>
         </TabsList>
       </div>
@@ -103,6 +111,14 @@ export default function TotemSettings() {
 
       <TabsContent value="banners" className="mt-0">
         <TotemBannerSettings />
+      </TabsContent>
+
+      <TabsContent value="categories" className="mt-0">
+        <TotemCategorySettings />
+      </TabsContent>
+
+      <TabsContent value="upsell" className="mt-0">
+        <UpsellManager context="totem" />
       </TabsContent>
     </Tabs>
   );

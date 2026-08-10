@@ -16,6 +16,7 @@ export default function LandingApp() {
           <Route path="/termos" element={<Suspense fallback={<div className="min-h-screen bg-[#f6f8f4]" />}><LegalPage /></Suspense>} />
           <Route path="/privacidade" element={<Suspense fallback={<div className="min-h-screen bg-[#f6f8f4]" />}><LegalPage /></Suspense>} />
           <Route path="/lgpd" element={<Suspense fallback={<div className="min-h-screen bg-[#f6f8f4]" />}><LegalPage /></Suspense>} />
+          <Route path="/exclusao-de-dados" element={<Suspense fallback={<div className="min-h-screen bg-[#f6f8f4]" />}><LegalPage /></Suspense>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

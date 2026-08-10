@@ -17,6 +17,8 @@ interface MenuImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportComplete: () => void;
+  initialUrl?: string;
+  initialImageDataUrl?: string;
 }
 
 interface ImportedVariant {
@@ -82,7 +84,7 @@ type LinkImportPreview = {
   };
 };
 
-const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onImportComplete }) => {
+const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onImportComplete, initialUrl = '', initialImageDataUrl = '' }) => {
   const [activeTab, setActiveTab] = useState('text');
   const [textInput, setTextInput] = useState('');
   const [jsonInput, setJsonInput] = useState('');
@@ -100,6 +102,27 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   useEffect(() => {
     cancelRef.current = !isOpen;
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (initialUrl) {
+      setActiveTab('link');
+      setUrlInput(initialUrl);
+      setLinkPreview(null);
+      return;
+    }
+    if (initialImageDataUrl) {
+      setActiveTab('image');
+      setImagePreview(initialImageDataUrl);
+      void fetch(initialImageDataUrl)
+        .then((response) => response.blob())
+        .then((blob) => setSelectedImage(new File([blob], `cardapio-${Date.now()}.${blob.type.split('/')[1] || 'jpg'}`, { type: blob.type || 'image/jpeg' })))
+        .catch(() => {
+          setSelectedImage(null);
+          setImagePreview(null);
+        });
+    }
+  }, [initialImageDataUrl, initialUrl, isOpen]);
 
   const isValidUrl = (value: string) => {
     try {

@@ -35,7 +35,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const { user, profile } = useAuth();
+  const { user, profile, refreshUser } = useAuth();
   const { toast } = useToast();
 
   const form = useForm<OnboardingFormValues>({
@@ -80,14 +80,20 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
     setIsLoading(true);
     try {
-      // Build opening hours string based on selection
-      let openingHoursFinal = values.openingHours;
-      if (values.applyToAllDays) {
-        openingHoursFinal = `Seg-Dom: ${values.openingHours}`;
-        if (values.closedDay && values.closedDay !== 'none') {
-           openingHoursFinal += ` (Fechado: ${daysOfWeek.find(d => d.value === values.closedDay)?.label})`;
-        }
-      }
+      const hoursMatch = values.openingHours.match(/(\d{2}:\d{2})\s*[-–—àa]+\s*(\d{2}:\d{2})/i);
+      if (!hoursMatch) throw new Error('Informe o horário no formato 10:00 - 22:00.');
+
+      const [, open, close] = hoursMatch;
+      const closedDayByScheduleKey: Record<string, string> = {
+        seg: 'monday', ter: 'tuesday', qua: 'wednesday', qui: 'thursday',
+        sex: 'friday', sab: 'saturday', dom: 'sunday',
+      };
+      const scheduleKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+      const closedScheduleKey = values.closedDay ? closedDayByScheduleKey[values.closedDay] : undefined;
+      const weeklySchedule = Object.fromEntries(scheduleKeys.map((day) => [
+        day,
+        { open, close, closed: day === closedScheduleKey },
+      ]));
 
       // Update or Create profile with restaurant info
       const profilePayload: any = {
@@ -95,7 +101,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         restaurant_name: profile?.restaurant_name || 'Restaurante',
         address: values.address,
         phone: values.phone,
-        opening_hours: openingHoursFinal,
+        opening_hours: JSON.stringify(weeklySchedule),
         description: values.description,
         updated_at: new Date().toISOString()
       };
@@ -109,6 +115,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
       }
 
       if (profileError) throw profileError;
+
+      await refreshUser();
 
       // Create default WhatsApp settings immediately (Non-blocking)
       try {
@@ -151,23 +159,22 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
   const finishWizard = async () => {
     try {
-       // Mark onboarding as completed in DB
-       if (user) {
-         // Tenta atualizar, mas não bloqueia se falhar
-         try {
-            await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
-         } catch (e) {
-            console.warn("Erro ao marcar onboarding_completed:", e);
-         }
-       }
-       
+       if (!user) throw new Error('Sessão não encontrada. Entre novamente.');
+       const { error } = await supabase
+         .from('profiles')
+         .update({ onboarding_completed: true, updated_at: new Date().toISOString() })
+         .eq('id', user.id);
+       if (error) throw error;
+       await refreshUser();
        await onComplete();
-       // Removido window.location.reload() que pode estar causando problemas
-       // window.location.reload();
-    } catch (error) {
+    } catch (error: any) {
        console.error(error);
-       // Mesmo com erro, tenta fechar
-       onComplete();
+       toast({
+         title: 'Não foi possível concluir',
+         description: error?.message || 'As configurações não foram confirmadas. Tente novamente.',
+         variant: 'destructive',
+       });
+       throw error;
     }
   };
 
@@ -287,25 +294,31 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
             await supabase.from('product_categories').insert({ ...category, user_id: user.id });
         }
         await finishWizard();
-     } catch (error) {
-        await finishWizard();
+     } catch (error: any) {
+        toast({
+          title: 'Não foi possível preparar o cardápio',
+          description: error?.message || 'Tente novamente.',
+          variant: 'destructive',
+        });
+     } finally {
+        setIsLoading(false);
      }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in duration-300">
-        <CardHeader className="text-center sticky top-0 bg-white z-10 border-b">
-          <div className="flex items-center justify-center mb-4">
-            <ChefHat className="w-12 h-12 text-boracume-orange" />
+    <div className="fixed inset-0 z-[100] flex items-stretch justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <Card className="h-[100dvh] w-full max-w-2xl overflow-x-hidden overflow-y-auto rounded-none shadow-2xl animate-in fade-in zoom-in duration-300 sm:h-auto sm:max-h-[90vh] sm:rounded-xl">
+        <CardHeader className="sticky top-0 z-10 border-b bg-white px-5 py-4 text-center sm:px-6 sm:py-6">
+          <div className="mb-2 flex items-center justify-center sm:mb-4">
+            <ChefHat className="h-9 w-9 text-boracume-orange sm:h-12 sm:w-12" />
           </div>
-          <CardTitle className="text-2xl">Bem-vindo ao PopSystem!</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-xl leading-tight sm:text-2xl">Bem-vindo ao PopSystem!</CardTitle>
+          <CardDescription className="mx-auto max-w-md text-sm leading-snug sm:text-base">
             {step === 1 ? 'Vamos configurar seu restaurante em alguns passos simples' : 'Como você deseja montar seu cardápio?'}
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="pt-6">
+        <CardContent className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] pt-5 sm:px-6 sm:pt-6">
           {step === 1 ? (
             <>
               <div className="mb-8">
@@ -377,7 +390,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                       )}
                     />
 
-                    <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="min-w-0 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3 sm:p-4">
                       <FormField
                         control={form.control}
                         name="openingHours"
@@ -396,15 +409,15 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                         control={form.control}
                         name="applyToAllDays"
                         render={({ field }) => (
-                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-2 shadow-sm bg-white">
+                          <FormItem className="flex min-w-0 flex-row items-start space-x-3 space-y-0 rounded-md border bg-white p-3 shadow-sm">
                             <FormControl>
                               <Checkbox
                                 checked={field.value}
                                 onCheckedChange={field.onChange}
                               />
                             </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel>
+                            <div className="min-w-0 flex-1 space-y-1 leading-none">
+                              <FormLabel className="block whitespace-normal break-words leading-snug">
                                 Aplicar este horário para todos os dias
                               </FormLabel>
                             </div>
@@ -420,8 +433,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                             <FormLabel>Dia de Folga (Loja Fechada)</FormLabel>
                             <Select onValueChange={field.onChange} defaultValue={field.value}>
                               <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione o dia de folga" />
+                              <SelectTrigger className="min-w-0 [&>span]:truncate">
+                                <SelectValue placeholder="Selecione o dia" />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
@@ -452,25 +465,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                       )}
                     />
 
-                <div className="flex justify-end gap-2">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={finishWizard}
-                        disabled={isLoading}
-                        className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
-                      >
-                        Sair / Fechar
-                      </Button>
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        onClick={() => setStep(2)}
-                        disabled={isLoading}
-                      >
-                        Pular para Opções de Cardápio
-                      </Button>
-                      <Button type="submit" disabled={isLoading} className="w-full sm:w-auto bg-boracume-orange hover:bg-orange-600">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <Button type="submit" disabled={isLoading} className="w-full bg-boracume-orange hover:bg-orange-600 sm:w-auto">
                         {isLoading ? 'Salvando...' : 'Continuar >'}
                       </Button>
                     </div>
@@ -502,9 +498,9 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                   <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
                     <CheckCircle className="w-5 h-5 text-orange-600" />
                   </div>
-                  <div className="text-left">
+                  <div className="min-w-0 flex-1 whitespace-normal text-left">
                     <h4 className="font-semibold text-gray-900">Criar Cardápio Automático</h4>
-                    <p className="text-sm text-gray-500">Gera categorias e produtos de exemplo baseados no seu tipo de negócio.</p>
+                    <p className="break-words text-sm text-gray-500">Gera categorias e produtos de exemplo baseados no seu tipo de negócio.</p>
                   </div>
                 </Button>
 
@@ -517,9 +513,9 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                   <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
                     <Wand2 className="w-5 h-5 text-purple-600" />
                   </div>
-                  <div className="text-left">
+                  <div className="min-w-0 flex-1 whitespace-normal text-left">
                     <h4 className="font-semibold text-gray-900">Importar com Inteligência Artificial</h4>
-                    <p className="text-sm text-gray-500">Envie uma foto do seu cardápio ou um link (iFood/Goomer) e a IA cria tudo pra você.</p>
+                    <p className="break-words text-sm text-gray-500">Envie uma foto do seu cardápio ou um link (iFood/Goomer) e a IA cria tudo pra você.</p>
                   </div>
                 </Button>
 
@@ -532,7 +528,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                   <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
                     <Plus className="w-5 h-5 text-gray-600" />
                   </div>
-                  <div className="text-left">
+                  <div className="min-w-0 flex-1 whitespace-normal text-left">
                     <h4 className="font-semibold text-gray-900">Começar do Zero</h4>
                     <p className="text-sm text-gray-500">Quero cadastrar meus produtos manualmente depois.</p>
                   </div>

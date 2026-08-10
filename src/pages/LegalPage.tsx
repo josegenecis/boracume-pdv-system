@@ -1,8 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowLeft, FileCheck2, LockKeyhole, Scale, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, FileCheck2, LockKeyhole, Scale, ShieldCheck, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const updatedAt = '24 de julho de 2026';
+const updatedAt = '10 de agosto de 2026';
 
 const pages = {
   '/privacidade': {
@@ -13,6 +13,7 @@ const pages = {
       ['Dados tratados', 'Tratamos dados de cadastro, autenticação, operação do restaurante, pedidos, pagamentos e registros técnicos necessários para prestar, proteger e melhorar o serviço. Dados financeiros sensíveis são processados pelos provedores de pagamento autorizados.'],
       ['Finalidades', 'Os dados são usados para autenticação, execução dos serviços contratados, prevenção a fraudes, suporte, conciliação, cumprimento de obrigações legais e segurança da plataforma.'],
       ['Compartilhamento e segurança', 'Compartilhamos somente o necessário com operadores essenciais, como infraestrutura, autenticação e meios de pagamento. Aplicamos controles de acesso, registros de auditoria e proteção de credenciais.'],
+      ['Integrações de marketing', 'Quando o restaurante conecta contas da Meta, tratamos identificadores de ativos comerciais, permissões concedidas, campanhas, criativos e métricas necessárias para criar, administrar e mensurar anúncios. Tokens de acesso são protegidos e utilizados somente para as ações autorizadas pelo titular da conta.'],
       ['Seus direitos', 'O titular pode solicitar confirmação, acesso, correção e demais direitos aplicáveis pelos canais oficiais do PopSystem, respeitadas as obrigações legais de retenção.'],
     ],
   },
@@ -38,6 +39,17 @@ const pages = {
       ['Aceite eletrônico', 'O aceite é vinculado ao usuário autenticado, à versão apresentada e à data e hora do consentimento. Uma nova versão relevante poderá exigir novo aceite.'],
     ],
   },
+  '/exclusao-de-dados': {
+    title: 'Exclusão de dados',
+    subtitle: 'Como solicitar a remoção dos dados vinculados ao PopSystem.',
+    icon: Trash2,
+    sections: [
+      ['Como solicitar', 'Envie a solicitação para contato@popsystem.com.br usando o e-mail da conta cadastrada. Informe o nome do restaurante e descreva se deseja desconectar uma integração específica ou excluir a conta e os dados associados.'],
+      ['Dados da Meta', 'O titular pode desconectar Facebook, Instagram e demais ativos da Meta no Pop Marketing. Ao confirmar a desconexão, o PopSystem revoga o uso da integração e remove os tokens armazenados. Também é possível remover o PopSystem nas configurações de integrações comerciais da própria Meta.'],
+      ['Confirmação e prazo', 'Podemos solicitar informações adicionais para confirmar a identidade e proteger a conta. Após a validação, a solicitação será processada e respondida pelo canal informado, observados os prazos legais aplicáveis.'],
+      ['Retenção obrigatória', 'Registros fiscais, financeiros, de segurança, auditoria e outros dados sujeitos a obrigação legal podem ser conservados pelo período exigido, com acesso restrito e finalidade limitada.'],
+    ],
+  },
 } as const;
 
 export default function LegalPage() {
@@ -48,7 +60,7 @@ export default function LegalPage() {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#ecfdf5,_transparent_38%),radial-gradient(circle_at_bottom_right,_#fff7ed,_transparent_38%)] px-4 py-10 text-slate-900 sm:py-16">
       <article className="mx-auto max-w-4xl overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-xl shadow-emerald-950/5">
-        <header className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-orange-500 px-6 py-10 text-white sm:px-10">
+        <header className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-600 px-6 py-10 text-white sm:px-10">
           <Icon className="mb-5 h-9 w-9" aria-hidden="true" />
           <h1 className="text-3xl font-black tracking-tight sm:text-4xl">{page.title}</h1>
           <p className="mt-3 max-w-2xl text-emerald-50">{page.subtitle}</p>

@@ -1,4 +1,10 @@
 project_id = "gcfyrcpugmducptktjic"
+
+[functions.data-migration]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/data-migration/index.ts"
+
 [functions.whatsapp-connect]
 enabled = true
 verify_jwt = true

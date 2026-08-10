@@ -85,6 +85,14 @@ const Subscription = () => {
   }, []);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('choosePlan') !== '1') return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('planos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
     if (!pixPayment || !accountUser?.id) return;
 
     let stopped = false;
@@ -563,7 +571,7 @@ const Subscription = () => {
 
         {subscription?.status === 'active' && renderCurrentPlan()}
 
-        <div className="mb-10 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div id="planos" className="mb-10 scroll-mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
           {PLAN_CATALOG.map((plan) => {
             const currentCatalogPlan = subscription?.plan_id ? getPlanCatalogItem(subscription.plan_id) : null;
             const display = getPlanDisplay(plan);

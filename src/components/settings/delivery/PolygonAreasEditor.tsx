@@ -212,7 +212,7 @@ export function GooglePolygonMap(props: {
           draggable: true,
           title: 'Local do Restaurante',
           icon: {
-            url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+            url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
           }
         })
         

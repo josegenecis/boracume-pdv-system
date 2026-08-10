@@ -940,7 +940,7 @@ const Entregadores: React.FC = () => {
       </Card>
 
       <Card id="delivery-history" className="scroll-mt-24 overflow-hidden">
-        <CardHeader className="border-b bg-gradient-to-r from-emerald-50 to-orange-50">
+        <CardHeader className="border-b bg-gradient-to-r from-emerald-50 to-emerald-100/70">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2"><History className="h-5 w-5 text-emerald-700" /> Histórico de entregas e pagamentos</CardTitle>

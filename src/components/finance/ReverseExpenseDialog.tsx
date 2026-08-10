@@ -15,6 +15,9 @@ import { Textarea } from '@/components/ui/textarea';
 
 interface ReverseExpenseDialogProps {
   open: boolean;
+  title?: string;
+  entityLabel?: string;
+  auditMessage?: string;
   description?: string;
   amountLabel?: string;
   onCancel: () => void;
@@ -23,6 +26,9 @@ interface ReverseExpenseDialogProps {
 
 export function ReverseExpenseDialog({
   open,
+  title = 'Estornar despesa',
+  entityLabel = 'despesa',
+  auditMessage = 'O lançamento permanecerá no histórico de auditoria e deixará de compor os totais financeiros.',
   description,
   amountLabel,
   onCancel,
@@ -58,17 +64,17 @@ export function ReverseExpenseDialog({
           <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
             <Undo2 className="h-5 w-5" />
           </div>
-          <DialogTitle>Estornar despesa</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             {description ? (
               <>
-                Você está estornando <strong>{description}</strong>
+                Você está estornando esta {entityLabel}: <strong>{description}</strong>
                 {amountLabel ? ` no valor de ${amountLabel}` : ''}.
               </>
             ) : (
-              'Confirme o estorno desta despesa.'
+              `Confirme o estorno desta ${entityLabel}.`
             )}{' '}
-            O lançamento permanecerá no histórico de auditoria e deixará de compor os totais financeiros.
+            {auditMessage}
           </DialogDescription>
         </DialogHeader>
 

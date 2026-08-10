@@ -166,7 +166,7 @@ class PrinterService extends EventEmitter {
       printer.println('CHAVE DE ACESSO');
       printer.bold(false);
       printer.alignLeft();
-      this.printWrappedChunks(printer, this.formatAccessKeyForPrint(nfce.chave), width <= 32 ? 22 : 28);
+      this.printWrappedChunks(printer, this.formatAccessKeyForPrint(nfce.chave), width);
     }
     if (nfce.qrCodeUrl) {
       printer.alignCenter();
@@ -180,7 +180,7 @@ class PrinterService extends EventEmitter {
       }
       printer.alignLeft();
       printer.println('Consulta pela chave:');
-      this.printWrappedChunks(printer, this.getNfceConsultaBaseUrl(nfce.qrCodeUrl), width <= 32 ? 22 : 28);
+      this.printWrappedChunks(printer, this.getNfceConsultaBaseUrl(nfce.qrCodeUrl), width);
     }
   }
 

@@ -1,33 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import {
-  Expand,
   LockKeyhole,
-  Printer,
-  Search,
   ShoppingBag,
-  Wifi,
-  WifiOff,
+  Utensils,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
 import type { SelectedVariationDetail } from '@/hooks/useSimpleVariations';
 import { useMenuData } from '@/hooks/useMenuData';
-import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import TotemCheckoutModal from '@/components/totem/TotemCheckoutModal';
 import TotemCheckoutBar from '@/components/totem/TotemCheckoutBar';
 import TotemIdleScreen from '@/components/totem/TotemIdleScreen';
 import TotemProductCard from '@/components/totem/TotemProductCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { PrinterService } from '@/utils/printerService';
 import MarketingPixels from '@/components/marketing/MarketingPixels';
 import { getSavedTotemRestaurantId, useTotemPwa } from '@/hooks/useTotemPwa';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useTotemTheme } from '@/hooks/useTotemTheme';
+import { supabase } from '@/integrations/supabase/client';
+import TotemFulfillmentDialog, { type TotemOrderType } from '@/components/totem/TotemFulfillmentDialog';
+import TotemUpsellModal, { type TotemUpsellRecommendation } from '@/components/totem/TotemUpsellModal';
+import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 
 interface Product {
   id: string;
@@ -49,9 +46,25 @@ interface Category {
   name: string;
   description?: string;
   display_order: number;
+  totem_image_url?: string;
   is_pizza?: boolean;
   pizza_half_price_mode?: 'highest' | 'split_halves';
 }
+
+type UpsellRule = {
+  id: string;
+  trigger_product_id: string | null;
+  suggested_product_id: string;
+  message: string | null;
+  placement: 'product' | 'checkout' | 'both';
+  discount_type: 'percentage' | 'fixed' | null;
+  discount_value: number | null;
+};
+
+type UpsellOffer = {
+  mode: 'product' | 'checkout';
+  recommendations: TotemUpsellRecommendation[];
+};
 
 export default function Totem() {
   const { userId } = useParams();
@@ -69,30 +82,27 @@ export default function Totem() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [started, setStarted] = useState(false);
   const [idleSecondsLeft, setIdleSecondsLeft] = useState<number | null>(null);
+  const [orderType, setOrderType] = useState<TotemOrderType | null>(null);
+  const [fulfillmentOpen, setFulfillmentOpen] = useState(false);
+  const [checkoutAfterFulfillment, setCheckoutAfterFulfillment] = useState(false);
+  const [upsellRules, setUpsellRules] = useState<UpsellRule[]>([]);
+  const [upsellOffer, setUpsellOffer] = useState<UpsellOffer | null>(null);
+  const [selectionContext, setSelectionContext] = useState<'normal' | 'product-upsell' | 'checkout-upsell'>('normal');
+  const [checkoutUpsellHandled, setCheckoutUpsellHandled] = useState(false);
 
   const { products, categories, profile, isLoading: menuLoading, error: menuError } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 60 });
-  const { canInstall, install, isInstalled, isOnline, isFullscreen, toggleFullscreen } = useTotemPwa(finalUserId);
+  useTotemPwa(finalUserId);
   const { settings: totemSettings, cssVariables } = useTotemTheme(finalUserId);
 
-  const categoryIds = useMemo(() => categories.map((category) => `category-${category.id}`), [categories]);
-  const { activeSection, registerSection } = useScrollSpy(categoryIds);
   const itemCount = getCartItemCount();
   const total = getCartTotal();
 
   useEffect(() => {
     clearCartRef.current = clearCart;
   }, [clearCart]);
-
-  useEffect(() => {
-    if (activeSection) {
-      const categoryId = activeSection.replace('category-', '');
-      setActiveCategory(categoryId);
-    }
-  }, [activeSection]);
 
   useEffect(() => {
     if (categories.length > 0 && !activeCategory) {
@@ -104,6 +114,21 @@ export default function Totem() {
     if (itemCount > 0) setStarted(true);
   }, [itemCount]);
 
+  useEffect(() => {
+    if (!finalUserId) return;
+    let cancelled = false;
+    const loadUpsells = async () => {
+      const { data, error } = await (supabase.from('upsell_rules') as any)
+        .select('id,trigger_product_id,suggested_product_id,message,placement,discount_type,discount_value')
+        .eq('user_id', finalUserId)
+        .eq('active', true)
+        .order('display_order', { ascending: true });
+      if (!cancelled && !error) setUpsellRules((data || []) as UpsellRule[]);
+    };
+    void loadUpsells();
+    return () => { cancelled = true; };
+  }, [finalUserId]);
+
   const featuredProducts = useMemo(() => {
     return (products as Product[])
       .filter((product) => product?.is_available && (product.is_highlight || Number(product.order_count || 0) > 0))
@@ -112,35 +137,35 @@ export default function Totem() {
   }, [products]);
 
   const filteredProductsByCategory = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
     const byCat: Record<string, Product[]> = {};
     for (const c of categories as Category[]) byCat[c.id] = [];
     for (const prod of products as Product[]) {
       if (!prod?.is_available) continue;
-      if (q) {
-        const hay = `${prod.name} ${prod.description}`.toLowerCase();
-        if (!hay.includes(q)) continue;
-      }
       if (!byCat[prod.category_id]) byCat[prod.category_id] = [];
       byCat[prod.category_id].push(prod);
     }
     return byCat;
-  }, [products, categories, searchQuery]);
+  }, [products, categories]);
 
-  const visibleCategoryCount = useMemo(() => {
-    return (categories as Category[]).filter((category) => (filteredProductsByCategory[category.id] || []).length > 0).length;
+  const visibleCategories = useMemo(() => {
+    return (categories as Category[]).filter((category) => (filteredProductsByCategory[category.id] || []).length > 0);
   }, [categories, filteredProductsByCategory]);
 
-  const scrollToCategory = (categoryId: string) => {
-    const element = document.getElementById(`category-${categoryId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const activeCategoryData = useMemo(() => visibleCategories.find((category) => category.id === activeCategory) || visibleCategories[0], [visibleCategories, activeCategory]);
+
+  useEffect(() => {
+    if (visibleCategories.length > 0 && !visibleCategories.some((category) => category.id === activeCategory)) {
+      setActiveCategory(visibleCategories[0].id);
     }
+  }, [visibleCategories, activeCategory]);
+
+  const scrollToCategory = (categoryId: string) => {
     setActiveCategory(categoryId);
     setStarted(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleProductClick = async (product: Product) => {
+  const handleProductClick = async (product: Product, context: typeof selectionContext = 'normal') => {
     if (!finalUserId) {
       toast({ title: 'Erro', description: 'Totem não configurado para este restaurante.', variant: 'destructive' });
       return;
@@ -151,22 +176,94 @@ export default function Totem() {
       // O modal ainda pode abrir sem adicionais quando a consulta falhar.
     }
     setStarted(true);
+    setSelectionContext(context);
     setSelectedProduct(product);
     setShowVariationModal(true);
   };
+
+  const buildRecommendations = useCallback((triggerProductIds: string[], mode: 'product' | 'checkout') => {
+    const productsById = new Map((products as Product[]).map((product) => [product.id, product]));
+    const cartProductIds = new Set(cart.map((item) => item.product.id));
+    const usedProducts = new Set<string>();
+    return upsellRules.flatMap((rule): TotemUpsellRecommendation[] => {
+      if (rule.placement !== mode && rule.placement !== 'both') return [];
+      if (rule.trigger_product_id && !triggerProductIds.includes(rule.trigger_product_id)) return [];
+      const original = productsById.get(rule.suggested_product_id);
+      if (!original?.is_available || cartProductIds.has(original.id) || usedProducts.has(original.id)) return [];
+      usedProducts.add(original.id);
+      const discount = Math.max(0, Number(rule.discount_value || 0));
+      const discountedPrice = rule.discount_type === 'percentage'
+        ? Math.max(0, Number(original.price) * (1 - Math.min(100, discount) / 100))
+        : rule.discount_type === 'fixed'
+          ? Math.max(0, Number(original.price) - discount)
+          : Number(original.price);
+      const offeredProduct = discountedPrice < Number(original.price)
+        ? { ...original, original_price: Number(original.price), price: Number(discountedPrice.toFixed(2)) }
+        : original;
+      return [{ ruleId: rule.id, message: rule.message, product: offeredProduct }];
+    }).slice(0, 8);
+  }, [products, cart, upsellRules]);
 
   const handleAddToCartFromModal = (product: Product, quantity: number, variations: string[], notes: string, variationPrice: number, optionDetails?: SelectedVariationDetail[]) => {
     addToCart(product, quantity, variations, notes, variationPrice, optionDetails);
     setShowVariationModal(false);
     setSelectedProduct(null);
+    if (selectionContext === 'checkout-upsell') {
+      setCheckoutUpsellHandled(true);
+      setShowCheckoutModal(true);
+    } else if (selectionContext === 'normal') {
+      const recommendations = buildRecommendations([product.id], 'product');
+      if (recommendations.length > 0) setUpsellOffer({ mode: 'product', recommendations });
+    }
+    setSelectionContext('normal');
+  };
+
+  const openCheckout = useCallback(() => {
+    if (!checkoutUpsellHandled) {
+      const recommendations = buildRecommendations(cart.map((item) => item.product.id), 'checkout');
+      if (recommendations.length > 0) {
+        setUpsellOffer({ mode: 'checkout', recommendations });
+        return;
+      }
+    }
+    setShowCheckoutModal(true);
+  }, [buildRecommendations, cart, checkoutUpsellHandled]);
+
+  const requestCheckout = () => {
+    if (!orderType) {
+      setCheckoutAfterFulfillment(true);
+      setFulfillmentOpen(true);
+      return;
+    }
+    openCheckout();
+  };
+
+  const selectFulfillment = (type: TotemOrderType) => {
+    setOrderType(type);
+    setFulfillmentOpen(false);
+    if (checkoutAfterFulfillment) {
+      setCheckoutAfterFulfillment(false);
+      window.setTimeout(openCheckout, 0);
+    }
+  };
+
+  const selectUpsell = (recommendation: TotemUpsellRecommendation) => {
+    const context = upsellOffer?.mode === 'checkout' ? 'checkout-upsell' : 'product-upsell';
+    setUpsellOffer(null);
+    void handleProductClick(recommendation.product as Product, context);
   };
 
   const handleNewSession = useCallback(() => {
     clearCartRef.current();
-    setSearchQuery('');
     setShowCheckoutModal(false);
     setShowVariationModal(false);
     setSelectedProduct(null);
+    setUpsellOffer(null);
+    setOrderType(null);
+    setFulfillmentOpen(false);
+    setCheckoutAfterFulfillment(false);
+    setCheckoutUpsellHandled(false);
+    setSelectionContext('normal');
     setIdleSecondsLeft(null);
     setStarted(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -183,30 +280,25 @@ export default function Totem() {
       lastInteraction = Date.now();
       setIdleSecondsLeft(null);
     };
-    const events: Array<keyof WindowEventMap> = ['pointerdown', 'touchstart', 'keydown'];
+    const timeoutSeconds = Math.min(60, Math.max(1, Number(totemSettings.idle_timeout_minutes || 3))) * 60;
+    const warningSeconds = Math.min(30, Math.max(10, Math.floor(timeoutSeconds / 3)));
+    const events: Array<keyof WindowEventMap> = ['pointerdown', 'touchstart', 'keydown', 'wheel', 'scroll'];
     events.forEach((eventName) => window.addEventListener(eventName, resetIdle, { passive: true }));
 
     const interval = window.setInterval(() => {
       const idleSeconds = Math.floor((Date.now() - lastInteraction) / 1000);
-      if (idleSeconds >= 180) {
+      if (idleSeconds >= timeoutSeconds) {
         handleNewSession();
         return;
       }
-      setIdleSecondsLeft(idleSeconds >= 150 ? 180 - idleSeconds : null);
+      setIdleSecondsLeft(itemCount > 0 && idleSeconds >= timeoutSeconds - warningSeconds ? timeoutSeconds - idleSeconds : null);
     }, 1000);
 
     return () => {
       window.clearInterval(interval);
       events.forEach((eventName) => window.removeEventListener(eventName, resetIdle));
     };
-  }, [started, handleNewSession]);
-
-  const handleInstall = async () => {
-    const outcome = await install();
-    if (outcome === 'unavailable') {
-      toast({ title: 'Instalar Totem', description: 'No Chrome ou Edge, abra o menu do navegador e escolha “Instalar Totem PopSystem”.' });
-    }
-  };
+  }, [started, handleNewSession, itemCount, totemSettings.idle_timeout_minutes]);
 
   if (!finalUserId) {
     return (
@@ -252,105 +344,70 @@ export default function Totem() {
           restaurantId={finalUserId}
           profile={profile}
           featuredProducts={featuredProducts}
-          isOnline={isOnline}
-          isFullscreen={isFullscreen}
-          isInstalled={isInstalled}
-          canInstall={canInstall}
           settings={totemSettings}
-          onStart={() => setStarted(true)}
-          onInstall={() => void handleInstall()}
-          onToggleFullscreen={() => void toggleFullscreen()}
+          onStart={() => {
+            setStarted(true);
+            setCheckoutAfterFulfillment(false);
+            setFulfillmentOpen(true);
+          }}
         />
       ) : null}
 
       <div className={started ? 'block' : 'hidden'}>
         <header className="sticky top-0 z-40 border-b border-stone-200 shadow-sm backdrop-blur" style={{ backgroundColor: 'color-mix(in srgb, var(--totem-surface) 95%, transparent)' }}>
-          <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 lg:px-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-3 lg:px-6">
+            <div className="flex items-center">
               <div className="flex items-center gap-3">
                 {profile?.logo_url ? <img src={profile.logo_url} alt="" className="h-14 w-14 rounded-xl border border-stone-200 bg-white object-contain p-1" /> : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#073a2d] text-white"><ShoppingBag className="h-7 w-7" /></div>}
                 <div>
                   <div className="text-2xl font-black leading-tight" style={{ color: 'var(--totem-secondary)' }}>{profile?.restaurant_name || 'Autoatendimento'}</div>
-                  <div className="text-sm font-semibold text-stone-500">Peça, pague e retire no balcão</div>
+                  <div className="text-sm font-semibold text-stone-500">Escolha seus produtos e finalize pelo Totem</div>
                 </div>
-              </div>
-
-              <div className="flex flex-1 items-center gap-3 lg:max-w-3xl">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar produto"
-                    className="h-14 rounded-lg border-stone-200 bg-stone-50 pl-12 text-lg font-semibold"
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  className="hidden h-14 rounded-lg border-stone-200 px-4 font-bold lg:inline-flex"
-                  onClick={async () => {
-                    const ok = await PrinterService.connectUsb();
-                    if (ok) toast({ title: 'Impressora conectada', description: 'Pronto para imprimir cupom.' });
-                    else toast({ title: 'Falha ao conectar', description: 'Tente novamente.', variant: 'destructive' });
-                  }}
-                >
-                  <Printer className="mr-2 h-5 w-5" />
-                  Impressora
-                </Button>
-                <div className={`hidden h-14 items-center gap-2 rounded-xl border px-4 text-sm font-bold xl:flex ${isOnline ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
-                  {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-                  {isOnline ? 'Online' : 'Offline'}
-                </div>
-                <Button variant="outline" size="icon" className="hidden h-14 w-14 rounded-xl lg:inline-flex" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Sair da tela cheia' : 'Abrir em tela cheia'}>
-                  <Expand className="h-5 w-5" />
-                </Button>
               </div>
             </div>
+            {orderType ? (
+              <button type="button" onClick={() => { setCheckoutAfterFulfillment(false); setFulfillmentOpen(true); }} className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-2 text-left shadow-sm">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-[#073a2d]">{orderType === 'dine_in' ? <Utensils className="h-5 w-5" /> : <ShoppingBag className="h-5 w-5" />}</span>
+                <span><span className="block text-xs font-bold text-stone-400">Seu pedido</span><span className="block font-black text-[#073a2d]">{orderType === 'dine_in' ? 'Comer aqui' : 'Para levar'}</span></span>
+                <span className="hidden text-xs font-bold text-orange-600 sm:block">Alterar</span>
+              </button>
+            ) : null}
+          </div>
+        </header>
 
-            <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-1">
-              {(categories as Category[]).map((category) => {
-                const selected = activeCategory === category.id;
+        <main className="totem-menu-main mx-auto flex max-w-[1600px] items-start pb-44">
+          <aside className="sticky top-[81px] h-[calc(100dvh-170px)] w-[112px] flex-none overflow-y-auto border-r border-stone-200 bg-white p-2 sm:w-[148px] sm:p-3 lg:w-[180px]">
+            <div className="space-y-2">
+              {visibleCategories.map((category) => {
+                const selected = activeCategoryData?.id === category.id;
+                const categoryImage = normalizeImageUrlForDisplay(category.totem_image_url || filteredProductsByCategory[category.id]?.find((product) => product.image_url)?.image_url);
                 return (
-                  <button
-                    key={category.id}
-                    type="button"
-                    onClick={() => scrollToCategory(category.id)}
-                    className={`h-12 shrink-0 rounded-lg border px-5 text-base font-extrabold transition ${selected ? 'shadow' : 'border-stone-200 hover:border-stone-300'}`}
-                    style={selected
-                      ? { borderColor: 'var(--totem-secondary)', backgroundColor: 'var(--totem-secondary)', color: 'var(--totem-button-text)' }
-                      : { backgroundColor: 'var(--totem-surface)', color: 'var(--totem-text)' }}
-                  >
-                    {category.name}
+                  <button key={category.id} type="button" onClick={() => scrollToCategory(category.id)} className={`w-full overflow-hidden rounded-2xl border-2 p-1.5 text-center transition ${selected ? 'shadow-md' : 'border-transparent hover:border-stone-200'}`} style={selected ? { borderColor: 'var(--totem-primary)', backgroundColor: 'color-mix(in srgb, var(--totem-primary) 8%, white)' } : undefined}>
+                    <span className="block aspect-square overflow-hidden rounded-xl bg-stone-100">{categoryImage ? <img src={categoryImage} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center"><ShoppingBag className="h-7 w-7 text-stone-300" /></span>}</span>
+                    <span className="mt-2 block line-clamp-2 text-xs font-black leading-tight sm:text-sm" style={{ color: selected ? 'var(--totem-primary)' : 'var(--totem-text)' }}>{category.name}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
-        </header>
+          </aside>
 
-        <main className="totem-menu-main mx-auto max-w-[1600px] px-4 py-6 pb-44 lg:px-6">
-          <section className="min-w-0 space-y-8">
+          <section className="min-w-0 flex-1 space-y-8 px-3 py-5 sm:px-5 lg:px-7">
             {menuLoading ? (
               <div className="rounded-lg border border-stone-200 p-8 text-lg font-bold" style={{ backgroundColor: 'var(--totem-surface)', color: 'var(--totem-text)' }}>
                 Carregando cardapio...
               </div>
-            ) : visibleCategoryCount === 0 ? (
+            ) : visibleCategories.length === 0 ? (
               <div className="rounded-lg border border-stone-200 p-8" style={{ backgroundColor: 'var(--totem-surface)', color: 'var(--totem-text)' }}>
                 <div className="text-2xl font-black">Nenhum produto encontrado</div>
-                <div className="mt-2 opacity-60">Tente buscar por outro nome.</div>
+                <div className="mt-2 opacity-60">Assim que o cardápio for publicado, os itens aparecerão aqui.</div>
               </div>
             ) : (
-              <div className="space-y-12">
-                {(categories as Category[]).map((category) => {
+              <div>
+                {activeCategoryData ? (() => {
+                  const category = activeCategoryData;
                   const items = filteredProductsByCategory[category.id] || [];
-                  if (items.length === 0) return null;
                   return (
-                    <section
-                      key={category.id}
-                      id={`category-${category.id}`}
-                      ref={(el) => registerSection(`category-${category.id}`, el)}
-                      className="scroll-mt-40"
-                    >
+                    <section key={category.id}>
                       <div className="mb-4 flex items-end justify-between gap-4">
                         <div>
                           <h2 className="text-3xl font-black" style={{ color: 'var(--totem-text)' }}>{category.name}</h2>
@@ -363,14 +420,14 @@ export default function Totem() {
                         </div>
                       </div>
 
-                      <div className="totem-product-grid grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="totem-product-grid grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                         {items.map((product: Product) => (
                           <TotemProductCard key={product.id} product={product} onSelect={handleProductClick} />
                         ))}
                       </div>
                     </section>
                   );
-                })}
+                })() : null}
               </div>
             )}
           </section>
@@ -380,7 +437,7 @@ export default function Totem() {
         <TotemCheckoutBar
           itemCount={itemCount}
           total={total}
-          onCheckout={() => setShowCheckoutModal(true)}
+          onCheckout={requestCheckout}
           onCancel={handleNewSession}
         />
       </div>
@@ -406,6 +463,25 @@ export default function Totem() {
         onUpdateQuantity={updateQuantity}
         onRemoveItem={removeFromCart}
         onClearCart={clearCart}
+        orderType={orderType || 'pickup'}
+        onNewSession={handleNewSession}
+      />
+
+      <TotemFulfillmentDialog open={fulfillmentOpen} onSelect={selectFulfillment} />
+
+      <TotemUpsellModal
+        open={Boolean(upsellOffer)}
+        mode={upsellOffer?.mode || 'product'}
+        recommendations={upsellOffer?.recommendations || []}
+        onSelect={selectUpsell}
+        onContinue={() => {
+          const mode = upsellOffer?.mode;
+          setUpsellOffer(null);
+          if (mode === 'checkout') {
+            setCheckoutUpsellHandled(true);
+            setShowCheckoutModal(true);
+          }
+        }}
       />
 
       <Dialog open={idleSecondsLeft !== null}>

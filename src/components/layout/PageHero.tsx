@@ -11,7 +11,7 @@ interface PageHeroProps {
 
 export function PageHero({ title, description, icon: Icon, eyebrow, actions }: PageHeroProps) {
   return (
-    <section className="overflow-hidden rounded-[28px] border-0 bg-gradient-to-br from-[#003223] via-[#07573d] to-[#FF6400] text-white shadow-[0_26px_60px_-34px_rgba(0,50,35,0.55)]">
+    <section className="overflow-hidden rounded-[28px] border-0 bg-gradient-to-br from-[#003223] via-[#07573d] to-[#087A55] text-white shadow-[0_26px_60px_-34px_rgba(0,50,35,0.55)]">
       <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/15 shadow-sm backdrop-blur">

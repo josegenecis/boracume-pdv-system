@@ -98,21 +98,6 @@ const configureEvolutionWebhook = async (baseUrl: string, globalApiKey: string, 
         headers: { 'Content-Type': 'application/json', apikey: globalApiKey },
         body: JSON.stringify({ enabled: true, url: webhookUrl, webhookUrl, byEvents: false, base64: true, events })
       }
-    },
-    {
-      label: 'instance-connect-legacy',
-      url: `${baseUrl}/instance/connect`,
-      init: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: instanceToken },
-        body: JSON.stringify({
-          webhookUrl,
-          subscribe: ['ALL'],
-          rabbitmqEnable: '',
-          websocketEnable: '',
-          natsEnable: ''
-        })
-      }
     }
   ];
 
@@ -287,30 +272,32 @@ serve(async (req) => {
       currentInstance = findCurrentInstance(refreshedInstancesResult.data, instanceName, instanceToken);
     }
 
-    let connectResult = await safeFetchJson(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': globalApiKey
-      }
-    });
+    let connectResult = isInstanceConnected(currentInstance)
+      ? { ok: true, response: new Response(null, { status: 204 }), data: { alreadyConnected: true } }
+      : await safeFetchJson(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': globalApiKey
+        }
+      });
 
-    if (!connectResult.response?.ok) {
+    // EvoGo/Evolution legada usa o token da instancia e POST sem o nome na URL.
+    // Mantemos como fallback para instalacoes que ainda nao suportam a rota moderna.
+    if (!isInstanceConnected(currentInstance) && !connectResult.response?.ok) {
       connectResult = await safeFetchJson(`${baseUrl}/instance/connect`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': instanceToken
-      },
-      body: JSON.stringify({
-        webhookUrl: buildWebhookUrl(),
-        subscribe: [
-          "ALL"
-        ],
-        rabbitmqEnable: "",
-        websocketEnable: "",
-        natsEnable: ""
-      })
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': instanceToken
+        },
+        body: JSON.stringify({
+          webhookUrl: buildWebhookUrl(),
+          subscribe: ['ALL'],
+          rabbitmqEnable: '',
+          websocketEnable: '',
+          natsEnable: ''
+        })
       });
     }
 

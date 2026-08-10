@@ -65,21 +65,6 @@ const configureEvolutionWebhook = async (baseUrl: string, globalApiKey: string, 
         headers: { 'Content-Type': 'application/json', apikey: globalApiKey },
         body: JSON.stringify({ enabled: true, url: webhookUrl, webhookUrl, byEvents: false, base64: true, events })
       }
-    },
-    {
-      label: 'instance-connect-legacy',
-      url: `${baseUrl}/instance/connect`,
-      init: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: instanceToken },
-        body: JSON.stringify({
-          webhookUrl,
-          subscribe: ['ALL'],
-          rabbitmqEnable: '',
-          websocketEnable: '',
-          natsEnable: ''
-        })
-      }
     }
   ];
 

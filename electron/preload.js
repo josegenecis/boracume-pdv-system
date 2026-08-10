@@ -38,6 +38,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('oauth-callback', listener);
     return () => ipcRenderer.removeListener('oauth-callback', listener);
   },
+  setCashSessionStatus: (payload) => ipcRenderer.send('cash-session-status', payload),
+  onNavigateToCashClose: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('navigate-to-cash-close', listener);
+    return () => ipcRenderer.removeListener('navigate-to-cash-close', listener);
+  },
   
   // Platform detection
   isElectron: true,

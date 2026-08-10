@@ -10,6 +10,7 @@ export interface TotemThemeSettings {
   idle_overlay_color: string;
   cta_text: string;
   banner_interval_seconds: number;
+  idle_timeout_minutes: number;
 }
 
 export interface TotemBanner {
@@ -18,6 +19,7 @@ export interface TotemBanner {
   title: string;
   description: string | null;
   media_url: string;
+  media_type: 'image' | 'video';
   orientation: 'both' | 'portrait' | 'landscape';
   active: boolean;
   display_order: number;
@@ -39,4 +41,5 @@ export const DEFAULT_TOTEM_THEME: TotemThemeSettings = {
   idle_overlay_color: '#05271F',
   cta_text: 'Toque para pedir',
   banner_interval_seconds: 7,
+  idle_timeout_minutes: 3,
 };

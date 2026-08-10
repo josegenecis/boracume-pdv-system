@@ -33,20 +33,33 @@ interface NFCeData {
     | 'download_xml'
     | 'testar_conexao'
     | 'validar_config'
+    | 'politica_emissao'
     | 'diagnosticar_cadastro_email';
   order_id?: string;
   cupom_id?: string;
+  model_code?: '55' | '65';
   consumer_data?: {
     nome?: string;
     cpf_cnpj?: string;
     email?: string;
+    state_registration?: string;
+    state_registration_indicator?: number;
+    address?: string;
+    address_number?: string;
+    address_complement?: string;
+    neighborhood?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    city_code?: string;
+    final_consumer?: boolean;
   };
   observacoes?: string;
   motivo?: string;
   _storeId?: string;
 }
 
-serve(async (req) => {
+export async function handleRequest(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
@@ -86,6 +99,8 @@ serve(async (req) => {
         return await testarConexaoSefaz(supabase, storeUserId);
       case 'validar_config':
         return await validarConfiguracaoFiscal(supabase, storeUserId);
+      case 'politica_emissao':
+        return await obterPoliticaEmissao(supabase, storeUserId, requestData.model_code);
       default:
         throw new Error('Operacao nao suportada');
     }
@@ -93,11 +108,63 @@ serve(async (req) => {
     console.error('Error in nfce-operations:', error);
     return json({ error: getErrorMessage(error) || 'Erro interno do servidor' }, 400);
   }
-});
+}
+
+async function obterPoliticaEmissao(supabase: any, userId: string, requestedModel?: '55' | '65') {
+  const modelCode = requestedModel === '55' ? '55' : '65';
+  const { data: model, error: modelError } = await supabase
+    .from('fiscal_document_models')
+    .select('enabled,automatic_emission,model_code,environment')
+    .eq('user_id', userId)
+    .eq('model_code', modelCode)
+    .maybeSingle();
+
+  if (modelError) throw new Error(`Erro ao consultar a política fiscal: ${modelError.message}`);
+
+  if (model) {
+    return json({
+      success: true,
+      enabled: model.enabled === true && (modelCode === '55' || model.automatic_emission === true),
+      model_code: modelCode,
+      environment: model.environment || null,
+      source: 'fiscal_document_models',
+    });
+  }
+
+  if (modelCode === '55') {
+    return json({ success: true, enabled: false, model_code: '55', environment: null, source: 'not_configured' });
+  }
+  // Compatibilidade com contas que ainda não possuem a linha do modelo 65.
+  const { data: legacy, error: legacyError } = await supabase
+    .from('fiscal_settings')
+    .select('ativo,ambiente')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (legacyError) throw new Error(`Erro ao consultar a configuração fiscal: ${legacyError.message}`);
+
+  return json({
+    success: true,
+    enabled: legacy?.ativo === true,
+    model_code: '65',
+    environment: legacy?.ambiente || null,
+    source: legacy ? 'fiscal_settings' : 'not_configured',
+  });
+}
+
+if (import.meta.main) serve(handleRequest);
 
 async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
-  const fiscalSettings = await loadFiscalSettings(supabase, userId, true);
-  validateFiscalSettingsForEmission(fiscalSettings);
+  const modelCode: '55' | '65' = data.model_code === '55' ? '55' : '65';
+  const fiscalSettings = await loadFiscalSettings(supabase, userId, modelCode === '65');
+  const modelSettings = await loadFiscalModel(supabase, userId, modelCode);
+  if (!modelSettings?.enabled) throw new Error(`${modelCode === '55' ? 'NF-e modelo 55' : 'NFC-e modelo 65'} não está habilitada nas Configurações fiscais`);
+  fiscalSettings.ambiente = modelSettings.environment;
+  fiscalSettings.nfce_serie = modelSettings.series;
+  fiscalSettings.nfce_numero_atual = modelSettings.next_number;
+  fiscalSettings.operation_nature = modelSettings.operation_nature || 'Venda de mercadoria';
+  validateFiscalSettingsForEmission(fiscalSettings, modelCode);
+  if (modelCode === '55') validateNFeRecipient(data.consumer_data);
   const { certInfo, sefazClient } = loadSefazClient(fiscalSettings);
 
   try {
@@ -119,16 +186,16 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
     if (productIds.length > 0) {
       const { data: productFiscalRows, error: productFiscalError } = await supabase
         .from('products')
-        .select('id,fiscal_ncm,fiscal_cfop,fiscal_csosn,fiscal_cst_pis,fiscal_cst_cofins,fiscal_origem,fiscal_cest,fiscal_beneficio,fiscal_observacao')
+        .select('id,fiscal_ncm,fiscal_cfop,fiscal_csosn,fiscal_cst_pis,fiscal_cst_cofins,fiscal_origem,fiscal_cest,fiscal_beneficio,fiscal_observacao,fiscal_ibs_cbs_cst,fiscal_cclass_trib,fiscal_reducao_ibs,fiscal_reducao_cbs')
         .in('id', productIds)
         .eq('user_id', userId);
       if (productFiscalError) throw new Error(`Erro ao carregar tributacao dos produtos: ${productFiscalError.message}`);
       for (const row of productFiscalRows || []) productFiscalById.set(String(row.id), row);
     }
 
-    const numeroNFCe = await getNextNFCeNumber(supabase, userId, fiscalSettings.nfce_serie);
+    const numeroNFCe = await getNextFiscalDocumentNumber(supabase, userId, modelCode);
     const dataEmissao = new Date();
-    const chaveAcesso = await generateAccessKey(supabase, fiscalSettings, numeroNFCe, dataEmissao);
+    const chaveAcesso = await generateAccessKey(supabase, fiscalSettings, numeroNFCe, dataEmissao, modelCode);
     const fiscalItems = buildFiscalItems(orderItems, fiscalSettings, productFiscalById);
     validateFiscalItemsForEmission(fiscalItems, fiscalSettings);
     const deliveryFee = money(order.delivery_fee || 0);
@@ -150,6 +217,7 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
         valor_tributos: valorTributos,
         consumidor_nome: data.consumer_data?.nome || null,
         consumidor_cpf_cnpj: onlyDigits(data.consumer_data?.cpf_cnpj) || null,
+        model_code: modelCode,
         status: 'pendente',
         contingencia: false,
         data_hora_emissao: dataEmissao.toISOString(),
@@ -175,20 +243,21 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
       valorDesconto,
       valorTotal,
       valorTributos,
+      modelCode,
     });
 
     const transmissionResult = await sefazClient.enviarNFCe(
       xmlContent,
       fiscalSettings.endereco_uf,
       fiscalSettings.ambiente as Ambiente,
-      {
+      modelCode === '65' ? {
         chaveAcesso,
         dataEmissao: cupom.data_hora_emissao,
         valorTotal,
         cpfCnpjConsumidor: data.consumer_data?.cpf_cnpj,
         cscId: fiscalSettings.csc_id,
         cscToken: fiscalSettings.csc_token,
-      }
+      } : undefined
     );
 
     const authorized = transmissionResult.success && ['100', '150'].includes(transmissionResult.cStat);
@@ -204,6 +273,16 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
       updateData.protocolo_autorizacao = transmissionResult.protocolo;
       updateData.data_hora_autorizacao = new Date().toISOString();
       updateData.xml_autorizado = transmissionResult.xmlRetorno;
+      try {
+        updateData.xml_processado = buildProcessedNFeXml(
+          transmissionResult.xmlEnviado || xmlContent,
+          transmissionResult.xmlRetorno,
+        );
+      } catch (processedXmlError) {
+        // Nunca perde uma autorizacao valida por falha de composicao local.
+        // O download tentara reconstruir novamente usando os XMLs preservados.
+        console.error('Falha ao montar nfeProc apos autorizacao:', processedXmlError);
+      }
       updateData.qr_code_url = qrCodeUrl;
     }
 
@@ -226,6 +305,7 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
       serie: fiscalSettings.nfce_serie,
       chave_acesso: chaveAcesso,
       qr_code_url: qrCodeUrl,
+      model_code: modelCode,
       xml_content: transmissionResult.xmlEnviado || xmlContent,
       ambiente: fiscalSettings.ambiente,
       status: updateData.status,
@@ -485,15 +565,62 @@ async function findAuthUserByEmail(supabase: any, email: string) {
 async function downloadXML(supabase: any, userId: string, cupomId: string) {
   const { data: cupom, error } = await supabase
     .from('nfce_cupons')
-    .select('xml_autorizado, xml_content, numero')
+    .select('xml_processado, xml_autorizado, xml_content, numero, status')
     .eq('id', cupomId)
     .eq('user_id', userId)
     .single();
   if (error || !cupom) throw new Error('Cupom nao encontrado');
 
-  const xml = cupom.xml_autorizado || cupom.xml_content;
-  if (!xml) throw new Error('XML nao disponivel para este cupom');
-  return json({ xml, numero: cupom.numero });
+  if (cupom.status !== 'autorizado') throw new Error('O XML fiscal processado so existe para documentos autorizados');
+
+  let xml = String(cupom.xml_processado || '').trim();
+  if (!xml) {
+    xml = buildProcessedNFeXml(cupom.xml_content, cupom.xml_autorizado);
+    const { error: updateError } = await supabase
+      .from('nfce_cupons')
+      .update({ xml_processado: xml, updated_at: new Date().toISOString() })
+      .eq('id', cupomId)
+      .eq('user_id', userId);
+    if (updateError) throw new Error(`Nao foi possivel armazenar o XML processado: ${updateError.message}`);
+  }
+  return json({ xml, numero: cupom.numero, document_type: 'nfeProc' });
+}
+
+function buildProcessedNFeXml(xmlNFe: unknown, xmlSefazResponse: unknown): string {
+  const sent = String(xmlNFe || '').trim();
+  const response = String(xmlSefazResponse || '').trim();
+  if (!sent || !response) throw new Error('XML enviado ou protocolo de autorizacao nao foi encontrado');
+
+  if (/<nfeProc\b/i.test(sent)) return ensureXmlDeclaration(sent);
+
+  const nfeMatch = sent.match(/<(?:\w+:)?NFe\b[^>]*>[\s\S]*?<\/(?:\w+:)?NFe>/i);
+  const protocolMatch = response.match(/<(?:\w+:)?protNFe\b[^>]*>[\s\S]*?<\/(?:\w+:)?protNFe>/i);
+  if (!nfeMatch) throw new Error('O XML assinado da nota nao foi encontrado');
+  if (!protocolMatch) throw new Error('O protocolo de autorizacao protNFe nao foi encontrado na resposta da Sefaz');
+
+  const nfe = removeNamespacePrefix(nfeMatch[0], 'NFe');
+  const protocol = normalizeProtocolFragment(protocolMatch[0]);
+  return `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">${stripXmlDeclaration(nfe)}${stripXmlDeclaration(protocol)}</nfeProc>`;
+}
+
+function removeNamespacePrefix(xml: string, elementName: string): string {
+  return xml
+    .replace(new RegExp(`<\\w+:${elementName}\\b`, 'gi'), `<${elementName}`)
+    .replace(new RegExp(`</\\w+:${elementName}>`, 'gi'), `</${elementName}>`);
+}
+
+function normalizeProtocolFragment(xml: string): string {
+  return xml
+    .replace(/(<\/?)[A-Za-z_][\w.-]*:/g, '$1')
+    .replace(/\s+xmlns:[A-Za-z_][\w.-]*=("[^"]*"|'[^']*')/g, '');
+}
+
+function stripXmlDeclaration(xml: string): string {
+  return String(xml || '').replace(/^\s*<\?xml[^>]*\?>\s*/i, '').trim();
+}
+
+function ensureXmlDeclaration(xml: string): string {
+  return /^\s*<\?xml/i.test(xml) ? xml : `<?xml version="1.0" encoding="UTF-8"?>${xml}`;
 }
 
 async function loadFiscalSettings(supabase: any, userId: string, activeOnly: boolean) {
@@ -502,6 +629,28 @@ async function loadFiscalSettings(supabase: any, userId: string, activeOnly: boo
   const { data, error } = await query.single();
   if (error || !data) throw new Error('Configuracoes fiscais nao encontradas ou inativas');
   return data;
+}
+
+async function loadFiscalModel(supabase: any, userId: string, modelCode: '55' | '65') {
+  const { data, error } = await supabase.from('fiscal_document_models').select('*')
+    .eq('user_id', userId).eq('model_code', modelCode).maybeSingle();
+  if (error) throw new Error(`Erro ao carregar configuração do modelo ${modelCode}: ${error.message}`);
+  return data;
+}
+
+function validateNFeRecipient(consumerData?: NFCeData['consumer_data']) {
+  const doc = onlyDigits(consumerData?.cpf_cnpj);
+  const missing: string[] = [];
+  if (!String(consumerData?.nome || '').trim()) missing.push('nome/razão social');
+  if (![11, 14].includes(doc.length)) missing.push('CPF/CNPJ válido');
+  if (!String(consumerData?.address || '').trim()) missing.push('logradouro');
+  if (!String(consumerData?.address_number || '').trim()) missing.push('número');
+  if (!String(consumerData?.neighborhood || '').trim()) missing.push('bairro');
+  if (!String(consumerData?.city || '').trim()) missing.push('município');
+  if (onlyDigits(consumerData?.city_code).length !== 7) missing.push('código IBGE do município');
+  if (!/^[A-Z]{2}$/.test(String(consumerData?.state || '').toUpperCase())) missing.push('UF');
+  if (onlyDigits(consumerData?.postal_code).length !== 8) missing.push('CEP');
+  if (missing.length) throw new Error(`Destinatário incompleto para NF-e modelo 55: ${missing.join(', ')}`);
 }
 
 function loadSefazClient(fiscalSettings: any) {
@@ -514,14 +663,14 @@ function loadSefazClient(fiscalSettings: any) {
   return { certInfo, sefazClient: new SefazClient(certInfo) };
 }
 
-function validateFiscalSettingsForEmission(settings: any) {
-  const readiness = buildFiscalReadiness(settings);
+function validateFiscalSettingsForEmission(settings: any, modelCode: '55' | '65' = '65') {
+  const readiness = buildFiscalReadiness(settings, modelCode);
   if (readiness.errors.length) {
     throw new Error(`Configuracao fiscal incompleta: ${readiness.errors.join('; ')}`);
   }
 }
 
-function buildFiscalReadiness(settings: any) {
+function buildFiscalReadiness(settings: any, modelCode: '55' | '65' = '65') {
   const errors: string[] = [];
   const warnings: string[] = [];
   const requiredFields = [
@@ -562,7 +711,7 @@ function buildFiscalReadiness(settings: any) {
       getSefazEndpoint(uf, ambiente, 'retAutorizacao');
       getSefazEndpoint(uf, ambiente, 'consulta');
       getSefazEndpoint(uf, ambiente, 'evento');
-      getQRCodeBaseUrl(uf, ambiente);
+      if (modelCode === '65') getQRCodeBaseUrl(uf, ambiente);
     } catch (error) {
       errors.push(getErrorMessage(error));
     }
@@ -575,7 +724,7 @@ function buildFiscalReadiness(settings: any) {
   const nextNumber = Number(settings.nfce_numero_atual);
   if (!Number.isInteger(nextNumber) || nextNumber < 1) errors.push('Proximo numero da NFC-e deve ser maior que zero');
   if (!String(settings.ambiente || '').match(/^(homologacao|producao)$/)) errors.push('Ambiente fiscal invalido');
-  if (!settings.csc_id || !settings.csc_token) {
+  if (modelCode === '65' && (!settings.csc_id || !settings.csc_token)) {
     warnings.push('CSC não informado: o emissor usará QR Code v3 online, que dispensa CSC conforme NT 2025.001.');
   }
   if (!settings.certificado_a1_base64 || !settings.certificado_senha) errors.push('Certificado A1 e senha sao obrigatorios');
@@ -586,13 +735,13 @@ function buildFiscalReadiness(settings: any) {
   return { errors, warnings };
 }
 
-async function getNextNFCeNumber(supabase: any, userId: string, serie: string): Promise<number> {
-  const { data, error } = await supabase.rpc('get_next_nfce_number', { p_user_id: userId, p_serie: serie });
-  if (error) throw new Error(`Erro ao gerar numero da NFC-e: ${error.message}`);
+async function getNextFiscalDocumentNumber(supabase: any, userId: string, modelCode: '55' | '65'): Promise<number> {
+  const { data, error } = await supabase.rpc('get_next_fiscal_document_number', { p_user_id: userId, p_model_code: modelCode });
+  if (error) throw new Error(`Erro ao gerar número do documento modelo ${modelCode}: ${error.message}`);
   return Number(data);
 }
 
-async function generateAccessKey(supabase: any, fiscalSettings: any, numero: number, dataEmissao: Date): Promise<string> {
+async function generateAccessKey(supabase: any, fiscalSettings: any, numero: number, dataEmissao: Date, modelCode: '55' | '65'): Promise<string> {
   const parts = getNfeDateParts(dataEmissao, fiscalSettings.endereco_uf);
   const aamm = `${parts.year.slice(-2)}${parts.month}`;
   const codigoNumerico = crypto.getRandomValues(new Uint32Array(1))[0].toString().slice(0, 8).padStart(8, '0');
@@ -600,7 +749,7 @@ async function generateAccessKey(supabase: any, fiscalSettings: any, numero: num
     p_uf: getCodigoUF(fiscalSettings.endereco_uf),
     p_aamm: aamm,
     p_cnpj: onlyDigits(fiscalSettings.cnpj),
-    p_modelo: '65',
+    p_modelo: modelCode,
     p_serie: String(fiscalSettings.nfce_serie),
     p_numero: String(numero),
     p_tipo_emissao: '1',
@@ -623,13 +772,26 @@ function normalizeOrderItems(rawItems: unknown): any[] {
   return [];
 }
 
-function buildFiscalItems(orderItems: any[], settings: any, productFiscalById: Map<string, any> = new Map()) {
+export function buildFiscalItems(orderItems: any[], settings: any, productFiscalById: Map<string, any> = new Map()) {
   return orderItems.map((item, index) => {
     const productFiscal = item.product_id ? productFiscalById.get(String(item.product_id)) || {} : {};
     const quantity = Math.max(Number(item.quantity || 1), 0.0001);
     const unitPrice = money(item.price || item.valor_unitario || 0);
     const total = money(item.subtotal ?? unitPrice * quantity);
     const ncm = String(item.ncm || item.fiscal_ncm || productFiscal.fiscal_ncm || settings.ncm_padrao || '21069090').replace(/\D/g, '').padStart(8, '0').slice(0, 8);
+    const cstIbsCbs = onlyDigits(String(item.fiscal_ibs_cbs_cst || productFiscal.fiscal_ibs_cbs_cst || '000')).padStart(3, '0').slice(0, 3);
+    const cclassTrib = onlyDigits(String(item.fiscal_cclass_trib || productFiscal.fiscal_cclass_trib || '000001')).padStart(6, '0').slice(0, 6);
+    const reducaoIbs = percentage(item.fiscal_reducao_ibs ?? productFiscal.fiscal_reducao_ibs ?? 0);
+    const reducaoCbs = percentage(item.fiscal_reducao_cbs ?? productFiscal.fiscal_reducao_cbs ?? 0);
+    const aliquotaIbsUf = percentage(settings.rtc_aliquota_ibs_uf ?? 0.1);
+    const aliquotaIbsMun = percentage(settings.rtc_aliquota_ibs_mun ?? 0);
+    const aliquotaCbs = percentage(settings.rtc_aliquota_cbs ?? 0.9);
+    const baseIbsCbs = money(Math.max(0, total - money(item.discount || 0)));
+    const aliquotaEfetivaIbsUf = effectiveRate(aliquotaIbsUf, reducaoIbs);
+    const aliquotaEfetivaIbsMun = effectiveRate(aliquotaIbsMun, reducaoIbs);
+    const aliquotaEfetivaCbs = effectiveRate(aliquotaCbs, reducaoCbs);
+    const valorIbsUf = money(baseIbsCbs * aliquotaEfetivaIbsUf / 100);
+    const valorIbsMun = money(baseIbsCbs * aliquotaEfetivaIbsMun / 100);
     return {
       product_id: item.product_id || null,
       codigo_produto: sanitizeCode(item.sku || item.codigo_produto || item.product_id || String(index + 1).padStart(6, '0')),
@@ -654,8 +816,30 @@ function buildFiscalItems(orderItems: any[], settings: any, productFiscalById: M
       cst_cofins: String(item.cst_cofins || item.fiscal_cst_cofins || productFiscal.fiscal_cst_cofins || settings.cst_cofins_padrao || '07'),
       aliquota_cofins: Number(item.aliquota_cofins || 0),
       valor_cofins: Number(item.valor_cofins || 0),
+      cst_ibs_cbs: cstIbsCbs,
+      cclass_trib: cclassTrib,
+      aliquota_ibs_uf: aliquotaIbsUf,
+      aliquota_ibs_mun: aliquotaIbsMun,
+      aliquota_cbs: aliquotaCbs,
+      reducao_ibs: reducaoIbs,
+      reducao_cbs: reducaoCbs,
+      valor_base_ibs_cbs: baseIbsCbs,
+      valor_ibs_uf: valorIbsUf,
+      valor_ibs_mun: valorIbsMun,
+      valor_ibs: money(valorIbsUf + valorIbsMun),
+      valor_cbs: money(baseIbsCbs * aliquotaEfetivaCbs / 100),
     };
   });
+}
+
+function percentage(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(100, Math.max(0, parsed));
+}
+
+function effectiveRate(nominalRate: number, reduction: number): number {
+  return Number((nominalRate * (1 - percentage(reduction) / 100)).toFixed(4));
 }
 
 function normalizeTaxCst(value: string, fallback = '07') {
@@ -702,6 +886,24 @@ function buildIcmsXml(item: any) {
   throw new Error(`CSOSN ${csosn || '(vazio)'} ainda não está homologado no motor fiscal. Revise a tributação do produto.`);
 }
 
+function buildIbsCbsXml(item: any) {
+  const cst = onlyDigits(String(item.cst_ibs_cbs || '')).padStart(3, '0').slice(0, 3);
+  const cclassTrib = onlyDigits(String(item.cclass_trib || '')).padStart(6, '0').slice(0, 6);
+  const reductionXml = (reduction: number, effective: number) => cst === '200'
+    ? `<gRed><pRedAliq>${fixed4(reduction)}</pRedAliq><pAliqEfet>${fixed4(effective)}</pAliqEfet></gRed>`
+    : '';
+  const effectiveIbsUf = effectiveRate(Number(item.aliquota_ibs_uf || 0), Number(item.reducao_ibs || 0));
+  const effectiveIbsMun = effectiveRate(Number(item.aliquota_ibs_mun || 0), Number(item.reducao_ibs || 0));
+  const effectiveCbs = effectiveRate(Number(item.aliquota_cbs || 0), Number(item.reducao_cbs || 0));
+
+  return `<IBSCBS><CST>${cst}</CST><cClassTrib>${cclassTrib}</cClassTrib><gIBSCBS><vBC>${fixed2(item.valor_base_ibs_cbs)}</vBC><gIBSUF><pIBSUF>${fixed4(item.aliquota_ibs_uf)}</pIBSUF>${reductionXml(item.reducao_ibs, effectiveIbsUf)}<vIBSUF>${fixed2(item.valor_ibs_uf)}</vIBSUF></gIBSUF><gIBSMun><pIBSMun>${fixed4(item.aliquota_ibs_mun)}</pIBSMun>${reductionXml(item.reducao_ibs, effectiveIbsMun)}<vIBSMun>${fixed2(item.valor_ibs_mun)}</vIBSMun></gIBSMun><vIBS>${fixed2(item.valor_ibs)}</vIBS><gCBS><pCBS>${fixed4(item.aliquota_cbs)}</pCBS>${reductionXml(item.reducao_cbs, effectiveCbs)}<vCBS>${fixed2(item.valor_cbs)}</vCBS></gCBS></gIBSCBS></IBSCBS>`;
+}
+
+function buildIbsCbsTotalsXml(items: any[]) {
+  const sum = (field: string) => money(items.reduce((total, item) => total + Number(item[field] || 0), 0));
+  return `<IBSCBSTot><vBCIBSCBS>${fixed2(sum('valor_base_ibs_cbs'))}</vBCIBSCBS><gIBS><gIBSUF><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vIBSUF>${fixed2(sum('valor_ibs_uf'))}</vIBSUF></gIBSUF><gIBSMun><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vIBSMun>${fixed2(sum('valor_ibs_mun'))}</vIBSMun></gIBSMun><vIBS>${fixed2(sum('valor_ibs'))}</vIBS><vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus></gIBS><gCBS><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vCBS>${fixed2(sum('valor_cbs'))}</vCBS><vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus></gCBS></IBSCBSTot>`;
+}
+
 function validateFiscalItemsForEmission(items: any[], settings: any) {
   const crt = Number(settings.regime_tributario || 0);
   if (crt !== 1) {
@@ -720,11 +922,21 @@ function validateFiscalItemsForEmission(items: any[], settings: any) {
     if (!/^\d{2}$/.test(String(item.cst_pis || ''))) errors.push(`${label}: CST PIS deve ter 2 dígitos`);
     if (!/^\d{2}$/.test(String(item.cst_cofins || ''))) errors.push(`${label}: CST COFINS deve ter 2 dígitos`);
     if (item.cest && !/^\d{7}$/.test(String(item.cest))) errors.push(`${label}: CEST deve ter 7 dígitos`);
+    if (!/^(000|200)$/.test(String(item.cst_ibs_cbs || ''))) {
+      errors.push(`${label}: CST IBS/CBS ${item.cst_ibs_cbs || '(vazio)'} ainda não homologado pelo motor fiscal`);
+    }
+    if (!/^\d{6}$/.test(String(item.cclass_trib || ''))) errors.push(`${label}: cClassTrib deve ter 6 dígitos`);
+    if (String(item.cclass_trib || '').slice(0, 3) !== String(item.cst_ibs_cbs || '')) {
+      errors.push(`${label}: os 3 primeiros dígitos do cClassTrib devem corresponder ao CST IBS/CBS`);
+    }
+    if (item.cst_ibs_cbs === '000' && (Number(item.reducao_ibs) !== 0 || Number(item.reducao_cbs) !== 0)) {
+      errors.push(`${label}: CST 000 não permite redução de alíquota`);
+    }
   }
   if (errors.length) throw new Error(`Cadastro fiscal dos produtos incompleto: ${errors.slice(0, 5).join('; ')}`);
 }
 
-function generateNFCeXML(input: {
+export function generateNFCeXML(input: {
   fiscalSettings: any;
   cupom: any;
   order: any;
@@ -737,6 +949,7 @@ function generateNFCeXML(input: {
   valorDesconto: number;
   valorTotal: number;
   valorTributos: number;
+  modelCode?: '55' | '65';
 }): string {
   const {
     fiscalSettings,
@@ -751,6 +964,7 @@ function generateNFCeXML(input: {
     valorDesconto,
     valorTotal,
     valorTributos,
+    modelCode = '65',
   } = input;
   const isHomologacao = fiscalSettings.ambiente !== 'producao';
   const dhEmi = formatNfeDate(new Date(cupom.data_hora_emissao), fiscalSettings.endereco_uf);
@@ -763,15 +977,17 @@ function generateNFCeXML(input: {
     const cestXml = item.cest ? `<CEST>${escapeXml(item.cest)}</CEST>` : '';
     const benefitXml = item.cbenef ? `<cBenef>${escapeXml(item.cbenef)}</cBenef>` : '';
     const additionalXml = item.informacoes_adicionais ? `<infAdProd>${escapeXml(item.informacoes_adicionais)}</infAdProd>` : '';
-    return `<det nItem="${index + 1}"><prod><cProd>${escapeXml(item.codigo_produto)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${escapeXml(productName)}</xProd><NCM>${item.ncm}</NCM>${cestXml}${benefitXml}<CFOP>${item.cfop}</CFOP><uCom>${escapeXml(item.unidade)}</uCom><qCom>${fixed4(item.quantidade)}</qCom><vUnCom>${fixed4(item.valor_unitario)}</vUnCom><vProd>${fixed2(item.valor_total)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>${escapeXml(item.unidade)}</uTrib><qTrib>${fixed4(item.quantidade)}</qTrib><vUnTrib>${fixed4(item.valor_unitario)}</vUnTrib><indTot>1</indTot></prod><imposto><vTotTrib>${fixed2(item.valor_total * 0.0765)}</vTotTrib>${buildIcmsXml(item)}${buildPisXml(item)}${buildCofinsXml(item)}</imposto>${additionalXml}</det>`;
+    return `<det nItem="${index + 1}"><prod><cProd>${escapeXml(item.codigo_produto)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${escapeXml(productName)}</xProd><NCM>${item.ncm}</NCM>${cestXml}${benefitXml}<CFOP>${item.cfop}</CFOP><uCom>${escapeXml(item.unidade)}</uCom><qCom>${fixed4(item.quantidade)}</qCom><vUnCom>${fixed4(item.valor_unitario)}</vUnCom><vProd>${fixed2(item.valor_total)}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>${escapeXml(item.unidade)}</uTrib><qTrib>${fixed4(item.quantidade)}</qTrib><vUnTrib>${fixed4(item.valor_unitario)}</vUnTrib><indTot>1</indTot></prod><imposto><vTotTrib>${fixed2(item.valor_total * 0.0765)}</vTotTrib>${buildIcmsXml(item)}${buildPisXml(item)}${buildCofinsXml(item)}${buildIbsCbsXml(item)}</imposto>${additionalXml}</det>`;
   }).join('');
 
+  const recipientAddressXml = modelCode === '55' ? `<enderDest><xLgr>${escapeXml(consumerData?.address || '')}</xLgr><nro>${escapeXml(consumerData?.address_number || '')}</nro>${consumerData?.address_complement ? `<xCpl>${escapeXml(consumerData.address_complement)}</xCpl>` : ''}<xBairro>${escapeXml(consumerData?.neighborhood || '')}</xBairro><cMun>${onlyDigits(consumerData?.city_code)}</cMun><xMun>${escapeXml(consumerData?.city || '')}</xMun><UF>${escapeXml(String(consumerData?.state || '').toUpperCase())}</UF><CEP>${onlyDigits(consumerData?.postal_code)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderDest>` : '';
+  const recipientIe = String(consumerData?.state_registration || '').trim();
   const destXml = consumidorDoc
-    ? `<dest>${consumidorDoc.length === 11 ? `<CPF>${consumidorDoc}</CPF>` : `<CNPJ>${consumidorDoc}</CNPJ>`}${consumerData?.nome ? `<xNome>${escapeXml(consumerData.nome)}</xNome>` : ''}<indIEDest>9</indIEDest></dest>`
+    ? `<dest>${consumidorDoc.length === 11 ? `<CPF>${consumidorDoc}</CPF>` : `<CNPJ>${consumidorDoc}</CNPJ>`}${consumerData?.nome ? `<xNome>${escapeXml(consumerData.nome)}</xNome>` : ''}${recipientAddressXml}<indIEDest>${Number(consumerData?.state_registration_indicator || 9)}</indIEDest>${recipientIe ? `<IE>${escapeXml(recipientIe)}</IE>` : ''}${consumerData?.email ? `<email>${escapeXml(consumerData.email)}</email>` : ''}</dest>`
     : '';
   const paymentXml = buildPaymentDetailsXml(order, paymentMethod, valorTotal);
 
-  return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${cupom.chave_acesso}" versao="4.00"><ide><cUF>${getCodigoUF(fiscalSettings.endereco_uf)}</cUF><cNF>${cupom.chave_acesso.substring(35, 43)}</cNF><natOp>Venda</natOp><mod>65</mod><serie>${Number(cupom.serie)}</serie><nNF>${cupom.numero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>${codigoMunicipio}</cMunFG><tpImp>4</tpImp><tpEmis>1</tpEmis><cDV>${cupom.chave_acesso.slice(-1)}</cDV><tpAmb>${isHomologacao ? '2' : '1'}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>PopSystem-1.0</verProc></ide><emit><CNPJ>${onlyDigits(fiscalSettings.cnpj)}</CNPJ><xNome>${escapeXml(fiscalSettings.razao_social)}</xNome><xFant>${escapeXml(fiscalSettings.nome_fantasia || fiscalSettings.razao_social)}</xFant><enderEmit><xLgr>${escapeXml(fiscalSettings.endereco_logradouro)}</xLgr><nro>${escapeXml(fiscalSettings.endereco_numero)}</nro>${fiscalSettings.endereco_complemento ? `<xCpl>${escapeXml(fiscalSettings.endereco_complemento)}</xCpl>` : ''}<xBairro>${escapeXml(fiscalSettings.endereco_bairro)}</xBairro><cMun>${codigoMunicipio}</cMun><xMun>${escapeXml(fiscalSettings.endereco_municipio)}</xMun><UF>${escapeXml(fiscalSettings.endereco_uf)}</UF><CEP>${onlyDigits(fiscalSettings.endereco_cep)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${escapeXml(fiscalSettings.inscricao_estadual || 'ISENTO')}</IE><CRT>${Number(fiscalSettings.regime_tributario || 1)}</CRT></emit>${destXml}${detXml}<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${fixed2(totalProdutos)}</vProd><vFrete>${fixed2(deliveryFee)}</vFrete><vSeg>0.00</vSeg><vDesc>${fixed2(valorDesconto)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${fixed2(valorTotal)}</vNF><vTotTrib>${fixed2(valorTributos)}</vTotTrib></ICMSTot></total><transp><modFrete>9</modFrete></transp><pag>${paymentXml}</pag>${observacoes ? `<infAdic><infCpl>${escapeXml(observacoes)}</infCpl></infAdic>` : ''}</infNFe></NFe>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${cupom.chave_acesso}" versao="4.00"><ide><cUF>${getCodigoUF(fiscalSettings.endereco_uf)}</cUF><cNF>${cupom.chave_acesso.substring(35, 43)}</cNF><natOp>${escapeXml(fiscalSettings.operation_nature || 'Venda de mercadoria')}</natOp><mod>${modelCode}</mod><serie>${Number(cupom.serie)}</serie><nNF>${cupom.numero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>${codigoMunicipio}</cMunFG><tpImp>${modelCode === '55' ? '1' : '4'}</tpImp><tpEmis>1</tpEmis><cDV>${cupom.chave_acesso.slice(-1)}</cDV><tpAmb>${isHomologacao ? '2' : '1'}</tpAmb><finNFe>1</finNFe><indFinal>${consumerData?.final_consumer === false ? '0' : '1'}</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>PopSystem-1.0</verProc></ide><emit><CNPJ>${onlyDigits(fiscalSettings.cnpj)}</CNPJ><xNome>${escapeXml(fiscalSettings.razao_social)}</xNome><xFant>${escapeXml(fiscalSettings.nome_fantasia || fiscalSettings.razao_social)}</xFant><enderEmit><xLgr>${escapeXml(fiscalSettings.endereco_logradouro)}</xLgr><nro>${escapeXml(fiscalSettings.endereco_numero)}</nro>${fiscalSettings.endereco_complemento ? `<xCpl>${escapeXml(fiscalSettings.endereco_complemento)}</xCpl>` : ''}<xBairro>${escapeXml(fiscalSettings.endereco_bairro)}</xBairro><cMun>${codigoMunicipio}</cMun><xMun>${escapeXml(fiscalSettings.endereco_municipio)}</xMun><UF>${escapeXml(fiscalSettings.endereco_uf)}</UF><CEP>${onlyDigits(fiscalSettings.endereco_cep)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${escapeXml(fiscalSettings.inscricao_estadual || 'ISENTO')}</IE><CRT>${Number(fiscalSettings.regime_tributario || 1)}</CRT></emit>${destXml}${detXml}<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${fixed2(totalProdutos)}</vProd><vFrete>${fixed2(deliveryFee)}</vFrete><vSeg>0.00</vSeg><vDesc>${fixed2(valorDesconto)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${fixed2(valorTotal)}</vNF><vTotTrib>${fixed2(valorTributos)}</vTotTrib></ICMSTot>${buildIbsCbsTotalsXml(items)}</total><transp><modFrete>9</modFrete></transp><pag>${paymentXml}</pag>${observacoes ? `<infAdic><infCpl>${escapeXml(observacoes)}</infCpl></infAdic>` : ''}</infNFe></NFe>`;
 }
 
 function buildPaymentDetailsXml(order: any, paymentMethod: string, valorTotal: number): string {
@@ -795,7 +1011,13 @@ function normalizeFiscalPaymentLines(order: any, paymentMethod: string, valorTot
     }))
     .filter((line: any) => line.amount > 0);
 
-  if (validSplitLines.length > 0) return validSplitLines;
+  if (validSplitLines.length > 0) {
+    const totals = new Map<string, number>();
+    validSplitLines.forEach((line: { method: string; amount: number }) => {
+      totals.set(line.method, money((totals.get(line.method) || 0) + line.amount));
+    });
+    return Array.from(totals, ([method, amount]) => ({ method, amount }));
+  }
 
   return [{
     method: normalizeFiscalPaymentMethod(paymentMethod),

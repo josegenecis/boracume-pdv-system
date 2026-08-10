@@ -2,6 +2,9 @@ export interface CmvProduct {
   id: string;
   name: string;
   price: number;
+  weight_based?: boolean | null;
+  costing_mode?: 'automatic_recipe' | 'manual' | string | null;
+  manual_unit_cost?: number | null;
 }
 
 export interface CmvRecipe {
@@ -32,6 +35,9 @@ export interface CmvProductMetric {
   cmvPercentage: number;
   abcClass: 'A' | 'B' | 'C' | 'N/A';
   hasRecipe: boolean;
+  hasCost: boolean;
+  costSource: 'recipe' | 'manual' | 'missing';
+  saleUnit: 'un' | 'kg';
   hasSales: boolean;
 }
 
@@ -101,6 +107,7 @@ export const calculateWeightedAverageCost = (params: {
 
 export const buildCmvReport = (products: CmvProduct[], recipes: CmvRecipe[], orders: CmvOrder[]): CmvReport => {
   const theoreticalCosts = buildTheoreticalCostMap(recipes);
+  const productsWithRecipe = new Set(recipes.map(recipe => recipe.product_id));
   const productById = new Map(products.map(product => [product.id, product]));
   const metrics = new Map<string, CmvProductMetric>();
 
@@ -109,7 +116,22 @@ export const buildCmvReport = (products: CmvProduct[], recipes: CmvRecipe[], ord
     const key = productId || `unlinked:${name.trim().toLocaleLowerCase('pt-BR')}`;
     const existing = metrics.get(key);
     if (existing) return existing;
-    const theoreticalUnitCost = productId ? theoreticalCosts.get(productId) || 0 : 0;
+    const recipeCost = productId ? theoreticalCosts.get(productId) || 0 : 0;
+    const hasRecipe = Boolean(productId && productsWithRecipe.has(productId));
+    const hasManualCost = product?.manual_unit_cost !== null && product?.manual_unit_cost !== undefined;
+    const usesManualCost = product?.costing_mode === 'manual' && hasManualCost;
+    const theoreticalUnitCost = usesManualCost
+      ? Math.max(0, numberValue(product?.manual_unit_cost))
+      : hasRecipe
+        ? recipeCost
+        : hasManualCost
+          ? Math.max(0, numberValue(product?.manual_unit_cost))
+          : 0;
+    const costSource: CmvProductMetric['costSource'] = usesManualCost || (!hasRecipe && hasManualCost)
+      ? 'manual'
+      : hasRecipe
+        ? 'recipe'
+        : 'missing';
     const metric: CmvProductMetric = {
       key,
       productId,
@@ -122,7 +144,10 @@ export const buildCmvReport = (products: CmvProduct[], recipes: CmvRecipe[], ord
       grossContribution: 0,
       cmvPercentage: 0,
       abcClass: 'N/A',
-      hasRecipe: theoreticalUnitCost > 0,
+      hasRecipe,
+      hasCost: costSource !== 'missing',
+      costSource,
+      saleUnit: product?.weight_based ? 'kg' : 'un',
       hasSales: false,
     };
     metrics.set(key, metric);
@@ -143,6 +168,10 @@ export const buildCmvReport = (products: CmvProduct[], recipes: CmvRecipe[], ord
         metric.netRevenue += Math.max(0, numberValue(item.net_revenue, numberValue(item.gross_revenue)));
         metric.realizedCost += Math.max(0, numberValue(item.total_cost));
         metric.hasRecipe ||= item.has_recipe === true;
+        metric.hasCost ||= item.has_cost === true || item.has_recipe === true;
+        if (item.cost_source === 'manual' || item.cost_source === 'manual_fallback') metric.costSource = 'manual';
+        if (item.cost_source === 'recipe') metric.costSource = 'recipe';
+        if (item.sale_unit === 'kg' || item.sale_unit === 'un') metric.saleUnit = item.sale_unit;
         metric.hasSales = true;
       }
       continue;

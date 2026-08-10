@@ -110,8 +110,8 @@ const FixedHeader = () => {
 
   const cashActionPath = (action: 'open' | 'close' | 'in' | 'out') => `/caixa?cashAction=${action}`;
   const primaryShortcuts = [
-    { label: 'Pedidos', icon: ClipboardList, path: '/pedidos', feature: 'orders' as FeatureKey },
     { label: 'PDV', icon: Monitor, path: '/pdv', feature: 'pdv' as FeatureKey },
+    { label: 'Pedidos', icon: ClipboardList, path: '/pedidos', feature: 'orders' as FeatureKey },
     { label: 'Mesas', icon: Table2, path: '/mesas', feature: 'tables' as FeatureKey },
     { label: 'WhatsApp', icon: MessageCircle, path: '/whatsapp-bot', feature: 'whatsapp' as FeatureKey },
   ];

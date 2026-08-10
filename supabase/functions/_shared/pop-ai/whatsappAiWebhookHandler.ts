@@ -50,10 +50,7 @@ function isActionableCustomerIntent(text: string) {
 
 function isExplicitCustomerReactivationIntent(text: string) {
   const value = normalizeIntentText(text);
-  return /(link|cardapio|catalogo|menu|me envia|me manda|manda (o )?(link|cardapio)|envia (o )?(link|cardapio)|me passa (o )?(link|cardapio)|quero (ver )?(o )?(cardapio|menu)|tem cardapio)/i.test(value) ||
-    /(acompanhar|rastrear|status do pedido|meu pedido|onde.*pedido|pedido.*andamento|pedido.*status)/i.test(value) ||
-    /(promo|promocao|desconto|oferta|combo)/i.test(value) ||
-    /(fazer pedido|pedir|finalizar pedido|quero pedir|quero fazer pedido|pedido por aqui|pedido no whatsapp)/i.test(value);
+  return /(voltar|retomar|reativar|chamar).*(bot|robo|robô|ia|atendimento automatico)|atendimento automatico.*(voltar|retomar|reativar)/i.test(value);
 }
 
 function getHandoffTimeoutMinutes(settings: any) {
@@ -162,12 +159,10 @@ export async function processPopAiMessage(params: PopAiIncomingMessage): Promise
       const explicitReactivationIntent = isExplicitCustomerReactivationIntent(text);
       const shouldResume =
         autoResumeEnabled &&
-        actionableCustomerIntent &&
         (
           explicitReactivationIntent ||
-          actionableCustomerIntent ||
-          (Number.isFinite(resumeAtMs) && resumeAtMs <= Date.now()) ||
-          (!resumeAt && minutesSince(aiConversation?.metadata?.pausedAt || aiConversation?.last_message_at) >= timeoutMinutes)
+          (actionableCustomerIntent && Number.isFinite(resumeAtMs) && resumeAtMs <= Date.now()) ||
+          (actionableCustomerIntent && !resumeAt && minutesSince(aiConversation?.metadata?.pausedAt || aiConversation?.last_message_at) >= timeoutMinutes)
         );
 
       if (shouldResume) {

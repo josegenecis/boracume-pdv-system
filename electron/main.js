@@ -6,14 +6,13 @@ let autoUpdater = null;
 try {
   autoUpdater = require('electron-updater').autoUpdater;
 } catch {}
-const { SerialPort } = require('serialport');
-const ThermalPrinter = require('node-thermal-printer').printer;
-const PrinterTypes = require('node-thermal-printer').types;
-
-const DeviceManager = require('./services/DeviceManager');
-const PrinterService = require('./services/PrinterService');
-const ScaleService = require('./services/ScaleService');
-const PrintAgentServer = require('./server');
+// Os módulos de hardware são carregados somente depois da verificação de
+// atualização. Assim, um driver incompatível nunca bloqueia a autocorreção.
+let DeviceManager = null;
+let PrinterService = null;
+let ScaleService = null;
+let PrintAgentServer = null;
+let hardwareModulesLoadError = null;
 
 let mainWindow;
 let tray = null;
@@ -23,6 +22,25 @@ let scaleService;
 let printAgentServer;
 let updateWindow;
 let pendingOAuthCallback = '';
+let rendererReportsOpenCash = false;
+let allowWindowClose = false;
+
+function loadHardwareModules() {
+  if (DeviceManager && PrinterService && ScaleService && PrintAgentServer) return true;
+  if (hardwareModulesLoadError) return false;
+
+  try {
+    DeviceManager = require('./services/DeviceManager');
+    PrinterService = require('./services/PrinterService');
+    ScaleService = require('./services/ScaleService');
+    PrintAgentServer = require('./server');
+    return true;
+  } catch (error) {
+    hardwareModulesLoadError = error;
+    console.error('Módulos de hardware indisponíveis; o aplicativo continuará sem integração local:', error);
+    return false;
+  }
+}
 
 function focusMainWindow() {
   if (!mainWindow) return;
@@ -133,12 +151,43 @@ function createWindow() {
     }
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  mainWindow.on('close', (event) => {
+    if (allowWindowClose || isAgentMode || !rendererReportsOpenCash) return;
+    event.preventDefault();
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'warning',
+      title: 'Caixa ainda aberto',
+      message: 'O caixa não foi fechado.',
+      detail: 'Para manter a conferência financeira correta, feche o caixa antes de encerrar o PopSystem.',
+      buttons: ['Fechar caixa', 'Encerrar mesmo assim', 'Cancelar'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    });
+    if (choice === 0) {
+      mainWindow.webContents.send('navigate-to-cash-close');
+      focusMainWindow();
+    } else if (choice === 1) {
+      allowWindowClose = true;
+      mainWindow.close();
+    }
   });
 
-  // Criar Tray icon mesmo com janela aberta, para acesso rápido
-  if (!tray) {
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    // No uso normal, fechar a janela significa encerrar integralmente o app,
+    // inclusive servidor local e integrações de hardware. Somente a execução
+    // explícita com --agent-mode permanece na bandeja.
+    if (!isAgentMode) {
+      if (tray) {
+        try { tray.destroy(); } catch {}
+        tray = null;
+      }
+      app.quit();
+    }
+  });
+
+  if (isAgentMode && !tray) {
     createTray();
   }
 
@@ -314,6 +363,7 @@ async function runAutoUpdateFlow() {
 }
 
 function createTray() {
+  if (tray) return;
   try {
     const iconPath = path.join(__dirname, '../public/LOGOMARCA/ICONE DESKTOP.png');
     tray = new Tray(iconPath);
@@ -365,20 +415,22 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  // No modo agente ou se tiver tray, manter rodando
-  if (process.platform !== 'darwin' && !tray) {
-    app.quit();
-  }
+  if (!isAgentMode) app.quit();
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (!isAgentMode && BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
 });
 
+ipcMain.on('cash-session-status', (_event, payload) => {
+  rendererReportsOpenCash = payload?.open === true;
+});
+
 function initializeServices() {
   try {
+    if (!loadHardwareModules()) return;
     // Se já foi inicializado pelo Server, reaproveitar ou garantir singleton
     if (!deviceManager) {
       deviceManager = new DeviceManager();
@@ -393,6 +445,7 @@ function initializeServices() {
 
 function startPrintServer() {
   try {
+    if (!loadHardwareModules()) return;
     printAgentServer = new PrintAgentServer(17171);
     printAgentServer.start();
     

@@ -28,7 +28,7 @@ const Downloads = () => {
       });
       return;
     }
-    window.location.href = '/api/desktop/latest';
+    window.location.href = `/api/desktop/latest?channel=stable&t=${Date.now()}`;
   };
 
   return (

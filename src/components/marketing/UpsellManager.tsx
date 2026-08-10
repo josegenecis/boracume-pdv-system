@@ -22,6 +22,7 @@ type UpsellRule = {
   display_order: number;
   discount_type: 'percentage' | 'fixed' | null;
   discount_value: number | null;
+  placement: 'product' | 'checkout' | 'both';
 };
 
 type ProductOption = {
@@ -30,7 +31,7 @@ type ProductOption = {
   price: number;
 };
 
-export default function UpsellManager() {
+export default function UpsellManager({ context = 'marketing' }: { context?: 'marketing' | 'totem' }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const confirm = useConfirmDialog();
@@ -48,7 +49,8 @@ export default function UpsellManager() {
     active: true,
     display_order: 0,
     discount_type: 'none',
-    discount_value: 0
+    discount_value: 0,
+    placement: context === 'totem' ? 'both' : 'checkout'
   });
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
@@ -83,7 +85,7 @@ export default function UpsellManager() {
 
   const resetForm = () => {
     setEditing(null);
-    setForm({ trigger_product_id: '__any__', suggested_product_id: '', message: '', active: true, display_order: 0, discount_type: 'none', discount_value: 0 });
+    setForm({ trigger_product_id: '__any__', suggested_product_id: '', message: '', active: true, display_order: 0, discount_type: 'none', discount_value: 0, placement: context === 'totem' ? 'both' : 'checkout' });
   };
 
   const openCreate = () => {
@@ -100,7 +102,8 @@ export default function UpsellManager() {
       active: Boolean(rule.active),
       display_order: Number(rule.display_order || 0),
       discount_type: rule.discount_type || 'none',
-      discount_value: Number(rule.discount_value || 0)
+      discount_value: Number(rule.discount_value || 0),
+      placement: rule.placement || 'checkout'
     });
     setOpen(true);
   };
@@ -122,6 +125,7 @@ export default function UpsellManager() {
         display_order: Number(form.display_order || 0),
         discount_type: form.discount_type === 'none' ? null : form.discount_type,
         discount_value: form.discount_type === 'none' ? null : Number(form.discount_value || 0),
+        placement: form.placement,
         updated_at: new Date().toISOString()
       };
       if (editing?.id) {
@@ -170,7 +174,7 @@ export default function UpsellManager() {
     <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <CardTitle>Venda Mais</CardTitle>
+          <CardTitle>{context === 'totem' ? 'Venda adicional do Totem' : 'Venda Mais'}</CardTitle>
           <Button onClick={openCreate} disabled={loading}>
             <Plus className="h-4 w-4 mr-2" />
             Nova regra
@@ -178,7 +182,9 @@ export default function UpsellManager() {
         </CardHeader>
         <CardContent>
           <div className="text-sm text-muted-foreground mb-4">
-            Configure sugestões automáticas para o cliente (ex.: “Quer adicionar uma borda?”).
+            {context === 'totem'
+              ? 'Relacione qualquer produto a bebidas, acompanhamentos ou adicionais de outras categorias e escolha em qual etapa a oferta será exibida.'
+              : 'Configure sugestões automáticas para o cliente (ex.: “Quer adicionar uma borda?”).'}
           </div>
 
           <Table>
@@ -187,6 +193,7 @@ export default function UpsellManager() {
                 <TableHead>Gatilho</TableHead>
                 <TableHead>Sugestão</TableHead>
                 <TableHead>Desconto</TableHead>
+                <TableHead>Momento</TableHead>
                 <TableHead>Mensagem</TableHead>
                 <TableHead className="w-[100px] text-center">Ativo</TableHead>
                 <TableHead className="w-[120px] text-right">Ações</TableHead>
@@ -203,6 +210,7 @@ export default function UpsellManager() {
                     <TableCell>
                       {r.discount_type === 'percentage' ? `${Number(r.discount_value || 0)}%` : r.discount_type === 'fixed' ? `R$ ${Number(r.discount_value || 0).toFixed(2)}` : '-'}
                     </TableCell>
+                    <TableCell>{r.placement === 'product' ? 'Após o produto' : r.placement === 'both' ? 'Produto e finalização' : 'Antes do pagamento'}</TableCell>
                     <TableCell className="max-w-[420px] truncate">{r.message || '-'}</TableCell>
                     <TableCell className="text-center">
                       <Switch
@@ -242,7 +250,7 @@ export default function UpsellManager() {
               })}
               {rules.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
                     Nenhuma regra cadastrada.
                   </TableCell>
                 </TableRow>
@@ -295,6 +303,18 @@ export default function UpsellManager() {
             <div className="space-y-2">
               <Label>Mensagem (opcional)</Label>
               <Input value={form.message} onChange={(e) => setForm((p) => ({ ...p, message: e.target.value }))} placeholder="Ex.: Quer adicionar uma bebida?" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Quando apresentar</Label>
+              <Select value={form.placement} onValueChange={(value) => setForm((current) => ({ ...current, placement: value as 'product' | 'checkout' | 'both' }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="product">Logo após escolher o produto</SelectItem>
+                  <SelectItem value="checkout">Antes de abrir o pagamento</SelectItem>
+                  <SelectItem value="both">Nos dois momentos</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

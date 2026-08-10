@@ -1025,6 +1025,7 @@ export type Database = {
           is_pizza: boolean
           name: string
           pizza_half_price_mode: string
+          totem_image_url: string | null
           updated_at: string
           user_id: string
         }
@@ -1037,6 +1038,7 @@ export type Database = {
           is_pizza?: boolean
           name: string
           pizza_half_price_mode?: string
+          totem_image_url?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1049,6 +1051,7 @@ export type Database = {
           is_pizza?: boolean
           name?: string
           pizza_half_price_mode?: string
+          totem_image_url?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1168,10 +1171,12 @@ export type Database = {
           available_pdv: boolean | null
           category: string
           category_id: string | null
+          costing_mode: string
           created_at: string
           description: string | null
           id: string
           image_url: string | null
+          manual_unit_cost: number | null
           name: string
           price: number
           receipt_ingredients: string | null
@@ -1189,10 +1194,12 @@ export type Database = {
           available_pdv?: boolean | null
           category: string
           category_id?: string | null
+          costing_mode?: string
           created_at?: string
           description?: string | null
           id?: string
           image_url?: string | null
+          manual_unit_cost?: number | null
           name: string
           price: number
           receipt_ingredients?: string | null
@@ -1210,10 +1217,12 @@ export type Database = {
           available_pdv?: boolean | null
           category?: string
           category_id?: string | null
+          costing_mode?: string
           created_at?: string
           description?: string | null
           id?: string
           image_url?: string | null
+          manual_unit_cost?: number | null
           name?: string
           price?: number
           receipt_ingredients?: string | null
@@ -1346,6 +1355,7 @@ export type Database = {
           end_date: string | null
           id: string
           media_url: string
+          media_type: string
           orientation: string
           start_date: string | null
           title: string
@@ -1360,6 +1370,7 @@ export type Database = {
           end_date?: string | null
           id?: string
           media_url: string
+          media_type?: string
           orientation?: string
           start_date?: string | null
           title?: string
@@ -1374,6 +1385,7 @@ export type Database = {
           end_date?: string | null
           id?: string
           media_url?: string
+          media_type?: string
           orientation?: string
           start_date?: string | null
           title?: string
@@ -1391,6 +1403,7 @@ export type Database = {
           created_at: string
           cta_text: string
           idle_overlay_color: string
+          idle_timeout_minutes: number
           price_color: string
           primary_color: string
           secondary_color: string
@@ -1407,6 +1420,7 @@ export type Database = {
           created_at?: string
           cta_text?: string
           idle_overlay_color?: string
+          idle_timeout_minutes?: number
           price_color?: string
           primary_color?: string
           secondary_color?: string
@@ -1423,6 +1437,7 @@ export type Database = {
           created_at?: string
           cta_text?: string
           idle_overlay_color?: string
+          idle_timeout_minutes?: number
           price_color?: string
           primary_color?: string
           secondary_color?: string

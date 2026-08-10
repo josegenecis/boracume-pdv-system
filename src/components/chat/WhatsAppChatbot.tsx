@@ -732,7 +732,7 @@ const WhatsAppChatbot = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border bg-gradient-to-r from-emerald-950 via-emerald-900 to-orange-600 p-6 text-white shadow-sm">
+      <div className="rounded-lg border bg-gradient-to-r from-emerald-950 via-emerald-900 to-emerald-700 p-6 text-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]">

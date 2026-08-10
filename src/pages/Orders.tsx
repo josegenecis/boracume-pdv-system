@@ -24,6 +24,7 @@ import { verifyAdminPin } from '@/services/adminPin';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 import { formatPaymentMethodLabel } from '@/lib/orderDetails';
 import { IfoodLogo } from '@/components/icons/IfoodLogo';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 
 interface Order {
   id: string;
@@ -107,6 +108,7 @@ const isHiddenTableServiceOrder = (order: any) => {
 const getAutoAcceptKey = (userId?: string) => `orders_auto_accept:${userId || 'local'}`;
 
 const Orders = () => {
+  const confirm = useConfirmDialog();
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -713,6 +715,15 @@ const Orders = () => {
       });
       return;
     }
+
+    const confirmed = await confirm({
+      title: 'Confirmar cancelamento do pedido',
+      description: `Tem certeza de que deseja cancelar o pedido #${order.order_number || order.id}? Essa ação altera o financeiro, o estoque e o andamento do pedido.`,
+      confirmText: 'Sim, cancelar pedido',
+      cancelText: 'Voltar',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
 
     const session = getLocalOperatorSession();
     if (canCancelOrder(session)) {

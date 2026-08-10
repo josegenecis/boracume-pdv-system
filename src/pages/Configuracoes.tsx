@@ -12,7 +12,6 @@ import MenuLinkGenerator from '@/components/menu/MenuLinkGenerator';
 import DeviceManager from '@/components/devices/DeviceManager';
 import { ErrorBoundary } from '@/components/utils/ErrorBoundary';
 import WhatsAppIntegration from '@/components/whatsapp/WhatsAppIntegration';
-import FiscalSettings from '@/components/fiscal/FiscalSettings';
 import { useAuth } from '@/contexts/AuthContext';
 
 import IfoodSettings from '@/components/settings/IfoodSettings';
@@ -24,7 +23,7 @@ import TotemSettings from '@/components/settings/TotemSettings';
 import Garcons from '@/pages/Garcons';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { supabase } from '@/integrations/supabase/client';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 
 import { IfoodLogo } from '@/components/icons/IfoodLogo';
@@ -33,6 +32,7 @@ import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
 
 const Configuracoes: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { subscription } = useAuth();
   const { canAccessFeature, openFeatureDialog } = useFeatureGate();
   const { ensureSubscribed } = usePushNotifications();
@@ -46,7 +46,6 @@ const Configuracoes: React.FC = () => {
     pix: 'pix',
     whatsapp: 'whatsapp',
     'whatsapp-api': 'whatsapp',
-    fiscal: 'fiscal',
     hardware: 'hardware',
     ifood: 'ifood',
     users: 'team',
@@ -84,7 +83,6 @@ const Configuracoes: React.FC = () => {
       'pix',
       'whatsapp',
       'whatsapp-api',
-      'fiscal',
       'hardware',
       'ifood',
       'users',
@@ -98,6 +96,10 @@ const Configuracoes: React.FC = () => {
   };
 
   const [tab, setTab] = useState(getInitialTab);
+
+  useEffect(() => {
+    if (searchParams.get('tab') === 'fiscal') navigate('/fiscal?tab=issuer', { replace: true });
+  }, [navigate, searchParams]);
 
   const setTabAndUrl = (nextTab: string) => {
     const feature = tabFeatures[nextTab];
@@ -145,9 +147,8 @@ const Configuracoes: React.FC = () => {
               <option value="pix">PIX</option>
               <option value="whatsapp">WhatsApp Mensagens</option>
               {subscription?.plan_id === 2 && <option value="whatsapp-api">WhatsApp Global (Admin)</option>}
-              <option value="hardware">Impressoras e Balanças</option>
+              <option value="hardware">Impressão, Balança e Leitor</option>
               <option value="totem">Totem</option>
-              <option value="fiscal">Fiscal / NFC-e</option>
               <option value="ifood">iFood</option>
               <option value="users">Usuários e Equipe</option>
               <option value="notifications">Notificações</option>
@@ -166,9 +167,8 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="pix">{tabLabel('PIX', 'pix')}</TabsTrigger>
           <TabsTrigger value="whatsapp">{tabLabel('WhatsApp Mensagens', 'whatsapp')}</TabsTrigger>
           {subscription?.plan_id === 2 && <TabsTrigger value="whatsapp-api">WhatsApp Global (Admin)</TabsTrigger>}
-          <TabsTrigger value="hardware">{tabLabel('Impressoras e Balanças', 'hardware')}</TabsTrigger>
+          <TabsTrigger value="hardware">{tabLabel('Dispositivos', 'hardware')}</TabsTrigger>
           <TabsTrigger value="totem">{tabLabel('Totem', 'settings')}</TabsTrigger>
-          <TabsTrigger value="fiscal">{tabLabel('Fiscal / NFC-e', 'fiscal')}</TabsTrigger>
           <TabsTrigger value="ifood">
             {tabLabel(<IfoodLogo className="h-4 w-auto" />, 'ifood')}
           </TabsTrigger>
@@ -252,15 +252,11 @@ const Configuracoes: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="hardware">
-          <HardwareSettings />
+          {(window as any)?.electronAPI?.isElectron ? <HardwareSettings /> : <DeviceManager />}
         </TabsContent>
 
         <TabsContent value="totem">
           <TotemSettings />
-        </TabsContent>
-
-        <TabsContent value="fiscal">
-          <FiscalSettings />
         </TabsContent>
 
         <TabsContent value="ifood">

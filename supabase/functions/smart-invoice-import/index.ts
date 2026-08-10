@@ -52,20 +52,79 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function uploadReceipt(supabase: any, userId: string, fileBase64: string, mimeType: string) {
-  try {
-    const ext = mimeType.includes("png") ? "png" : mimeType.includes("pdf") ? "pdf" : "jpg";
-    const path = `smart-invoices/${userId}/${Date.now()}.${ext}`;
-    const bytes = Uint8Array.from(atob(fileBase64), (char) => char.charCodeAt(0));
-    const { error } = await supabase.storage
-      .from("expense-receipts")
-      .upload(path, bytes, { contentType: mimeType, upsert: false });
-    if (error) return null;
-    const { data } = supabase.storage.from("expense-receipts").getPublicUrl(path);
-    return data?.publicUrl || null;
-  } catch {
-    return null;
+async function uploadReceipt(supabase: any, userId: string, fileBase64: string, mimeType: string, fileName: string) {
+  const ext = mimeType.includes("xml") || fileName.toLowerCase().endsWith(".xml")
+    ? "xml"
+    : mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : mimeType.includes("pdf") ? "pdf" : "jpg";
+  const path = `${userId}/smart-invoices/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+  const bytes = Uint8Array.from(atob(fileBase64), (char) => char.charCodeAt(0));
+  const { error } = await supabase.storage
+    .from("purchase-invoice-attachments")
+    .upload(path, bytes, { contentType: mimeType, cacheControl: "3600", upsert: false });
+  if (error) throw new Error(`Não foi possível salvar o anexo da nota: ${error.message}`);
+  return {
+    path,
+    name: String(fileName || `nota.${ext}`).trim().slice(0, 180),
+    mimeType,
+    sizeBytes: bytes.byteLength,
+  };
+}
+
+function decodeXmlEntities(value: string) {
+  return value
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").trim();
+}
+
+function xmlTag(xml: string, tagName: string) {
+  const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = xml.match(new RegExp(`<(?:\\w+:)?${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:\\w+:)?${escaped}>`, "i"));
+  return match ? decodeXmlEntities(match[1].replace(/<[^>]+>/g, "")) : "";
+}
+
+function parseNfeXml(fileBase64: string) {
+  const bytes = Uint8Array.from(atob(fileBase64), (char) => char.charCodeAt(0));
+  const xml = new TextDecoder("utf-8").decode(bytes);
+  if (!/<(?:\w+:)?NFe[\s>]/i.test(xml) && !/<(?:\w+:)?infNFe[\s>]/i.test(xml)) {
+    throw new Error("O XML enviado não contém uma NF-e/NFC-e válida.");
   }
+  const emitBlock = xml.match(/<(?:\w+:)?emit(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?emit>/i)?.[1] || "";
+  const totalBlock = xml.match(/<(?:\w+:)?ICMSTot(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?ICMSTot>/i)?.[1] || "";
+  const infId = xml.match(/<(?:\w+:)?infNFe\b[^>]*\bId=["']NFe(\d{44})["']/i)?.[1] || xmlTag(xml, "chNFe");
+  const detBlocks = Array.from(xml.matchAll(/<(?:\w+:)?det\b[^>]*>([\s\S]*?)<\/(?:\w+:)?det>/gi));
+  const items = detBlocks.map((match, index) => {
+    const product = match[1].match(/<(?:\w+:)?prod(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?prod>/i)?.[1] || match[1];
+    const quantity = numberValue(xmlTag(product, "qCom"), 1);
+    const unitPrice = numberValue(xmlTag(product, "vUnCom"), 0);
+    const total = numberValue(xmlTag(product, "vProd"), quantity * unitPrice);
+    const description = xmlTag(product, "xProd") || `Item ${xmlTag(product, "cProd") || index + 1}`;
+    return {
+      description,
+      normalized_name: cleanName(description),
+      category: "Insumos",
+      subcategory: "",
+      quantity: Math.max(quantity, 0.001),
+      unit: normalizeUnit(xmlTag(product, "uCom")),
+      stock_unit: normalizeUnit(xmlTag(product, "uCom")),
+      unit_price: unitPrice,
+      total_price: total,
+      confidence: 1,
+      similar_to: null,
+      control_stock: true,
+    };
+  }).filter((item) => item.normalized_name);
+  if (items.length === 0) throw new Error("O XML não possui produtos para lançamento.");
+
+  return {
+    supplier_name: xmlTag(emitBlock, "xNome") || xmlTag(emitBlock, "xFant"),
+    supplier_document: xmlTag(emitBlock, "CNPJ") || xmlTag(emitBlock, "CPF"),
+    invoice_number: xmlTag(xml, "nNF"),
+    invoice_date: (xmlTag(xml, "dhEmi") || xmlTag(xml, "dEmi") || todayIso()).slice(0, 10),
+    document_key: onlyDigits(infId).slice(0, 44) || null,
+    total_amount: numberValue(xmlTag(totalBlock, "vNF"), items.reduce((sum, item) => sum + item.total_price, 0)),
+    expense_category: "insumos",
+    items,
+  };
 }
 
 async function findIngredient(supabase: any, userId: string, name: string) {
@@ -244,27 +303,23 @@ async function upsertSaleProductFromInvoice(supabase: any, userId: string, item:
 }
 
 async function analyzeInvoice(supabase: any, userId: string, body: any) {
-  const mimeType = String(body.mimeType || body.mime_type || "image/jpeg");
+  const fileName = String(body.fileName || body.file_name || "nota-de-compra");
+  const mimeType = String(body.mimeType || body.mime_type || (fileName.toLowerCase().endsWith(".xml") ? "application/xml" : "image/jpeg"));
   const fileBase64 = String(body.fileBase64 || body.file_base64 || "").replace(/^data:[^,]+,/, "");
-  if (!fileBase64) throw new Error("Envie uma imagem ou PDF da nota.");
+  if (!fileBase64) throw new Error("Envie uma imagem, PDF ou XML da nota.");
 
   const geminiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_API_KEY");
   const geminiModel = Deno.env.get("GEMINI_VISION_MODEL") || Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const openAiKey = Deno.env.get("OPENAI_API_KEY");
   const openAiModel = Deno.env.get("OPENAI_VISION_MODEL") || Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini";
-  if (!geminiKey && !openAiKey) throw new Error("Configure GEMINI_API_KEY ou OPENAI_API_KEY para processar notas com IA.");
-  if (!geminiKey && mimeType.includes("pdf")) {
-    throw new Error("PDF exige GEMINI_API_KEY nesta versão. Para testar agora, envie uma foto JPG/PNG da nota.");
-  }
+  const isXml = mimeType.includes("xml") || fileName.toLowerCase().endsWith(".xml");
+  if (!isXml && !geminiKey && !openAiKey) throw new Error("Configure GEMINI_API_KEY ou OPENAI_API_KEY para processar notas com IA.");
 
-  const [{ data: ingredients }, receiptUrl] = await Promise.all([
-    supabase
-      .from("ingredients")
-      .select("id, name, category, subcategory, unit, cost_price, price, current_stock")
-      .eq("user_id", userId)
-      .limit(300),
-    uploadReceipt(supabase, userId, fileBase64, mimeType),
-  ]);
+  const { data: ingredients } = await supabase
+    .from("ingredients")
+    .select("id, name, category, subcategory, unit, cost_price, price, current_stock")
+    .eq("user_id", userId)
+    .limit(300);
 
   const knownCatalog = (ingredients || []).map((item: any) => ({
     name: item.name,
@@ -290,6 +345,7 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
   "supplier_name": "Fornecedor",
   "supplier_document": "CNPJ/CPF se houver",
   "invoice_number": "numero se houver",
+  "document_key": "chave de acesso com 44 digitos se houver",
   "invoice_date": "YYYY-MM-DD ou vazio",
   "total_amount": 0,
   "expense_category": "insumos",
@@ -318,8 +374,8 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
     "- control_stock deve ser true para insumos, embalagens e mercadorias controlaveis; false para servicos/taxas/frete.",
   ].join("\n");
 
-  let parsed: any = null;
-  if (geminiKey) {
+  let parsed: any = isXml ? parseNfeXml(fileBase64) : null;
+  if (!isXml && geminiKey) {
     const ai = await geminiGenerateContent({
       apiKey: geminiKey,
       model: geminiModel,
@@ -336,8 +392,11 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
       }],
     });
     parsed = safeParseJson(ai.text);
-  } else {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  } else if (!isXml) {
+    const content = mimeType.includes("pdf")
+      ? [{ type: "input_file", filename: fileName, file_data: `data:${mimeType};base64,${fileBase64}` }, { type: "input_text", text: userPrompt }]
+      : [{ type: "input_text", text: userPrompt }, { type: "input_image", image_url: `data:${mimeType};base64,${fileBase64}`, detail: "high" }];
+    const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${openAiKey}`,
@@ -345,23 +404,18 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
       },
       body: JSON.stringify({
         model: openAiModel,
+        instructions: system,
         temperature: 0.1,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: system },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: userPrompt },
-              { type: "image_url", image_url: { url: `data:${mimeType};base64,${fileBase64}` } },
-            ],
-          },
-        ],
+        input: [{ role: "user", content }],
       }),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data?.error?.message || "Erro ao processar imagem com OpenAI.");
-    parsed = safeParseJson(data?.choices?.[0]?.message?.content || "");
+    if (!response.ok) throw new Error(data?.error?.message || "Erro ao processar a nota com OpenAI.");
+    const outputText = data?.output_text || (data?.output || [])
+      .flatMap((entry: any) => entry?.content || [])
+      .map((entry: any) => entry?.text || "")
+      .join("\n");
+    parsed = safeParseJson(outputText);
   }
   if (!parsed || !Array.isArray(parsed.items)) throw new Error("A IA nao conseguiu ler itens validos da nota.");
 
@@ -385,23 +439,32 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
   }).filter((item: any) => item.normalized_name);
 
   const totalAmount = numberValue(parsed.total_amount, aiItems.reduce((sum: number, item: any) => sum + Number(item.total_price || 0), 0));
+  const attachment = await uploadReceipt(supabase, userId, fileBase64, mimeType, fileName);
   const { data: importRow, error: importError } = await supabase
     .from("smart_invoice_imports")
     .insert([{
       user_id: userId,
-      source_type: mimeType.includes("pdf") ? "pdf" : "image",
+      source_type: isXml ? "xml" : mimeType.includes("pdf") ? "pdf" : "image",
       supplier_name: String(parsed.supplier_name || "").trim() || null,
       supplier_document: onlyDigits(parsed.supplier_document) || null,
       invoice_number: String(parsed.invoice_number || "").trim() || null,
+      document_key: onlyDigits(parsed.document_key || parsed.access_key).slice(0, 44) || null,
       invoice_date: String(parsed.invoice_date || "").slice(0, 10) || todayIso(),
       total_amount: totalAmount,
       expense_category: String(parsed.expense_category || "insumos").trim() || "insumos",
-      receipt_url: receiptUrl,
+      receipt_url: null,
+      attachment_path: attachment.path,
+      attachment_name: attachment.name,
+      attachment_mime_type: attachment.mimeType,
+      attachment_size_bytes: attachment.sizeBytes,
       raw_ai_response: parsed,
     }])
     .select("*")
     .single();
-  if (importError) throw importError;
+  if (importError) {
+    await supabase.storage.from("purchase-invoice-attachments").remove([attachment.path]);
+    throw importError;
+  }
 
   const rows = aiItems.map((item: any) => ({
     ...item,
@@ -412,7 +475,11 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
     .from("smart_invoice_import_items")
     .insert(rows)
     .select("*");
-  if (itemError) throw itemError;
+  if (itemError) {
+    await supabase.from("smart_invoice_imports").delete().eq("id", importRow.id).eq("user_id", userId);
+    await supabase.storage.from("purchase-invoice-attachments").remove([attachment.path]);
+    throw itemError;
+  }
 
   return json({ ok: true, import: importRow, items: insertedItems || [] });
 }
@@ -424,27 +491,7 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
   const launchStock = body.launchStock !== false;
   const reviewedItems = Array.isArray(body.items) ? body.items : [];
 
-  const { data: importRow, error: importError } = await supabase
-    .from("smart_invoice_imports")
-    .select("*")
-    .eq("id", importId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (importError) throw importError;
-  if (!importRow) throw new Error("Importacao nao encontrada.");
-  if (importRow.status === "committed") throw new Error("Esta nota ja foi lancada.");
-
-  const { data: dbItems, error: itemsError } = await supabase
-    .from("smart_invoice_import_items")
-    .select("*")
-    .eq("import_id", importId)
-    .eq("user_id", userId);
-  if (itemsError) throw itemsError;
-
-  const itemById = new Map((dbItems || []).map((item: any) => [String(item.id), item]));
-  const items = (reviewedItems.length > 0 ? reviewedItems : dbItems || []).map((item: any) => {
-    const base = item.id ? itemById.get(String(item.id)) || {} : {};
-    const merged = { ...base, ...item };
+  const items = reviewedItems.map((merged: any) => {
     const quantity = Math.max(0.001, numberValue(merged.quantity, 1));
     const total = numberValue(merged.total_price, numberValue(merged.unit_price) * quantity);
     return {
@@ -459,140 +506,18 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
       unit_price: numberValue(merged.unit_price, total / quantity),
       total_price: total,
       control_stock: merged.control_stock !== false,
+      create_sale_product: looksLikeSaleProduct(merged),
     };
   }).filter((item: any) => item.normalized_name);
-
-  const totalAmount = items.reduce((sum: number, item: any) => sum + Number(item.total_price || 0), 0) || Number(importRow.total_amount || 0);
-  let expenseId = importRow.expense_id || null;
-  if (launchExpense) {
-    const description = [
-      "Nota de compra",
-      importRow.supplier_name ? `- ${importRow.supplier_name}` : "",
-      importRow.invoice_number ? `NF ${importRow.invoice_number}` : "",
-    ].filter(Boolean).join(" ");
-    const { data: expense, error: expenseError } = await supabase
-      .from("expenses")
-      .insert([{
-        user_id: userId,
-        description,
-        amount: totalAmount,
-        category: importRow.expense_category || "insumos",
-        expense_date: importRow.invoice_date || todayIso(),
-        due_date: importRow.invoice_date || todayIso(),
-        status: "pending",
-        receipt_url: importRow.receipt_url,
-      }])
-      .select("id")
-      .single();
-    if (expenseError) throw expenseError;
-    expenseId = expense.id;
-  }
-
-  const stockResults: any[] = [];
-  if (launchStock) {
-    for (const item of items) {
-      if (!item.control_stock) continue;
-      let ingredient = await findIngredient(supabase, userId, item.normalized_name);
-      if (!ingredient) {
-        const { data: created, error: createError } = await supabase
-          .from("ingredients")
-          .insert([{
-            user_id: userId,
-            name: item.normalized_name,
-            category: item.category || "Insumos",
-            subcategory: item.subcategory || null,
-            unit: item.stock_unit || item.unit || "un",
-            purchase_unit: item.unit || item.stock_unit || "un",
-            purchase_conversion: 1,
-            yield_percentage: 100,
-            cost_price: 0,
-            price: 0,
-            current_stock: 0,
-            min_stock: 0,
-            stock_controlled: true,
-            is_active: true,
-          }])
-          .select("*")
-          .single();
-        if (createError) throw createError;
-        ingredient = created;
-      } else {
-        await supabase
-          .from("ingredients")
-          .update({
-            category: item.category || ingredient.category || "Insumos",
-            subcategory: item.subcategory || ingredient.subcategory || null,
-            stock_controlled: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", ingredient.id)
-          .eq("user_id", userId);
-      }
-
-      const { error: purchaseError } = await supabase.rpc("record_ingredient_purchase", {
-        p_ingredient_id: ingredient.id,
-        p_purchase_quantity: item.quantity,
-        p_purchase_unit_cost: item.unit_price || 0,
-        p_reason: `Entrada por nota ${importRow.invoice_number || importRow.id}`,
-        p_owner_id: userId,
-      });
-      if (purchaseError) throw purchaseError;
-
-      if (item.id) {
-        await supabase
-          .from("smart_invoice_import_items")
-          .update({
-            ingredient_id: ingredient.id,
-            description: item.description,
-            normalized_name: item.normalized_name,
-            category: item.category,
-            subcategory: item.subcategory || null,
-            quantity: item.quantity,
-            unit: item.unit,
-            stock_unit: item.stock_unit,
-            unit_price: item.unit_price,
-            total_price: item.total_price,
-            control_stock: item.control_stock,
-          })
-          .eq("id", item.id)
-          .eq("user_id", userId);
-      }
-
-      const product = await upsertSaleProductFromInvoice(supabase, userId, item);
-      if (product?.id && item.id) {
-        await supabase
-          .from("smart_invoice_import_items")
-          .update({ product_id: product.id })
-          .eq("id", item.id)
-          .eq("user_id", userId);
-
-        await supabase
-          .from("inventory_movements")
-          .insert([{
-            user_id: userId,
-            product_id: product.id,
-            type: "purchase",
-            quantity: Math.max(1, Math.floor(numberValue(item.quantity, 1))),
-          }]);
-      }
-
-      stockResults.push({
-        item: item.normalized_name,
-        ingredient_id: ingredient.id,
-        product_id: product?.id || null,
-        quantity: item.quantity,
-      });
-    }
-  }
-
-  const { error: doneError } = await supabase
-    .from("smart_invoice_imports")
-    .update({ status: "committed", expense_id: expenseId, total_amount: totalAmount, updated_at: new Date().toISOString() })
-    .eq("id", importId)
-    .eq("user_id", userId);
-  if (doneError) throw doneError;
-
-  return json({ ok: true, expense_id: expenseId, stock: stockResults, total_amount: totalAmount });
+  const { data, error } = await supabase.rpc("commit_purchase_invoice_import", {
+    p_import_id: importId,
+    p_store_user_id: userId,
+    p_items: items,
+    p_launch_expense: launchExpense,
+    p_launch_stock: launchStock,
+  });
+  if (error) throw error;
+  return json(data || { ok: true });
 }
 
 serve(async (req) => {
@@ -610,12 +535,33 @@ serve(async (req) => {
     if (authError || !user) throw new Error("Invalid authorization token");
 
     const body = await req.json().catch(() => ({}));
+    const requestedUserId = String(body.userId || body.user_id || user.id);
+    if (requestedUserId !== user.id) {
+      const { data: ownedNetworks } = await supabase
+        .from("store_networks")
+        .select("id")
+        .eq("owner_user_id", user.id);
+      const networkIds = (ownedNetworks || []).map((network: any) => network.id);
+      if (networkIds.length === 0) throw new Error("Você não possui acesso a esta loja.");
+      const { data: accessibleStore } = await supabase
+        .from("store_network_stores")
+        .select("store_user_id")
+        .eq("store_user_id", requestedUserId)
+        .eq("status", "active")
+        .in("network_id", networkIds)
+        .limit(1)
+        .maybeSingle();
+      if (!accessibleStore) throw new Error("Você não possui acesso a esta loja.");
+    }
     const operation = String(body.operation || "analyze");
-    if (operation === "analyze") return await analyzeInvoice(supabase, user.id, body);
-    if (operation === "commit") return await commitInvoice(supabase, user.id, body);
+    if (operation === "analyze") return await analyzeInvoice(supabase, requestedUserId, body);
+    if (operation === "commit") return await commitInvoice(supabase, requestedUserId, body);
     throw new Error("Operacao nao suportada.");
   } catch (error: any) {
     console.error("smart-invoice-import error:", error);
-    return json({ ok: false, error: error?.message || "Erro interno" }, 400);
+    const message = error?.code === "23505"
+      ? "Esta nota fiscal já foi importada para este restaurante."
+      : error?.message || "Erro interno";
+    return json({ ok: false, error: message }, 400);
   }
 });
