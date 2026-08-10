@@ -68,6 +68,7 @@ export interface ElectronAPI {
   printProductLabel: (deviceId: string, productData: any) => Promise<DeviceResponse>;
   printSystem: (deviceName: string, html: string, silent?: boolean) => Promise<DeviceResponse>;
   previewPdf: (html: string, fileName?: string) => Promise<DeviceResponse & { path?: string }>;
+  previewPdfBuffer: (pdfBytes: Uint8Array, fileName?: string) => Promise<DeviceResponse & { path?: string }>;
   
   // Scale operations
   connectScale: (deviceId: string, protocol?: string, options?: any) => Promise<DeviceResponse>;

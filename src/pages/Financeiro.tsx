@@ -258,7 +258,10 @@ const Financeiro = () => {
       }
       
       setCurrentSession(data);
-      if (data?.id) setSelectedSessionId(data.id);
+      if (data?.id) {
+        setSelectedSessionId(data.id);
+        setCashSessions((current) => [data, ...current.filter((session) => session.id !== data.id)]);
+      }
     } catch (err) {
       console.error('Unexpected error checking session:', err);
     }
@@ -272,7 +275,7 @@ const Financeiro = () => {
         .select('id, opened_at, closed_at, initial_amount, final_amount, status, notes')
         .eq('user_id', user.id)
         .order('opened_at', { ascending: false })
-        .limit(50);
+        .limit(500);
       if (error) throw error;
       setCashSessions((data as any) || []);
     } catch (e: any) {
@@ -1295,12 +1298,21 @@ const Financeiro = () => {
     }
   };
 
+  const closeSelectedCashSession = async () => {
+    if (!selectedSession || selectedSession.status !== 'open') return;
+    setCurrentSession(selectedSession);
+    setSelectedSessionId(selectedSession.id);
+    await openCashActionDialog('close');
+  };
+
   useEffect(() => {
     const action = new URLSearchParams(location.search).get('cashAction');
     if (!action || !['open', 'close', 'in', 'out'].includes(action)) return;
-
-    void openCashActionDialog(action as 'open' | 'close' | 'in' | 'out');
-    navigate(location.pathname, { replace: true });
+    void (async () => {
+      if (action === 'close') await checkOpenSession();
+      await openCashActionDialog(action as 'open' | 'close' | 'in' | 'out');
+      navigate(location.pathname, { replace: true });
+    })();
   }, [location.pathname, location.search, navigate]);
 
   const refreshFinanceData = async () => {
@@ -1860,6 +1872,16 @@ const Financeiro = () => {
                 {selectedSession?.status === 'open' ? 'ABERTO' : 'FECHADO'}
               </Badge>
             </div>
+            {selectedSession?.status === 'open' && (
+              <Button
+                type="button"
+                className="h-9 w-full rounded-[14px] bg-[#C93B32] text-xs text-white hover:bg-[#A92F28]"
+                onClick={() => { void closeSelectedCashSession(); }}
+              >
+                <Lock className="mr-1.5 h-3.5 w-3.5" />
+                Fechar esta sessão
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -2327,6 +2349,15 @@ const Financeiro = () => {
                   </div>
                 </div>
                 <div className="flex flex-col items-stretch justify-end gap-2 sm:flex-row sm:items-end">
+                  {selectedSession?.status === 'open' && (
+                    <Button
+                      className="bg-[#C93B32] text-white hover:bg-[#A92F28]"
+                      onClick={() => { void closeSelectedCashSession(); }}
+                    >
+                      <Lock className="mr-2 h-4 w-4" />
+                      Fechar esta sessão
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => selectedSessionId && fetchSessionDetails(selectedSessionId)} disabled={!selectedSessionId || loadingSessionDetails}>
                     {loadingSessionDetails ? 'Atualizando...' : 'Atualizar sessão'}
                   </Button>

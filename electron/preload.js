@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   printProductLabel: (deviceId, productData) => ipcRenderer.invoke('print-product-label', deviceId, productData),
   printSystem: (deviceName, html, silent) => ipcRenderer.invoke('print-system', { deviceName, html, silent }),
   previewPdf: (html, fileName) => ipcRenderer.invoke('preview-pdf', { html, fileName }),
+  previewPdfBuffer: (pdfBytes, fileName) => ipcRenderer.invoke('preview-pdf-buffer', { pdfBytes, fileName }),
   printRawSystem: (deviceName, text) => ipcRenderer.invoke('print-raw-system', { deviceName, text }),
   
   // Scale operations

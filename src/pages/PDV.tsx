@@ -1782,7 +1782,7 @@ const PDV = () => {
         description: `O limite deste caixa venceu em ${currentDeadline.toLocaleString('pt-BR')}. Feche-o antes de lançar um novo pedido.`,
         variant: 'destructive',
       });
-      navigate('/caixa?acao=fechar&motivo=limite');
+      navigate('/caixa?cashAction=close&motivo=limite');
       return false;
     }
     return true;
@@ -2315,7 +2315,7 @@ const PDV = () => {
           description: `Este caixa deveria ter sido fechado até ${cashSessionDeadline.toLocaleString('pt-BR')}. Feche e abra um novo caixa para continuar.`,
           variant: 'destructive',
         });
-        navigate('/caixa?acao=fechar&motivo=limite');
+        navigate('/caixa?cashAction=close&motivo=limite');
         return;
       }
 

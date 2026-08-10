@@ -211,6 +211,7 @@ function normalizeNfcePrintData(order: any) {
   const chave = normalizeSingleLine(raw.chave_acesso || raw.access_key || raw.chave || extractNfceAccessKeyFromXml(xmlContent));
   const ambiente = normalizeSingleLine(raw.ambiente || raw.environment);
   const modelCode = normalizeSingleLine(raw.model_code || raw.modelCode || xmlContent.match(/<mod>(55|65)<\/mod>/i)?.[1] || '65');
+  const cupomId = normalizeSingleLine(raw.cupom_id || raw.cupomId || raw.id);
   const qrCodeUrl = normalizeNfceQrCodeUrl(
     extractNfceQrCodeFromXml(xmlContent) || raw.qr_code_url || raw.qrCodeUrl || raw.qrcode_url || raw.qr_url,
     ambiente,
@@ -218,7 +219,48 @@ function normalizeNfcePrintData(order: any) {
   );
 
   if (!numero && !protocolo && !chave && !qrCodeUrl) return null;
-  return { numero, serie, protocolo, chave, qrCodeUrl: modelCode === '55' ? '' : qrCodeUrl, ambiente, modelCode };
+  return { numero, serie, protocolo, chave, qrCodeUrl: modelCode === '55' ? '' : qrCodeUrl, ambiente, modelCode, cupomId };
+}
+
+async function openAuthorizedNfeDanfe(fiscal: ReturnType<typeof normalizeNfcePrintData>) {
+  if (!fiscal?.cupomId) throw new Error('Identificador da NF-e autorizada não encontrado.');
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error('Login não confirmado para abrir o DANFE.');
+
+  const isElectron = Boolean((window as any)?.electronAPI?.isElectron);
+  const previewWindow = !isElectron ? window.open('', '_blank') : null;
+  if (!isElectron && !previewWindow) throw new Error('Pop-up bloqueado. Permita pop-ups para visualizar o DANFE.');
+  if (previewWindow) {
+    previewWindow.document.write('<!doctype html><title>Gerando DANFE...</title><p style="font:16px sans-serif;padding:24px">Gerando DANFE a partir do XML autorizado...</p>');
+  }
+
+  try {
+    const response = await fetch('/api/nfce/danfe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ cupom_id: fiscal.cupomId }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.error || 'Não foi possível gerar o DANFE da NF-e autorizada.');
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (isElectron) {
+      const result = await (window as any).electronAPI?.previewPdfBuffer?.(
+        bytes,
+        `DANFE-NFe-${fiscal.numero || 'documento'}`,
+      );
+      if (!result?.success) throw new Error(result?.error || 'Não foi possível abrir o DANFE no leitor de PDF.');
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    if (previewWindow) previewWindow.location.replace(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+  } catch (error) {
+    try { previewWindow?.close(); } catch {}
+    throw error;
+  }
 }
 
 function buildNfceHtmlBlock(order: any) {
@@ -1638,23 +1680,12 @@ export const PrinterService = {
 
     const fiscalPrintData = normalizeNfcePrintData(enrichedOrder);
     if (fiscalPrintData?.modelCode === '55') {
-      const html = buildNfeDanfeA4Html(enrichedOrder, store);
-      if (isElectron) {
-        const fileName = `DANFE-NFe-${fiscalPrintData.numero || order?.order_number || 'documento'}`;
-        const resp = api.previewPdf
-          ? await api.previewPdf(html, fileName)
-          : await api.printSystem(undefined, html, false);
-        if (!resp?.success) toast.error(resp?.error || 'Falha ao abrir a pré-visualização do DANFE A4');
-        return;
+      try {
+        await openAuthorizedNfeDanfe(fiscalPrintData);
+      } catch (error: any) {
+        toast.error(error?.message || 'Falha ao abrir o DANFE oficial da NF-e.');
+        throw error;
       }
-
-      const printWindow = window.open('', '_blank', 'width=900,height=1100');
-      if (!printWindow) {
-        toast.error('Pop-up bloqueado! Permita pop-ups para imprimir o DANFE.');
-        return;
-      }
-      printWindow.document.write(html.replace('</body>', '<script>window.onload=function(){window.print();}</script></body>'));
-      printWindow.document.close();
       return;
     }
 

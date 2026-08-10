@@ -779,6 +779,26 @@ ipcMain.handle('preview-pdf', async (_event, { html, fileName } = {}) => {
   }
 });
 
+ipcMain.handle('preview-pdf-buffer', async (_event, { pdfBytes, fileName } = {}) => {
+  try {
+    const pdf = Buffer.from(pdfBytes || []);
+    if (pdf.length < 5 || pdf.subarray(0, 5).toString() !== '%PDF-') {
+      return { success: false, error: 'O servidor não devolveu um arquivo PDF válido.' };
+    }
+    const safeName = String(fileName || 'DANFE-NFe')
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'DANFE-NFe';
+    const pdfPath = path.join(app.getPath('temp'), `${safeName}-${Date.now()}.pdf`);
+    fs.writeFileSync(pdfPath, pdf);
+    generatedPdfPreviews.add(pdfPath);
+    const openError = await shell.openPath(pdfPath);
+    if (openError) return { success: false, error: openError };
+    return { success: true, path: pdfPath };
+  } catch (error) {
+    return { success: false, error: error?.message || 'Falha ao abrir o DANFE em PDF' };
+  }
+});
+
 ipcMain.handle('print-raw-system', async (event, { deviceName, text } = {}) => {
   try {
     if (!printerService) return { success: false, error: 'Serviço de impressora não inicializado' };
