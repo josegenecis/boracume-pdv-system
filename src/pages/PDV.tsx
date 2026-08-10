@@ -2078,6 +2078,16 @@ const PDV = () => {
     const nfceData = await emitNfceForOrder(order);
     const fiscalOrder = { ...order, nfce: nfceData };
 
+    if (modelCode === '55') {
+      // NF-e gera dois documentos distintos: primeiro o comprovante operacional
+      // normal na térmica e, depois, o DANFE modelo 55 em PDF A4 para conferência.
+      await PrinterService.printOrder(order, {
+        openCashDrawer: shouldOpenCashDrawerForOrder(order),
+      });
+      await PrinterService.printOrder(fiscalOrder);
+      return { fiscal: true as const, nfce: nfceData };
+    }
+
     await PrinterService.printOrder(fiscalOrder, {
       openCashDrawer: shouldOpenCashDrawerForOrder(fiscalOrder),
     });
