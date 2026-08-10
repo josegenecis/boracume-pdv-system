@@ -713,13 +713,15 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
     const encoded = encodeURIComponent(html);
     await win.loadURL(`data:text/html;charset=utf-8,${encoded}`);
 
+    const isA4 = /data-print-format=["']a4["']/i.test(html);
     const printResult = await new Promise((resolve) => {
       win.webContents.print(
         {
           silent: !!silent,
           deviceName: deviceName || undefined,
           printBackground: true,
-          margins: { marginType: 'none' },
+          margins: { marginType: isA4 ? 'default' : 'none' },
+          pageSize: isA4 ? 'A4' : undefined,
           scaleFactor: 100
         },
         (success, failureReason) => resolve({ success, failureReason })

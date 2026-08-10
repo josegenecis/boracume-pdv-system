@@ -964,6 +964,120 @@ function buildOrderHtml(order: any, config: any, store?: any) {
     `;
 }
 
+function buildNfeDanfeA4Html(order: any, store?: any) {
+  const fiscal = normalizeNfcePrintData(order);
+  const recipient = order?.variations?.fiscal_recipient || {};
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const accessKey = formatAccessKeyForPrint(fiscal?.chave || '');
+  const issueDate = order?.created_at ? new Date(order.created_at).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR');
+  const subtotal = Math.max(0, Number(order?.total || 0) - Number(order?.delivery_fee || 0) + Number(order?.discount || 0));
+
+  return `<!DOCTYPE html>
+    <html data-print-format="a4">
+      <head>
+        <meta charset="utf-8" />
+        <title>DANFE NF-e ${escapeHtml(fiscal?.numero || '')}</title>
+        <style>
+          @page { size: A4 portrait; margin: 8mm; }
+          * { box-sizing: border-box; }
+          html, body { width: 210mm; min-height: 297mm; margin: 0; padding: 0; }
+          body { font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 9px; line-height: 1.22; }
+          .danfe { width: 194mm; margin: 0 auto; }
+          .box { border: 1px solid #000; }
+          .header { display: grid; grid-template-columns: 42% 18% 40%; min-height: 29mm; }
+          .header > div { padding: 3mm; border-right: 1px solid #000; }
+          .header > div:last-child { border-right: 0; }
+          .issuer { text-align: center; }
+          .issuer strong { display: block; font-size: 14px; margin-bottom: 2mm; }
+          .danfe-title { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+          .danfe-title strong { font-size: 19px; letter-spacing: .8px; }
+          .danfe-title span { font-size: 8px; }
+          .number { margin-top: 2mm; font-size: 11px; font-weight: 700; }
+          .key { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700; letter-spacing: .35px; word-spacing: 1px; }
+          .label { display:block; font-size: 7px; font-weight: 700; text-transform: uppercase; margin-bottom: 1mm; }
+          .row { display:grid; border: 1px solid #000; border-top: 0; }
+          .row > div { min-height: 12mm; padding: 2mm; border-right: 1px solid #000; }
+          .row > div:last-child { border-right:0; }
+          .nature { grid-template-columns: 48% 26% 26%; }
+          .recipient { grid-template-columns: 52% 24% 24%; }
+          .address { grid-template-columns: 52% 18% 18% 12%; }
+          .totals { grid-template-columns: repeat(5, 1fr); }
+          .section { margin-top: 3mm; font-size: 8px; font-weight: 700; }
+          table { width:100%; border-collapse:collapse; table-layout:fixed; }
+          th, td { border:1px solid #000; padding:1.4mm 1mm; vertical-align:top; }
+          th { font-size:7px; text-transform:uppercase; background:#eee; }
+          td { font-size:8px; }
+          .right { text-align:right; }
+          .center { text-align:center; }
+          .additional { min-height: 24mm; padding:2mm; border:1px solid #000; }
+          .footer { margin-top:2mm; text-align:center; font-size:7px; }
+        </style>
+      </head>
+      <body>
+        <main class="danfe">
+          <section class="box header">
+            <div class="issuer">
+              <strong>${escapeHtml(store?.restaurant_name || store?.name || 'EMITENTE')}</strong>
+              <div>${escapeHtml(store?.address || '')}</div>
+              ${store?.phone ? `<div>Telefone: ${escapeHtml(store.phone)}</div>` : ''}
+              <div>CNPJ: ${escapeHtml(store?.cnpj || '')}</div>
+            </div>
+            <div class="danfe-title">
+              <strong>DANFE</strong>
+              <span>Documento Auxiliar da Nota Fiscal Eletrônica</span>
+              <div class="number">NF-e nº ${escapeHtml(fiscal?.numero || '')}<br/>Série ${escapeHtml(fiscal?.serie || '1')}</div>
+            </div>
+            <div>
+              <span class="label">Chave de acesso</span>
+              <div class="key">${escapeHtml(accessKey)}</div>
+              <div style="margin-top:3mm">Consulta de autenticidade no portal nacional da NF-e ou no site da SEFAZ autorizadora.</div>
+              ${fiscal?.protocolo ? `<div style="margin-top:2mm"><span class="label">Protocolo de autorização</span>${escapeHtml(fiscal.protocolo)}</div>` : ''}
+              ${fiscal?.ambiente && fiscal.ambiente !== 'producao' ? '<div style="margin-top:2mm;font-weight:700">SEM VALOR FISCAL — AMBIENTE DE HOMOLOGAÇÃO</div>' : ''}
+            </div>
+          </section>
+          <section class="row nature">
+            <div><span class="label">Natureza da operação</span>Venda de mercadoria</div>
+            <div><span class="label">Número da venda</span>${escapeHtml(order?.order_number || '')}</div>
+            <div><span class="label">Data e hora da emissão</span>${escapeHtml(issueDate)}</div>
+          </section>
+          <div class="section">DESTINATÁRIO / REMETENTE</div>
+          <section class="row recipient">
+            <div><span class="label">Nome / Razão social</span>${escapeHtml(recipient.name || order?.customer_name || '')}</div>
+            <div><span class="label">CPF / CNPJ</span>${escapeHtml(recipient.cpf_cnpj || order?.customer_document || '')}</div>
+            <div><span class="label">Inscrição estadual</span>${escapeHtml(recipient.state_registration || '')}</div>
+          </section>
+          <section class="row address">
+            <div><span class="label">Endereço</span>${escapeHtml([recipient.address, recipient.address_number, recipient.address_complement].filter(Boolean).join(', ') || order?.customer_address || '')}</div>
+            <div><span class="label">Bairro</span>${escapeHtml(recipient.neighborhood || '')}</div>
+            <div><span class="label">Município</span>${escapeHtml(recipient.city || '')}</div>
+            <div><span class="label">UF / CEP</span>${escapeHtml([recipient.state, recipient.postal_code].filter(Boolean).join(' / '))}</div>
+          </section>
+          <div class="section">DADOS DOS PRODUTOS / SERVIÇOS</div>
+          <table>
+            <thead><tr><th style="width:8%">Código</th><th style="width:34%">Descrição</th><th style="width:10%">NCM/SH</th><th style="width:8%">CST/CSOSN</th><th style="width:8%">CFOP</th><th style="width:6%">Un.</th><th style="width:8%">Qtd.</th><th style="width:9%">V. unit.</th><th style="width:9%">V. total</th></tr></thead>
+            <tbody>${items.map((item: any) => {
+              const quantity = Number(item.quantity || 1);
+              const unitPrice = Number(item.price || item.unit_price || 0);
+              const total = Number(item.subtotal || item.total || unitPrice * quantity);
+              return `<tr><td>${escapeHtml(String(item.product_id || '').slice(0, 8))}</td><td>${escapeHtml(item.product_name || item.name || 'Produto')}</td><td class="center">${escapeHtml(item.fiscal_ncm || '')}</td><td class="center">${escapeHtml(item.fiscal_csosn || '')}</td><td class="center">${escapeHtml(item.fiscal_cfop || '')}</td><td class="center">${escapeHtml(item.sale_unit || 'UN')}</td><td class="right">${quantity.toFixed(3)}</td><td class="right">${formatCurrencyValue(unitPrice)}</td><td class="right">${formatCurrencyValue(total)}</td></tr>`;
+            }).join('')}</tbody>
+          </table>
+          <div class="section">CÁLCULO DO IMPOSTO</div>
+          <section class="row totals">
+            <div><span class="label">Valor dos produtos</span>${formatCurrencyValue(subtotal)}</div>
+            <div><span class="label">Valor do frete</span>${formatCurrencyValue(Number(order?.delivery_fee || 0))}</div>
+            <div><span class="label">Desconto</span>${formatCurrencyValue(Number(order?.discount || 0))}</div>
+            <div><span class="label">Outras despesas</span>${formatCurrencyValue(0)}</div>
+            <div><span class="label">Valor total da NF-e</span><strong>${formatCurrencyValue(Number(order?.total || 0))}</strong></div>
+          </section>
+          <div class="section">DADOS ADICIONAIS</div>
+          <section class="additional"><span class="label">Informações complementares</span>Documento referente à venda ${escapeHtml(order?.order_number || '')}. ${escapeHtml(fiscal?.ambiente && fiscal.ambiente !== 'producao' ? 'NF-e emitida em ambiente de homologação, sem valor fiscal.' : '')}</section>
+          <div class="footer">Sistema ${BRAND_NAME}</div>
+        </main>
+      </body>
+    </html>`;
+}
+
 function buildKitchenTicketHtml(order: any, config: any) {
   const width = config.paper_width === '58mm' ? '58mm' : '80mm';
   const bodyWidth = config.paper_width === '58mm' ? '46mm' : '68mm';
@@ -1521,6 +1635,26 @@ export const PrinterService = {
       return { ...it, receiptDescriptionLines, variations: finalLines };
     });
     (enrichedOrder as any).items = itemsSorted;
+
+    const fiscalPrintData = normalizeNfcePrintData(enrichedOrder);
+    if (fiscalPrintData?.modelCode === '55') {
+      const html = buildNfeDanfeA4Html(enrichedOrder, store);
+      if (isElectron) {
+        const printerName = String(localStorage.getItem('hw.report.printer') || '').trim();
+        const resp = await api.printSystem(printerName || undefined, html, Boolean(printerName));
+        if (!resp?.success) toast.error(resp?.error || 'Falha ao imprimir o DANFE A4');
+        return;
+      }
+
+      const printWindow = window.open('', '_blank', 'width=900,height=1100');
+      if (!printWindow) {
+        toast.error('Pop-up bloqueado! Permita pop-ups para imprimir o DANFE.');
+        return;
+      }
+      printWindow.document.write(html.replace('</body>', '<script>window.onload=function(){window.print();}</script></body>'));
+      printWindow.document.close();
+      return;
+    }
 
     if (isElectron) {
       const resp = await printElectron(enrichedOrder, config);
