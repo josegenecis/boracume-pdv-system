@@ -2411,6 +2411,9 @@ const PDV = () => {
       // Consulta o valor fiscal atual em toda venda, mas inicia em paralelo com
       // a gravação para não adicionar uma espera sequencial ao checkout.
       const fiscalActivePromise = isFiscalEmissionActive(selectedFiscalRecipient ? '55' : '65');
+      if (selectedFiscalRecipient && !(await fiscalActivePromise)) {
+        throw new Error('A NF-e modelo 55 está desativada. Ative o modelo 55 em Configurações fiscais antes de concluir esta venda.');
+      }
 
       const { data, error } = await supabase
         .from('orders')
@@ -3651,6 +3654,9 @@ const PDV = () => {
                   } as any);
 
                 const fiscalActiveForSale = await isFiscalEmissionActive(selectedFiscalRecipient ? '55' : '65');
+                if (selectedFiscalRecipient && !fiscalActiveForSale) {
+                  throw new Error('A NF-e modelo 55 está desativada. Ative o modelo 55 em Configurações fiscais.');
+                }
                 let printResult: { fiscal: boolean; nfce: any | null } = { fiscal: fiscalActiveForSale, nfce: null };
                 try {
                   printResult = await printOrderAfterSale(resolvedOrder, fiscalActiveForSale);
