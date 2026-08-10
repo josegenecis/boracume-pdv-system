@@ -257,7 +257,8 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
         cpfCnpjConsumidor: data.consumer_data?.cpf_cnpj,
         cscId: fiscalSettings.csc_id,
         cscToken: fiscalSettings.csc_token,
-      } : undefined
+      } : undefined,
+      modelCode,
     );
 
     const authorized = transmissionResult.success && ['100', '150'].includes(transmissionResult.cStat);
@@ -327,13 +328,17 @@ async function consultarNFCe(supabase: any, userId: string, cupomId: string) {
     .single();
   if (cupomError || !cupom) throw new Error('Cupom nao encontrado');
 
+  const modelCode: '55' | '65' = cupom.model_code === '55' ? '55' : '65';
   const fiscalSettings = await loadFiscalSettings(supabase, userId, false);
+  const modelSettings = await loadFiscalModel(supabase, userId, modelCode);
+  if (modelSettings?.environment) fiscalSettings.ambiente = modelSettings.environment;
   const { sefazClient } = loadSefazClient(fiscalSettings);
   try {
     const result = await sefazClient.consultarNFCe(
       cupom.chave_acesso,
       fiscalSettings.endereco_uf,
-      fiscalSettings.ambiente as Ambiente
+      fiscalSettings.ambiente as Ambiente,
+      modelCode,
     );
 
     const status = ['100', '150'].includes(result.cStat) ? 'autorizado' : cupom.status;
@@ -371,7 +376,10 @@ async function cancelarNFCe(supabase: any, userId: string, cupomId: string, moti
   if (cupom.status !== 'autorizado') throw new Error('Apenas cupons autorizados podem ser cancelados');
   if (!cupom.protocolo_autorizacao) throw new Error('Cupom autorizado sem protocolo salvo');
 
+  const modelCode: '55' | '65' = cupom.model_code === '55' ? '55' : '65';
   const fiscalSettings = await loadFiscalSettings(supabase, userId, false);
+  const modelSettings = await loadFiscalModel(supabase, userId, modelCode);
+  if (modelSettings?.environment) fiscalSettings.ambiente = modelSettings.environment;
   const { sefazClient } = loadSefazClient(fiscalSettings);
   try {
     const result = await sefazClient.cancelarNFCe(
@@ -380,7 +388,8 @@ async function cancelarNFCe(supabase: any, userId: string, cupomId: string, moti
       motivo,
       fiscalSettings.endereco_uf,
       fiscalSettings.ambiente as Ambiente,
-      fiscalSettings.cnpj
+      fiscalSettings.cnpj,
+      modelCode,
     );
 
     if (result.success) {

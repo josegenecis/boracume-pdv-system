@@ -35,6 +35,7 @@ interface NFCeCupom {
   contingencia: boolean;
   order_id?: string;
   sale_order_number?: string;
+  model_code?: '55' | '65';
 }
 
 const NFCeManager: React.FC = () => {
@@ -475,7 +476,7 @@ const NFCeManager: React.FC = () => {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="text-lg flex items-center gap-2">
-                      NFC-e #{cupom.numero}
+                      {cupom.model_code === '55' ? 'NF-e' : 'NFC-e'} #{cupom.numero}
                       <Badge variant="outline" className="font-normal text-xs">
                         Série {cupom.serie}
                       </Badge>

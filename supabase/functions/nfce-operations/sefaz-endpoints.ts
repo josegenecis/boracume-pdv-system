@@ -41,6 +41,26 @@ const SVRS_HOM: EndpointSet = {
   evento: 'https://nfce-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
 };
 
+// O modelo 55 usa a infraestrutura NF-e. O leiaute XML é compartilhado com o
+// modelo 65, mas os hosts `nfce.*` recusam NF-e com a rejeição 775.
+const NFE_SVRS_PROD: EndpointSet = {
+  autorizacao: 'https://nfe.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+  retAutorizacao: 'https://nfe.svrs.rs.gov.br/ws/NfeRetAutorizacao/NFeRetAutorizacao4.asmx',
+  consulta: 'https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+  status: 'https://nfe.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
+  evento: 'https://nfe.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+};
+
+const NFE_SVRS_HOM: EndpointSet = {
+  autorizacao: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+  retAutorizacao: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeRetAutorizacao/NFeRetAutorizacao4.asmx',
+  consulta: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+  status: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
+  evento: 'https://nfe-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+};
+
+const NFE_SVRS_UFS = new Set(['AC', 'AL', 'AP', 'CE', 'DF', 'ES', 'PA', 'PB', 'PI', 'RJ', 'RN', 'RO', 'RR', 'SC', 'SE', 'TO']);
+
 const GO_PROD: EndpointSet = {
   autorizacao: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4',
   retAutorizacao: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeRetAutorizacao4',
@@ -216,16 +236,20 @@ const ENDPOINTS: Record<Ambiente, Partial<Record<string, EndpointSet>>> = {
   },
 };
 
-export function getSefazEndpoint(uf: string, ambiente: Ambiente, operation: SefazOperation): string {
+export function getSefazEndpoint(uf: string, ambiente: Ambiente, operation: SefazOperation, modelCode: '55' | '65' = '65'): string {
   const normalizedUf = String(uf || '').toUpperCase();
-  const override = getEndpointOverride(normalizedUf, ambiente, operation);
+  const override = getEndpointOverride(normalizedUf, ambiente, operation, modelCode);
   if (override) return override;
+
+  if (modelCode === '55' && NFE_SVRS_UFS.has(normalizedUf)) {
+    return sanitizeEndpointUrl((ambiente === 'producao' ? NFE_SVRS_PROD : NFE_SVRS_HOM)[operation]);
+  }
 
   const endpoints = ENDPOINTS[ambiente]?.[normalizedUf];
   const endpoint = endpoints?.[operation];
   if (!endpoint) {
-    const envKey = getEndpointEnvKey(normalizedUf, ambiente, operation);
-    throw new Error(`Endpoint NFC-e nao configurado para ${normalizedUf}/${ambiente}/${operation}. Configure ${envKey} ou adicione a UF no mapa fiscal.`);
+    const envKey = getEndpointEnvKey(normalizedUf, ambiente, operation, modelCode);
+    throw new Error(`Endpoint do modelo ${modelCode} nao configurado para ${normalizedUf}/${ambiente}/${operation}. Configure ${envKey} ou adicione a UF no mapa fiscal.`);
   }
   return sanitizeEndpointUrl(endpoint);
 }
@@ -242,13 +266,13 @@ export function hasSefazEndpoint(uf: string, ambiente: Ambiente, operation: Sefa
   }
 }
 
-function getEndpointOverride(uf: string, ambiente: Ambiente, operation: SefazOperation): string {
-  const value = Deno.env.get(getEndpointEnvKey(uf, ambiente, operation))?.trim();
+function getEndpointOverride(uf: string, ambiente: Ambiente, operation: SefazOperation, modelCode: '55' | '65' = '65'): string {
+  const value = Deno.env.get(getEndpointEnvKey(uf, ambiente, operation, modelCode))?.trim();
   return value ? sanitizeEndpointUrl(value) : '';
 }
 
-function getEndpointEnvKey(uf: string, ambiente: Ambiente, operation: SefazOperation): string {
-  return `NFCE_${ambiente.toUpperCase()}_${uf}_${OPERATION_ENV_KEYS[operation]}_URL`;
+function getEndpointEnvKey(uf: string, ambiente: Ambiente, operation: SefazOperation, modelCode: '55' | '65' = '65'): string {
+  return `${modelCode === '55' ? 'NFE' : 'NFCE'}_${ambiente.toUpperCase()}_${uf}_${OPERATION_ENV_KEYS[operation]}_URL`;
 }
 
 function sanitizeEndpointUrl(value: string): string {

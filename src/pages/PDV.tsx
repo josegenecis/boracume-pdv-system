@@ -1725,8 +1725,40 @@ const PDV = () => {
     return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
   };
 
-  const ensureCashCanReceiveOrder = () => {
-    if (!cashSession?.id) {
+  const ensureCashCanReceiveOrder = async () => {
+    if (!user?.id) return false;
+
+    let currentSession: CashSession | null = null;
+    let currentDeadline: Date | null = null;
+    try {
+      const [{ data: session, error: sessionError }, { data: profile, error: profileError }] = await Promise.all([
+        supabase
+          .from('cash_register_sessions' as any)
+          .select('id, opened_at, initial_amount, status')
+          .eq('user_id', user.id)
+          .eq('status', 'open')
+          .order('opened_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.from('profiles').select('opening_hours').eq('id', user.id).maybeSingle(),
+      ]);
+      if (sessionError) throw sessionError;
+      if (profileError) throw profileError;
+      currentSession = (session as CashSession | null) || null;
+      currentDeadline = session?.opened_at ? getCashSessionDeadline(session.opened_at, profile?.opening_hours) : null;
+      setCashSession(currentSession);
+      setCashSessionDeadline(currentDeadline);
+    } catch (error) {
+      console.error('Falha ao validar o caixa antes de lançar o pedido:', error);
+      toast({
+        title: 'Não foi possível validar o caixa',
+        description: 'Atualize a tela e tente novamente. O pagamento não foi aberto por segurança.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    if (!currentSession?.id) {
       toast({
         title: 'Caixa fechado',
         description: 'Abra o caixa antes de lançar um pedido.',
@@ -1735,10 +1767,10 @@ const PDV = () => {
       openCashDialog('open');
       return false;
     }
-    if (cashSessionDeadline && Date.now() > cashSessionDeadline.getTime()) {
+    if (currentDeadline && Date.now() > currentDeadline.getTime()) {
       toast({
         title: 'Caixa pendente de encerramento',
-        description: `O limite deste caixa venceu em ${cashSessionDeadline.toLocaleString('pt-BR')}. Feche-o antes de lançar um novo pedido.`,
+        description: `O limite deste caixa venceu em ${currentDeadline.toLocaleString('pt-BR')}. Feche-o antes de lançar um novo pedido.`,
         variant: 'destructive',
       });
       navigate('/caixa?acao=fechar&motivo=limite');
@@ -1767,7 +1799,7 @@ const PDV = () => {
       return;
     }
 
-    if (!ensureCashCanReceiveOrder()) return;
+    if (!(await ensureCashCanReceiveOrder())) return;
 
     try {
       setProcessing(true);
@@ -1905,7 +1937,7 @@ const PDV = () => {
     }
   };
 
-  const openTableLaunch = () => {
+  const openTableLaunch = async () => {
     if (cart.length === 0) {
       toast({
         title: "Pedido vazio",
@@ -1914,12 +1946,12 @@ const PDV = () => {
       });
       return;
     }
-    if (!ensureCashCanReceiveOrder()) return;
+    if (!(await ensureCashCanReceiveOrder())) return;
     setTableLaunchId(selectedTable || '');
     setTableLaunchOpen(true);
   };
 
-  const openCheckout = () => {
+  const openCheckout = async () => {
     if (cart.length === 0) {
       toast({
         title: "Pedido vazio",
@@ -1929,7 +1961,7 @@ const PDV = () => {
       return;
     }
 
-    if (!ensureCashCanReceiveOrder()) return;
+    if (!(await ensureCashCanReceiveOrder())) return;
 
     setMobileCartOpen(false);
     setCheckoutOpen(true);

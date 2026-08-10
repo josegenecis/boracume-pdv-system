@@ -121,7 +121,8 @@ export class SefazClient {
       cpfCnpjConsumidor?: string;
       cscId?: string;
       cscToken?: string;
-    }
+    },
+    modelCode: '55' | '65' = '65'
   ): Promise<SefazResponse> {
     const signedNFe = this.xmlSigner.signXML(xmlNFCe);
     const digestValue = signedNFe.match(/<DigestValue>([^<]+)<\/DigestValue>/)?.[1];
@@ -148,7 +149,7 @@ export class SefazClient {
     const loteId = Date.now().toString().slice(-15);
     const nfeXml = stripXmlDeclaration(finalNFe);
     const payload = `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${loteId}</idLote><indSinc>1</indSinc>${nfeXml}</enviNFe>`;
-    const result = await this.callSefaz('autorizacao', payload, uf, ambiente, 'nfeAutorizacaoLote');
+    const result = await this.callSefaz('autorizacao', payload, uf, ambiente, 'nfeAutorizacaoLote', modelCode);
     const enrichedResult = enrichQrCodeSchemaError(result, generatedQrCodeUrl, finalNFe);
     return {
       ...enrichedResult,
@@ -164,10 +165,10 @@ export class SefazClient {
     return await this.callSefaz('retAutorizacao', payload, uf, ambiente, 'nfeRetAutorizacaoLote');
   }
 
-  async consultarNFCe(chaveAcesso: string, uf: string, ambiente: Ambiente): Promise<SefazResponse> {
+  async consultarNFCe(chaveAcesso: string, uf: string, ambiente: Ambiente, modelCode: '55' | '65' = '65'): Promise<SefazResponse> {
     const tpAmb = ambiente === 'producao' ? '1' : '2';
     const payload = `<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chaveAcesso}</chNFe></consSitNFe>`;
-    return await this.callSefaz('consulta', payload, uf, ambiente, 'nfeConsultaNF');
+    return await this.callSefaz('consulta', payload, uf, ambiente, 'nfeConsultaNF', modelCode);
   }
 
   async consultarStatusServico(uf: string, ambiente: Ambiente): Promise<SefazResponse> {
@@ -183,7 +184,8 @@ export class SefazClient {
     motivo: string,
     uf: string,
     ambiente: Ambiente,
-    cnpj: string
+    cnpj: string,
+    modelCode: '55' | '65' = '65'
   ): Promise<SefazResponse> {
     const tpAmb = ambiente === 'producao' ? '1' : '2';
     const timestamp = formatNfeDate(new Date());
@@ -192,7 +194,7 @@ export class SefazClient {
     const eventXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><infEvento Id="${eventId}"><cOrgao>${getCodigoUF(uf)}</cOrgao><tpAmb>${tpAmb}</tpAmb><CNPJ>${onlyDigits(cnpj)}</CNPJ><chNFe>${chaveAcesso}</chNFe><dhEvento>${timestamp}</dhEvento><tpEvento>110111</tpEvento><nSeqEvento>${sequence}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Cancelamento</descEvento><nProt>${protocolo}</nProt><xJust>${escapeXml(motivo).slice(0, 255)}</xJust></detEvento></infEvento></evento>`;
     const signedEvent = this.xmlSigner.signXML(eventXml);
     const payload = `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>${Date.now().toString().slice(-15)}</idLote>${signedEvent}</envEvento>`;
-    return await this.callSefaz('evento', payload, uf, ambiente, 'nfeRecepcaoEvento');
+    return await this.callSefaz('evento', payload, uf, ambiente, 'nfeRecepcaoEvento', modelCode);
   }
 
   private async callSefaz(
@@ -200,9 +202,10 @@ export class SefazClient {
     payload: string,
     uf: string,
     ambiente: Ambiente,
-    soapAction: string
+    soapAction: string,
+    modelCode: '55' | '65' = '65'
   ): Promise<SefazResponse> {
-    const endpoint = getSefazEndpoint(uf, ambiente, operation);
+    const endpoint = getSefazEndpoint(uf, ambiente, operation, modelCode);
     const namespace = getSoapNamespace(operation);
     const action = `${namespace}/${soapAction}`;
     const soapEnvelope = this.createSoapEnvelope(payload, namespace, uf);
