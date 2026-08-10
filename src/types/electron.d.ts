@@ -67,6 +67,7 @@ export interface ElectronAPI {
   openCashDrawer: (deviceId: string) => Promise<DeviceResponse>;
   printProductLabel: (deviceId: string, productData: any) => Promise<DeviceResponse>;
   printSystem: (deviceName: string, html: string, silent?: boolean) => Promise<DeviceResponse>;
+  previewPdf: (html: string, fileName?: string) => Promise<DeviceResponse & { path?: string }>;
   
   // Scale operations
   connectScale: (deviceId: string, protocol?: string, options?: any) => Promise<DeviceResponse>;

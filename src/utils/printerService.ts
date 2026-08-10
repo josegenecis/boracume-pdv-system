@@ -1640,9 +1640,11 @@ export const PrinterService = {
     if (fiscalPrintData?.modelCode === '55') {
       const html = buildNfeDanfeA4Html(enrichedOrder, store);
       if (isElectron) {
-        const printerName = String(localStorage.getItem('hw.report.printer') || '').trim();
-        const resp = await api.printSystem(printerName || undefined, html, Boolean(printerName));
-        if (!resp?.success) toast.error(resp?.error || 'Falha ao imprimir o DANFE A4');
+        const fileName = `DANFE-NFe-${fiscalPrintData.numero || order?.order_number || 'documento'}`;
+        const resp = api.previewPdf
+          ? await api.previewPdf(html, fileName)
+          : await api.printSystem(undefined, html, false);
+        if (!resp?.success) toast.error(resp?.error || 'Falha ao abrir a pré-visualização do DANFE A4');
         return;
       }
 

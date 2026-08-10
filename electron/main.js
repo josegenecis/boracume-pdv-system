@@ -24,6 +24,7 @@ let updateWindow;
 let pendingOAuthCallback = '';
 let rendererReportsOpenCash = false;
 let allowWindowClose = false;
+const generatedPdfPreviews = new Set();
 
 function loadHardwareModules() {
   if (DeviceManager && PrinterService && ScaleService && PrintAgentServer) return true;
@@ -740,6 +741,41 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
   } catch (error) {
     console.error('Erro ao imprimir via sistema:', error);
     return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('preview-pdf', async (_event, { html, fileName } = {}) => {
+  let win;
+  try {
+    if (!html || typeof html !== 'string') {
+      return { success: false, error: 'HTML inválido para gerar o PDF' };
+    }
+
+    win = new BrowserWindow({
+      show: false,
+      webPreferences: { nodeIntegration: false, contextIsolation: true }
+    });
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    const pdf = await win.webContents.printToPDF({
+      pageSize: 'A4',
+      landscape: false,
+      printBackground: true,
+      margins: { top: 0.2, bottom: 0.2, left: 0.2, right: 0.2 },
+      preferCSSPageSize: true,
+    });
+    const safeName = String(fileName || 'DANFE-NFe')
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'DANFE-NFe';
+    const pdfPath = path.join(app.getPath('temp'), `${safeName}-${Date.now()}.pdf`);
+    fs.writeFileSync(pdfPath, pdf);
+    generatedPdfPreviews.add(pdfPath);
+    const openError = await shell.openPath(pdfPath);
+    if (openError) return { success: false, error: openError };
+    return { success: true, path: pdfPath };
+  } catch (error) {
+    return { success: false, error: error?.message || 'Falha ao gerar a pré-visualização do PDF' };
+  } finally {
+    try { win?.close(); } catch {}
   }
 });
 
