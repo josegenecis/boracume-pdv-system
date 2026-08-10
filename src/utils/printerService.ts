@@ -210,6 +210,7 @@ function normalizeNfcePrintData(order: any) {
   const protocolo = normalizeSingleLine(raw.protocolo || raw.protocolo_autorizacao || raw.protocol);
   const chave = normalizeSingleLine(raw.chave_acesso || raw.access_key || raw.chave || extractNfceAccessKeyFromXml(xmlContent));
   const ambiente = normalizeSingleLine(raw.ambiente || raw.environment);
+  const modelCode = normalizeSingleLine(raw.model_code || raw.modelCode || xmlContent.match(/<mod>(55|65)<\/mod>/i)?.[1] || '65');
   const qrCodeUrl = normalizeNfceQrCodeUrl(
     extractNfceQrCodeFromXml(xmlContent) || raw.qr_code_url || raw.qrCodeUrl || raw.qrcode_url || raw.qr_url,
     ambiente,
@@ -217,7 +218,7 @@ function normalizeNfcePrintData(order: any) {
   );
 
   if (!numero && !protocolo && !chave && !qrCodeUrl) return null;
-  return { numero, serie, protocolo, chave, qrCodeUrl, ambiente };
+  return { numero, serie, protocolo, chave, qrCodeUrl: modelCode === '55' ? '' : qrCodeUrl, ambiente, modelCode };
 }
 
 function buildNfceHtmlBlock(order: any) {
@@ -233,8 +234,8 @@ function buildNfceHtmlBlock(order: any) {
 
   return `
           <div class="divider"></div>
-          <div class="center bold" style="font-size: 1.05em;">CUPOM FISCAL NFC-e</div>
-          ${nfce.numero ? `<div class="center">NFC-e ${escapeHtml(nfce.numero)}${nfce.serie ? ` / Série ${escapeHtml(nfce.serie)}` : ''}</div>` : ''}
+          <div class="center bold" style="font-size: 1.05em;">${nfce.modelCode === '55' ? 'DANFE NF-e - MODELO 55' : 'CUPOM FISCAL NFC-e'}</div>
+          ${nfce.numero ? `<div class="center">${nfce.modelCode === '55' ? 'NF-e' : 'NFC-e'} ${escapeHtml(nfce.numero)}${nfce.serie ? ` / Série ${escapeHtml(nfce.serie)}` : ''}</div>` : ''}
           ${nfce.protocolo ? `<div class="center">Protocolo: ${escapeHtml(nfce.protocolo)}</div>` : ''}
           ${nfce.ambiente && nfce.ambiente !== 'producao' ? `<div class="center bold">AMBIENTE: ${escapeHtml(nfce.ambiente.toUpperCase())}</div>` : ''}
           ${printedAccessKey ? `<div class="nfce-long center" style="margin-top: 6px;"><span class="bold">CHAVE DE ACESSO</span><br />${escapeHtml(formatAccessKeyForPrint(printedAccessKey))}</div>` : ''}
@@ -273,9 +274,9 @@ function appendNfceEscPosCommands(order: any, lineWidth: number) {
 
   line();
   commands += ALIGN_CENTER + BOLD_ON;
-  commands += text('CUPOM FISCAL NFC-e');
+  commands += text(nfce.modelCode === '55' ? 'DANFE NF-e - MODELO 55' : 'CUPOM FISCAL NFC-e');
   commands += BOLD_OFF;
-  if (nfce.numero) commands += text(`NFC-e ${nfce.numero}${nfce.serie ? ` / Serie ${nfce.serie}` : ''}`);
+  if (nfce.numero) commands += text(`${nfce.modelCode === '55' ? 'NF-e' : 'NFC-e'} ${nfce.numero}${nfce.serie ? ` / Serie ${nfce.serie}` : ''}`);
   if (nfce.protocolo) commands += text(`Protocolo: ${nfce.protocolo}`);
   if (nfce.ambiente && nfce.ambiente !== 'producao') commands += text(`AMBIENTE: ${nfce.ambiente.toUpperCase()}`);
   commands += ALIGN_LEFT;
