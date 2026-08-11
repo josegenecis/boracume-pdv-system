@@ -53,6 +53,9 @@ interface NFCeData {
     state?: string;
     postal_code?: string;
     city_code?: string;
+    country_code?: string;
+    country_name?: string;
+    foreign_id?: string;
     final_consumer?: boolean;
   };
   observacoes?: string;
@@ -199,8 +202,12 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
     const numeroNFCe = await getNextFiscalDocumentNumber(supabase, userId, modelCode);
     const dataEmissao = new Date();
     const chaveAcesso = await generateAccessKey(supabase, fiscalSettings, numeroNFCe, dataEmissao, modelCode);
-    const fiscalItems = buildFiscalItems(orderItems, fiscalSettings, productFiscalById);
-    validateFiscalItemsForEmission(fiscalItems, fiscalSettings);
+    const operationDestination = resolveOperationDestination(fiscalSettings, data.consumer_data, modelCode);
+    if (operationDestination === 3) {
+      throw new Error('Operação com destino ao exterior bloqueada: complete a homologação fiscal de exportação (país, idEstrangeiro, endereço e tributação) antes de transmitir. O sistema não emitirá uma NF-e internacional com dados incompletos.');
+    }
+    const fiscalItems = buildFiscalItems(orderItems, fiscalSettings, productFiscalById, operationDestination);
+    validateFiscalItemsForEmission(fiscalItems, fiscalSettings, operationDestination);
     const deliveryFee = money(order.delivery_fee || 0);
     const totalProdutos = money(fiscalItems.reduce((sum, item) => sum + item.valor_total, 0));
     const valorTotal = money(order.total || totalProdutos + deliveryFee);
@@ -860,7 +867,12 @@ function normalizeOrderItems(rawItems: unknown): any[] {
   return [];
 }
 
-export function buildFiscalItems(orderItems: any[], settings: any, productFiscalById: Map<string, any> = new Map()) {
+export function buildFiscalItems(
+  orderItems: any[],
+  settings: any,
+  productFiscalById: Map<string, any> = new Map(),
+  operationDestination: 1 | 2 | 3 = 1,
+) {
   return orderItems.map((item, index) => {
     const productFiscal = item.product_id ? productFiscalById.get(String(item.product_id)) || {} : {};
     const quantity = Math.max(Number(item.quantity || 1), 0.0001);
@@ -885,7 +897,10 @@ export function buildFiscalItems(orderItems: any[], settings: any, productFiscal
       codigo_produto: sanitizeCode(item.internal_code || productFiscal.internal_code || item.sku || item.codigo_produto || item.product_id || String(index + 1).padStart(6, '0')),
       descricao: String(item.product_name || item.name || item.descricao || `Item ${index + 1}`),
       ncm,
-      cfop: String(item.cfop || item.fiscal_cfop || productFiscal.fiscal_cfop || settings.cfop_padrao || '5102'),
+      cfop: normalizeCfopForDestination(
+        item.cfop || item.fiscal_cfop || productFiscal.fiscal_cfop || settings.cfop_padrao || '5102',
+        operationDestination,
+      ),
       unidade: String(item.unidade || 'UN'),
       quantidade: quantity,
       valor_unitario: unitPrice,
@@ -992,7 +1007,7 @@ function buildIbsCbsTotalsXml(items: any[]) {
   return `<IBSCBSTot><vBCIBSCBS>${fixed2(sum('valor_base_ibs_cbs'))}</vBCIBSCBS><gIBS><gIBSUF><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vIBSUF>${fixed2(sum('valor_ibs_uf'))}</vIBSUF></gIBSUF><gIBSMun><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vIBSMun>${fixed2(sum('valor_ibs_mun'))}</vIBSMun></gIBSMun><vIBS>${fixed2(sum('valor_ibs'))}</vIBS><vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus></gIBS><gCBS><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vCBS>${fixed2(sum('valor_cbs'))}</vCBS><vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus></gCBS></IBSCBSTot>`;
 }
 
-function validateFiscalItemsForEmission(items: any[], settings: any) {
+function validateFiscalItemsForEmission(items: any[], settings: any, operationDestination: 1 | 2 | 3 = 1) {
   const crt = Number(settings.regime_tributario || 0);
   if (crt !== 1) {
     throw new Error('O emissor próprio está liberado nesta fase somente para CRT 1 (Simples Nacional). Regime normal exige homologação do especialista fiscal.');
@@ -1003,6 +1018,10 @@ function validateFiscalItemsForEmission(items: any[], settings: any) {
     const label = `Item ${index + 1} (${item.descricao || item.codigo_produto})`;
     if (!/^\d{8}$/.test(String(item.ncm || ''))) errors.push(`${label}: NCM deve ter 8 dígitos`);
     if (!/^\d{4}$/.test(String(item.cfop || ''))) errors.push(`${label}: CFOP deve ter 4 dígitos`);
+    const expectedCfopPrefix = String(operationDestination === 1 ? 5 : operationDestination === 2 ? 6 : 7);
+    if (/^\d{4}$/.test(String(item.cfop || '')) && !String(item.cfop).startsWith(expectedCfopPrefix)) {
+      errors.push(`${label}: CFOP ${item.cfop} incompatível com operação ${operationDestination === 1 ? 'interna' : operationDestination === 2 ? 'interestadual' : 'com o exterior'}`);
+    }
     if (!/^\d{3}$/.test(String(item.cst_icms || ''))) errors.push(`${label}: CSOSN deve ter 3 dígitos`);
     if (!['102', '103', '300', '400', '500'].includes(String(item.cst_icms || ''))) {
       errors.push(`${label}: CSOSN ${item.cst_icms || '(vazio)'} ainda não homologado`);
@@ -1055,6 +1074,7 @@ export function generateNFCeXML(input: {
     modelCode = '65',
   } = input;
   const isHomologacao = fiscalSettings.ambiente !== 'producao';
+  const operationDestination = resolveOperationDestination(fiscalSettings, consumerData, modelCode);
   const dhEmi = formatNfeDate(new Date(cupom.data_hora_emissao), fiscalSettings.endereco_uf);
   const codigoMunicipio = resolveMunicipalityCode(fiscalSettings);
   const consumidorDoc = onlyDigits(consumerData?.cpf_cnpj);
@@ -1075,7 +1095,33 @@ export function generateNFCeXML(input: {
     : '';
   const paymentXml = buildPaymentDetailsXml(order, paymentMethod, valorTotal);
 
-  return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${cupom.chave_acesso}" versao="4.00"><ide><cUF>${getCodigoUF(fiscalSettings.endereco_uf)}</cUF><cNF>${cupom.chave_acesso.substring(35, 43)}</cNF><natOp>${escapeXml(fiscalSettings.operation_nature || 'Venda de mercadoria')}</natOp><mod>${modelCode}</mod><serie>${Number(cupom.serie)}</serie><nNF>${cupom.numero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>${codigoMunicipio}</cMunFG><tpImp>${modelCode === '55' ? '1' : '4'}</tpImp><tpEmis>1</tpEmis><cDV>${cupom.chave_acesso.slice(-1)}</cDV><tpAmb>${isHomologacao ? '2' : '1'}</tpAmb><finNFe>1</finNFe><indFinal>${consumerData?.final_consumer === false ? '0' : '1'}</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>PopSystem-1.0</verProc></ide><emit><CNPJ>${onlyDigits(fiscalSettings.cnpj)}</CNPJ><xNome>${escapeXml(fiscalSettings.razao_social)}</xNome><xFant>${escapeXml(fiscalSettings.nome_fantasia || fiscalSettings.razao_social)}</xFant><enderEmit><xLgr>${escapeXml(fiscalSettings.endereco_logradouro)}</xLgr><nro>${escapeXml(fiscalSettings.endereco_numero)}</nro>${fiscalSettings.endereco_complemento ? `<xCpl>${escapeXml(fiscalSettings.endereco_complemento)}</xCpl>` : ''}<xBairro>${escapeXml(fiscalSettings.endereco_bairro)}</xBairro><cMun>${codigoMunicipio}</cMun><xMun>${escapeXml(fiscalSettings.endereco_municipio)}</xMun><UF>${escapeXml(fiscalSettings.endereco_uf)}</UF><CEP>${onlyDigits(fiscalSettings.endereco_cep)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${escapeXml(fiscalSettings.inscricao_estadual || 'ISENTO')}</IE><CRT>${Number(fiscalSettings.regime_tributario || 1)}</CRT></emit>${destXml}${detXml}<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${fixed2(totalProdutos)}</vProd><vFrete>${fixed2(deliveryFee)}</vFrete><vSeg>0.00</vSeg><vDesc>${fixed2(valorDesconto)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${fixed2(valorTotal)}</vNF><vTotTrib>${fixed2(valorTributos)}</vTotTrib></ICMSTot>${buildIbsCbsTotalsXml(items)}</total><transp><modFrete>9</modFrete></transp><pag>${paymentXml}</pag>${observacoes ? `<infAdic><infCpl>${escapeXml(observacoes)}</infCpl></infAdic>` : ''}</infNFe></NFe>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${cupom.chave_acesso}" versao="4.00"><ide><cUF>${getCodigoUF(fiscalSettings.endereco_uf)}</cUF><cNF>${cupom.chave_acesso.substring(35, 43)}</cNF><natOp>${escapeXml(fiscalSettings.operation_nature || 'Venda de mercadoria')}</natOp><mod>${modelCode}</mod><serie>${Number(cupom.serie)}</serie><nNF>${cupom.numero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>${operationDestination}</idDest><cMunFG>${codigoMunicipio}</cMunFG><tpImp>${modelCode === '55' ? '1' : '4'}</tpImp><tpEmis>1</tpEmis><cDV>${cupom.chave_acesso.slice(-1)}</cDV><tpAmb>${isHomologacao ? '2' : '1'}</tpAmb><finNFe>1</finNFe><indFinal>${consumerData?.final_consumer === false ? '0' : '1'}</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>PopSystem-1.0</verProc></ide><emit><CNPJ>${onlyDigits(fiscalSettings.cnpj)}</CNPJ><xNome>${escapeXml(fiscalSettings.razao_social)}</xNome><xFant>${escapeXml(fiscalSettings.nome_fantasia || fiscalSettings.razao_social)}</xFant><enderEmit><xLgr>${escapeXml(fiscalSettings.endereco_logradouro)}</xLgr><nro>${escapeXml(fiscalSettings.endereco_numero)}</nro>${fiscalSettings.endereco_complemento ? `<xCpl>${escapeXml(fiscalSettings.endereco_complemento)}</xCpl>` : ''}<xBairro>${escapeXml(fiscalSettings.endereco_bairro)}</xBairro><cMun>${codigoMunicipio}</cMun><xMun>${escapeXml(fiscalSettings.endereco_municipio)}</xMun><UF>${escapeXml(fiscalSettings.endereco_uf)}</UF><CEP>${onlyDigits(fiscalSettings.endereco_cep)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>${escapeXml(fiscalSettings.inscricao_estadual || 'ISENTO')}</IE><CRT>${Number(fiscalSettings.regime_tributario || 1)}</CRT></emit>${destXml}${detXml}<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${fixed2(totalProdutos)}</vProd><vFrete>${fixed2(deliveryFee)}</vFrete><vSeg>0.00</vSeg><vDesc>${fixed2(valorDesconto)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${fixed2(valorTotal)}</vNF><vTotTrib>${fixed2(valorTributos)}</vTotTrib></ICMSTot>${buildIbsCbsTotalsXml(items)}</total><transp><modFrete>9</modFrete></transp><pag>${paymentXml}</pag>${observacoes ? `<infAdic><infCpl>${escapeXml(observacoes)}</infCpl></infAdic>` : ''}</infNFe></NFe>`;
+}
+
+export function resolveOperationDestination(
+  fiscalSettings: any,
+  consumerData: NFCeData['consumer_data'] | undefined,
+  modelCode: '55' | '65' = '65',
+): 1 | 2 | 3 {
+  if (modelCode === '65') return 1;
+  const issuerState = String(fiscalSettings?.endereco_uf || '').trim().toUpperCase();
+  const recipientState = String(consumerData?.state || '').trim().toUpperCase();
+  const countryCode = onlyDigits(consumerData?.country_code || '1058');
+  if (recipientState === 'EX' || (countryCode && countryCode !== '1058')) return 3;
+  if (!/^[A-Z]{2}$/.test(issuerState) || !/^[A-Z]{2}$/.test(recipientState)) {
+    throw new Error('Não foi possível determinar o destino fiscal: confira a UF do emitente e do destinatário.');
+  }
+  return issuerState === recipientState ? 1 : 2;
+}
+
+export function normalizeCfopForDestination(cfopValue: unknown, operationDestination: 1 | 2 | 3): string {
+  const cfop = onlyDigits(String(cfopValue || ''));
+  if (!/^\d{4}$/.test(cfop)) return cfop;
+  if (!/^[567]/.test(cfop)) {
+    throw new Error(`CFOP ${cfop} inválido para uma operação de saída.`);
+  }
+  const expectedPrefix = operationDestination === 1 ? '5' : operationDestination === 2 ? '6' : '7';
+  return `${expectedPrefix}${cfop.slice(1)}`;
 }
 
 function buildPaymentDetailsXml(order: any, paymentMethod: string, valorTotal: number): string {

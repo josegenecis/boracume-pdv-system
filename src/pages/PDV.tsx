@@ -2053,6 +2053,8 @@ const PDV = () => {
             state: recipient?.state || null,
             postal_code: recipient?.postal_code || null,
             city_code: recipient?.city_code || null,
+            country_code: recipient?.country_code || '1058',
+            country_name: recipient?.country_name || 'BRASIL',
             final_consumer: recipient?.final_consumer !== false,
           }
         : null,
@@ -2408,6 +2410,8 @@ const PDV = () => {
             state: selectedFiscalRecipient.state || null,
             postal_code: selectedFiscalRecipient.postal_code || null,
             city_code: selectedFiscalRecipient.city_code || null,
+            country_code: selectedFiscalRecipient.country_code || '1058',
+            country_name: selectedFiscalRecipient.country_name || 'BRASIL',
             final_consumer: selectedFiscalRecipient.final_consumer_default !== false,
           } : null,
           environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',

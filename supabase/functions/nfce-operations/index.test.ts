@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes } from 'https://deno.land/std@0.168.0/testing/asserts.ts';
-import { buildFiscalItems, generateNFCeXML } from './index.ts';
+import { buildFiscalItems, generateNFCeXML, normalizeCfopForDestination, resolveOperationDestination } from './index.ts';
 
 const settings = {
   ambiente: 'homologacao',
@@ -76,4 +76,35 @@ Deno.test('gera grupos de reducao para bares e restaurantes', () => {
   assertStringIncludes(xml, '<CST>200</CST><cClassTrib>200047</cClassTrib>');
   assertStringIncludes(xml, '<gRed><pRedAliq>40.0000</pRedAliq><pAliqEfet>0.0600</pAliqEfet></gRed>');
   assertStringIncludes(xml, '<gRed><pRedAliq>40.0000</pRedAliq><pAliqEfet>0.5400</pAliqEfet></gRed>');
+});
+
+Deno.test('classifica CE para PE como interestadual e converte CFOP 5102 para 6102', () => {
+  const consumerData = { state: 'PE', country_code: '1058' };
+  const destination = resolveOperationDestination(settings, consumerData, '55');
+  const items = buildFiscalItems([
+    { product_id: 'product-1', product_name: 'Produto', quantity: 1, price: 100 },
+  ], settings, new Map([['product-1', { fiscal_cfop: '5102' }]]), destination);
+  assertEquals(destination, 2);
+  assertEquals(items[0].cfop, '6102');
+  const xml = generateNFCeXML({
+    fiscalSettings: settings,
+    cupom: {
+      chave_acesso: '23260844625108000145550010000000011000000010',
+      serie: '1', numero: 1, data_hora_emissao: '2026-08-03T12:00:00.000Z',
+    },
+    order: {}, items, consumerData, modelCode: '55', paymentMethod: 'pix',
+    deliveryFee: 0, totalProdutos: 100, valorDesconto: 0, valorTotal: 100, valorTributos: 7.65,
+  });
+  assertStringIncludes(xml, '<idDest>2</idDest>');
+  assertStringIncludes(xml, '<CFOP>6102</CFOP>');
+});
+
+Deno.test('mantem operacao na mesma UF como interna', () => {
+  assertEquals(resolveOperationDestination(settings, { state: 'CE', country_code: '1058' }, '55'), 1);
+  assertEquals(normalizeCfopForDestination('6102', 1), '5102');
+});
+
+Deno.test('classifica destinatario fora do Brasil como exterior', () => {
+  assertEquals(resolveOperationDestination(settings, { state: 'EX', country_code: '2496' }, '55'), 3);
+  assertEquals(normalizeCfopForDestination('5102', 3), '7102');
 });
