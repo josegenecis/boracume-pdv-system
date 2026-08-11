@@ -306,6 +306,27 @@ const WhatsAppChatbot = () => {
     return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
   };
 
+  const formatWaitingDuration = (totalMinutes: number) => {
+    if (totalMinutes < 60) return `${totalMinutes} min`;
+
+    const totalHours = Math.floor(totalMinutes / 60);
+    const remainingMinutes = totalMinutes % 60;
+    if (totalHours < 24) {
+      return remainingMinutes > 0 ? `${totalHours} h ${remainingMinutes} min` : `${totalHours} h`;
+    }
+
+    const totalDays = Math.floor(totalHours / 24);
+    const remainingHours = totalHours % 24;
+    if (totalDays < 30) {
+      return remainingHours > 0 ? `${totalDays} d ${remainingHours} h` : `${totalDays} ${totalDays === 1 ? 'dia' : 'dias'}`;
+    }
+
+    const totalMonths = Math.floor(totalDays / 30);
+    const remainingDays = totalDays % 30;
+    const monthLabel = totalMonths === 1 ? 'mês' : 'meses';
+    return remainingDays > 0 ? `${totalMonths} ${monthLabel} ${remainingDays} d` : `${totalMonths} ${monthLabel}`;
+  };
+
   const fetchMessages = async (conversationId: string) => {
     try {
       const { data, error } = await supabase
@@ -954,7 +975,7 @@ const WhatsAppChatbot = () => {
                         {Number(conversation.unread_count || 0) > 0 ? <Badge className="bg-red-500 text-white">{conversation.unread_count} nova(s)</Badge> : null}
                         {conversation.queue_status !== 'resolved' && conversation.queue_status !== 'waiting_customer' ? (
                           <Badge variant="outline" className={minutes >= 5 ? 'border-red-300 bg-red-50 text-red-700' : minutes >= 2 ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-emerald-300 bg-emerald-50 text-emerald-700'}>
-                            <Clock3 className="mr-1 h-3 w-3" />{minutes} min
+                            <Clock3 className="mr-1 h-3 w-3" />{formatWaitingDuration(minutes)}
                           </Badge>
                         ) : null}
                         {conversation.bot_paused && (
