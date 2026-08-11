@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthForm from '@/components/auth/AuthForm';
-import { Loader2 } from 'lucide-react';
 import { debugLogger } from '@/utils/debugLogger';
 import { getLocalOperatorSession, getOperatorPathForRequestedPath } from '@/services/operatorAuth';
 
@@ -98,15 +97,16 @@ const Login = () => {
     };
   }, []);
 
-  // Se está carregando ou redirecionando, mostrar spinner
-  if (isLoading || redirecting) {
+  // A verificação inicial da sessão nunca deve esconder o formulário. Em
+  // navegadores com várias abas, o lock do Auth pode levar alguns segundos.
+  if (redirecting) {
     console.log('⏳ [LOGIN] Exibindo spinner:', { isLoading, redirecting });
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-boracume-orange mx-auto mb-4" />
+          <span className="mx-auto mb-4 block h-2.5 w-2.5 animate-pulse rounded-full bg-[#25d366]" />
           <p className="text-gray-600 text-sm">
-            {redirecting ? 'Redirecionando...' : 'Verificando autenticação...'}
+            Abrindo seu painel…
           </p>
         </div>
       </div>

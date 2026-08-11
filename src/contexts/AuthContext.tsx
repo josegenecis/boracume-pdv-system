@@ -125,12 +125,34 @@ const withAuthTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs = 5000): P
   }
 };
 
+const readCachedAuthSession = (): Session | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key?.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+      const stored = window.localStorage.getItem(key);
+      if (!stored) continue;
+      const parsed = JSON.parse(stored);
+      const candidate = parsed?.currentSession || parsed;
+      const expiresAt = Number(candidate?.expires_at || 0);
+      const isUsable = !expiresAt || expiresAt > Math.floor(Date.now() / 1000) - 60;
+      if (candidate?.access_token && candidate?.user?.id && isUsable) return candidate as Session;
+    }
+  } catch (error) {
+    console.warn('[AUTH] Sessão local inválida; seguindo com validação normal.', error);
+  }
+  return null;
+};
+
+const initialCachedSession = readCachedAuthSession();
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [accountUser, setAccountUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [accountUser, setAccountUser] = useState<User | null>(() => initialCachedSession?.user || null);
+  const [session, setSession] = useState<Session | null>(() => initialCachedSession);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !initialCachedSession?.user);
   const [stores, setStores] = useState<StoreAccess[]>([]);
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
   const [billingOwnerId, setBillingOwnerId] = useState<string | null>(null);
@@ -353,7 +375,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Não deixe a tela inteira presa aguardando o cliente de autenticação.
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout na verificação de sessão')), 3000)
+          setTimeout(() => reject(new Error('Timeout na verificação de sessão')), 800)
         );
         
         let sessionData: any = null;
@@ -362,7 +384,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sessionData = await Promise.race([sessionPromise, timeoutPromise]);
         } catch (timeoutError) {
           debugLogger.auth('session_check_timeout', { 
-              timeout: 3000,
+              timeout: 800,
             error: timeoutError.message 
           }, 'error');
         }
@@ -590,10 +612,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('waiter_session');
       sessionStorage.removeItem('operator_session');
       sessionStorage.removeItem('waiter_session');
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error } = await withAuthTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        8000,
+      );
 
       if (error) {
         let errorMessage = 'Erro ao entrar. Tente novamente.';
@@ -611,8 +633,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: errorMessage,
           variant: "destructive",
         });
-        await logSecurityEvent('failed_login', `Failed login for ${email}: ${error.message}`, 'medium');
+        void logSecurityEvent('failed_login', `Failed login for ${email}: ${error.message}`, 'medium');
         throw error;
+      }
+
+      // Não espere o listener global para refletir o login. Em várias abas e no
+      // Electron o lock do Supabase pode atrasar o evento apesar de a sessão já
+      // ter sido devolvida com sucesso.
+      if (data.session?.user && isMountedRef.current) {
+        setAccountUser(data.session.user);
+        setSession(data.session);
+        setLoading(false);
       }
       
       // Success is logged by the auth state change listener

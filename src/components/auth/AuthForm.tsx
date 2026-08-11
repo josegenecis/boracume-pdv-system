@@ -24,7 +24,7 @@ type AuthFormProps = {
 };
 
 const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
-  const { signIn, signUp, isLoading } = useAuth();
+  const { signIn, signUp } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -65,10 +65,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
     e.preventDefault();
     
     // Prevenir múltiplas submissões
-    if (isSubmittingLogin || isLoading) {
+    if (isSubmittingLogin) {
       debugLogger.form('login_submission_blocked', { 
-        isSubmittingLogin, 
-        isLoading 
+        isSubmittingLogin
       }, 'warn');
       return;
     }
@@ -87,14 +86,13 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
     
     try {
       await signIn(loginData.email, loginData.password);
-      await logSecurityEvent('login', `Successful login for ${loginData.email}`, 'low');
+      void logSecurityEvent('login', `Successful login for ${loginData.email}`, 'low');
       debugLogger.form('login_submission_success', { email: loginData.email });
     } catch (error: any) {
       debugLogger.form('login_submission_error', { 
         email: loginData.email,
         error: error.message 
       }, 'error');
-      await logSecurityEvent('failed_login', `Failed login attempt for ${loginData.email}: ${error.message}`, 'medium');
     } finally {
       // Reset com delay REDUZIDO para 500ms para evitar cliques rápidos
       loginTimeoutRef.current = setTimeout(() => {
@@ -107,7 +105,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
     e.preventDefault();
     
     // Prevenir múltiplas submissões
-    if (isSubmittingSignup || isLoading) {
+    if (isSubmittingSignup) {
       console.log('🚫 [AUTH FORM] Signup já em andamento - ignorando');
       return;
     }
@@ -140,7 +138,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
   
   const handleGoogleLogin = async () => {
     // Prevenir múltiplas submissões
-    if (isSubmittingGoogle || isLoading) {
+    if (isSubmittingGoogle) {
       console.log('🚫 [AUTH FORM] Login Google já em andamento - ignorando');
       return;
     }
@@ -300,7 +298,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
                   placeholder="seu@email.com"
                   value={loginData.email}
                   onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                  disabled={isSubmittingLogin || isLoading}
+                  disabled={isSubmittingLogin}
                   required
                 />
                 {loginValidation.errors.email && (
@@ -317,7 +315,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
                     placeholder="Sua senha"
                     value={loginData.password}
                     onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                    disabled={isSubmittingLogin || isLoading}
+                    disabled={isSubmittingLogin}
                     required
                     className="pr-10"
                   />
@@ -340,7 +338,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
               <Button 
                 type="submit" 
                 className="w-full" 
-                disabled={isSubmittingLogin || isLoading}
+                disabled={isSubmittingLogin}
               >
                 {isSubmittingLogin ? (
                   <>
@@ -357,7 +355,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
                 variant="outline"
                 className="w-full relative"
                 onClick={handleGoogleLogin}
-                disabled={isSubmittingGoogle || isLoading}
+                disabled={isSubmittingGoogle}
               >
                 {isSubmittingGoogle ? (
                   <>
@@ -377,7 +375,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
                 variant="link"
                 className="w-full text-sm"
                 onClick={handleForgotPassword}
-                disabled={isSubmittingLogin || isLoading}
+                disabled={isSubmittingLogin}
               >
                 Esqueci minha senha
               </Button>
@@ -394,7 +392,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
                   placeholder="Seu nome completo"
                   value={signupData.name}
                   onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
-                  disabled={isSubmittingSignup || isLoading}
+                  disabled={isSubmittingSignup}
                   required
                 />
                 {signupValidation.errors.name && (
@@ -410,7 +408,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
                   placeholder="Nome do seu restaurante"
                   value={signupData.restaurantName}
                   onChange={(e) => setSignupData({ ...signupData, restaurantName: e.target.value })}
-                  disabled={isSubmittingSignup || isLoading}
+                  disabled={isSubmittingSignup}
                   required
                 />
                 {signupValidation.errors.restaurantName && (
@@ -426,7 +424,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
                   placeholder="seu@email.com"
                   value={signupData.email}
                   onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
-                  disabled={isSubmittingSignup || isLoading}
+                  disabled={isSubmittingSignup}
                   required
                 />
                 {signupValidation.errors.email && (
@@ -443,7 +441,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
                     placeholder="Mínimo 6 caracteres"
                     value={signupData.password}
                     onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
-                    disabled={isSubmittingSignup || isLoading}
+                    disabled={isSubmittingSignup}
                     required
                     className="pr-10"
                   />
@@ -472,7 +470,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
                     placeholder="Confirme sua senha"
                     value={signupData.confirmPassword}
                     onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
-                    disabled={isSubmittingSignup || isLoading}
+                    disabled={isSubmittingSignup}
                     required
                     className="pr-10"
                   />
@@ -495,7 +493,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ defaultTab = 'login' }) => {
               <Button 
                 type="submit" 
                 className="w-full"
-                disabled={isSubmittingSignup || isLoading}
+                disabled={isSubmittingSignup}
               >
                 {isSubmittingSignup ? (
                   <>
