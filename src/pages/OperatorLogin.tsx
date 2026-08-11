@@ -31,7 +31,7 @@ const buildSessionPayload = (operator: WaiterOperator, restaurantUserId: string)
 });
 
 const OperatorLogin = () => {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, activeStoreId, storesLoading } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,6 +39,8 @@ const OperatorLogin = () => {
   const [operatorId, setOperatorId] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadAttempt, setReloadAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [creatingFirst, setCreatingFirst] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -53,18 +55,38 @@ const OperatorLogin = () => {
   );
 
   useEffect(() => {
-    if (!user?.id) return;
+    // A sessão da conta aparece antes de a loja ativa ser resolvida. Consultar
+    // nesse intervalo usa o ID da conta (em vez do ID da loja) e produz uma
+    // lista vazia falsa para usuários multiloja.
+    if (!user?.id || !activeStoreId || activeStoreId !== user.id) return;
 
     let active = true;
     const loadOperators = async () => {
       try {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('waiters' as any)
-          .select('id, name, pin, active, role, permissions')
-          .eq('user_id', user.id)
-          .eq('active', true)
-          .order('name');
+        setLoadError(null);
+        let result: any = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), 8000);
+          try {
+            result = await supabase
+              .from('waiters' as any)
+              .select('id, name, pin, active, role, permissions')
+              .eq('user_id', user.id)
+              .eq('active', true)
+              .order('name')
+              .abortSignal(controller.signal);
+          } catch (attemptError) {
+            result = { data: null, error: attemptError };
+          } finally {
+            window.clearTimeout(timeout);
+          }
+          if (!result?.error) break;
+          if (attempt === 0) await new Promise((resolve) => window.setTimeout(resolve, 500));
+        }
+
+        const { data, error } = result || {};
 
         if (error) throw error;
         if (!active) return;
@@ -73,9 +95,12 @@ const OperatorLogin = () => {
         setOperators(rows);
         setOperatorId((current) => current || rows[0]?.id || '');
       } catch (error: any) {
+        if (!active) return;
+        const message = error?.message || 'Nao foi possivel buscar os usuarios da equipe.';
+        setLoadError(message);
         toast({
           title: 'Erro ao carregar operadores',
-          description: error?.message || 'Nao foi possivel buscar os usuarios da equipe.',
+          description: 'A conexao ainda esta se recuperando. Os operadores existentes nao foram alterados.',
           variant: 'destructive',
         });
       } finally {
@@ -87,7 +112,7 @@ const OperatorLogin = () => {
     return () => {
       active = false;
     };
-  }, [user?.id, toast]);
+  }, [user?.id, activeStoreId, toast, reloadAttempt]);
 
   if (!isLoading && !user) {
     return <Navigate to="/login" replace />;
@@ -184,9 +209,21 @@ const OperatorLogin = () => {
                 <p className="mt-2 text-sm text-slate-500">Conta do restaurante autenticada. Agora informe quem esta operando.</p>
               </div>
 
-              {isLoading || loading ? (
+              {isLoading || storesLoading || !activeStoreId || loading ? (
                 <div className="flex min-h-[240px] items-center justify-center">
                   <Loader2 className="h-7 w-7 animate-spin text-[#FF6400]" />
+                </div>
+              ) : loadError ? (
+                <div className="mt-8 space-y-5">
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                    Nao foi possivel confirmar a equipe desta loja. Nenhum operador foi apagado e o sistema nao criara um cadastro duplicado.
+                  </div>
+                  <Button
+                    className="h-12 w-full rounded-2xl bg-[#08785f] text-base font-bold hover:bg-[#06634f]"
+                    onClick={() => setReloadAttempt((attempt) => attempt + 1)}
+                  >
+                    Tentar carregar novamente
+                  </Button>
                 </div>
               ) : operators.length > 0 ? (
                 <div className="mt-8 space-y-5">

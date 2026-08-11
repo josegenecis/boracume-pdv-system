@@ -38,6 +38,9 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
         
         if (!mounted) return;
 
+        if (productsResult.error) throw productsResult.error;
+        if (profileResult.error) throw profileResult.error;
+
         const hasProducts = (productsResult.count || 0) > 0;
         const isCompleted = profileResult.data?.onboarding_completed === true;
         
