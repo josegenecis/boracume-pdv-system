@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'popsystem-shell-v5';
+const CACHE_VERSION = 'popsystem-shell-v6';
 const APP_SHELL = ['/', '/offline.html', '/manifest.json', '/manifest-totem.json', '/manifest-motoboy.json', '/icon-192x192.png', '/icon-512x512.png'];
 
 self.addEventListener('install', (event) => {
