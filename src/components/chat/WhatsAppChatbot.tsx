@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MessageSquare, Send, Phone, Bot, User, Users, Mail, Search, PauseCircle, PlayCircle, Sparkles, Settings, Activity, Save, RefreshCw, Clock3, UserCheck, CheckCircle2 } from 'lucide-react';
+import { MessageSquare, Send, Phone, Bot, User, Users, Mail, Search, PauseCircle, PlayCircle, Sparkles, Settings, Activity, Save, RefreshCw, Clock3, UserCheck, CheckCircle2, Inbox, Headphones } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -134,6 +134,7 @@ const WhatsAppChatbot = () => {
   const [aiLogs, setAiLogs] = useState<AiLog[]>([]);
   const [loadingAiLogs, setLoadingAiLogs] = useState(false);
   const [queueFilter, setQueueFilter] = useState<'open' | 'mine' | 'waiting_customer' | 'resolved' | 'all'>('open');
+  const [conversationSearch, setConversationSearch] = useState('');
   const operator = getLocalOperatorSession();
   const operatorId = operator?.id || user?.id || '';
   const operatorName = operator?.name || user?.email || 'Administrador';
@@ -839,7 +840,9 @@ const WhatsAppChatbot = () => {
     if (conversation.queue_status === 'resolved') counts.resolved += 1;
     return counts;
   }, { open: 0, mine: 0, waiting_customer: 0, resolved: 0, all: 0 });
+  const normalizedConversationSearch = conversationSearch.trim().toLocaleLowerCase('pt-BR');
   const visibleConversations = conversations.filter((conversation) => {
+    if (normalizedConversationSearch && !`${conversation.customer_name} ${conversation.customer_phone}`.toLocaleLowerCase('pt-BR').includes(normalizedConversationSearch)) return false;
     if (queueFilter === 'all') return true;
     if (queueFilter === 'mine') return conversation.assigned_operator_id === operatorId && conversation.queue_status !== 'resolved';
     if (queueFilter === 'waiting_customer') return conversation.queue_status === 'waiting_customer';
@@ -849,16 +852,16 @@ const WhatsAppChatbot = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border bg-gradient-to-r from-emerald-950 via-emerald-900 to-emerald-700 p-6 text-white shadow-sm">
+      <div className="overflow-hidden rounded-3xl border border-emerald-900/10 bg-gradient-to-r from-[#053f36] via-[#075e54] to-[#128c7e] p-6 text-white shadow-lg shadow-emerald-950/10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]">
               <Sparkles size={14} />
               POP AI
             </div>
-            <h1 className="text-3xl font-bold">Atendente Virtual Inteligente</h1>
+            <h1 className="text-3xl font-black tracking-tight">Central de Atendimento</h1>
             <p className="mt-2 max-w-3xl text-sm text-white/85">
-              Atendimento pelo WhatsApp com memória, cardápio inteligente, montagem de pedidos e transferência para humano quando precisar.
+              Conversas, equipe e automações do WhatsApp organizadas em uma única fila.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -874,7 +877,7 @@ const WhatsAppChatbot = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl bg-[#f1f4ef] p-1.5 md:grid-cols-4">
           <TabsTrigger value="conversations" className="flex items-center gap-2">
             <MessageSquare size={16} />
             Conversas ({conversations.length})
@@ -895,17 +898,21 @@ const WhatsAppChatbot = () => {
 
         <TabsContent value="conversations" className="space-y-6">
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
+      <div className="grid min-h-[680px] grid-cols-1 gap-4 lg:grid-cols-[390px_minmax(0,1fr)]">
         {/* Lista de Conversas */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Phone size={20} />
-              Conversas ({conversations.length})
+        <Card className="overflow-hidden rounded-3xl border-slate-200/80 shadow-sm">
+          <CardHeader className="border-b bg-white px-4 pb-4 pt-5">
+            <CardTitle className="flex items-center justify-between gap-2 text-xl">
+              <span className="flex items-center gap-2"><Inbox className="text-[#128c7e]" size={21} /> Caixa de entrada</span>
+              <Badge className="rounded-full bg-[#e8f8ef] text-[#075e54] hover:bg-[#e8f8ef]">{queueCounts.open} pendentes</Badge>
             </CardTitle>
+            <div className="relative mt-3">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Buscar cliente ou telefone" className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-9" />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="grid grid-cols-2 gap-1.5 border-b p-3 text-xs">
+            <div className="flex gap-2 overflow-x-auto border-b bg-slate-50/70 p-3 text-xs">
               {([
                 ['all', 'Todas', queueCounts.all],
                 ['open', 'Novas', queueCounts.open],
@@ -913,12 +920,12 @@ const WhatsAppChatbot = () => {
                 ['waiting_customer', 'Aguardando cliente', queueCounts.waiting_customer],
                 ['resolved', 'Resolvidas', queueCounts.resolved],
               ] as const).map(([value, label, count]) => (
-                <button key={value} type="button" onClick={() => setQueueFilter(value)} className={`rounded-lg px-2 py-2 font-semibold transition ${queueFilter === value ? 'bg-[#075e54] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                <button key={value} type="button" onClick={() => setQueueFilter(value)} className={`shrink-0 rounded-full border px-3 py-2 font-bold transition ${queueFilter === value ? 'border-[#075e54] bg-[#075e54] text-white shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-[#25d366] hover:text-[#075e54]'}`}>
                   {label} ({count})
                 </button>
               ))}
             </div>
-            <div className="space-y-2 max-h-[500px] overflow-y-auto">
+            <div className="max-h-[545px] overflow-y-auto bg-slate-50/30 p-2">
               {visibleConversations.length === 0 ? (
                 <div className="p-4 text-center text-gray-500">
                   <MessageSquare className="mx-auto h-8 w-8 mb-2" />
@@ -927,12 +934,13 @@ const WhatsAppChatbot = () => {
               ) : (
                 visibleConversations.map((conversation) => {
                   const minutes = waitingMinutes(conversation);
-                  const priorityClass = minutes >= 5 ? 'border-l-red-500' : minutes >= 2 ? 'border-l-amber-400' : 'border-l-emerald-500';
+                  const priorityClass = minutes >= 5 ? '!border-l-red-500' : minutes >= 2 ? '!border-l-amber-400' : '!border-l-emerald-500';
                   return (
-                  <div
+                  <button
+                    type="button"
                     key={conversation.id}
-                    className={`border-b border-l-4 p-3 cursor-pointer hover:bg-gray-50 ${priorityClass} ${
-                      selectedConversation === conversation.id ? 'bg-blue-50 border-blue-200' : ''
+                    className={`mb-2 w-full rounded-2xl border border-l-4 bg-white p-3.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${priorityClass} ${
+                      selectedConversation === conversation.id ? 'border-[#25d366] bg-[#f0fff5] ring-2 ring-[#25d366]/20' : 'border-slate-200'
                     }`}
                     onClick={() => setSelectedConversation(conversation.id)}
                   >
@@ -964,7 +972,7 @@ const WhatsAppChatbot = () => {
                     <p className="text-xs text-gray-400 mt-1">
                       {new Date(conversation.created_at).toLocaleDateString()}
                     </p>
-                  </div>
+                  </button>
                 );})
               )}
             </div>
@@ -972,24 +980,24 @@ const WhatsAppChatbot = () => {
         </Card>
 
         {/* Chat */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
+        <Card className="overflow-hidden rounded-3xl border-slate-200/80 shadow-sm">
+          <CardHeader className="border-b bg-white px-5 py-4">
             <CardTitle className="flex flex-wrap items-center justify-between gap-3">
               <span className="flex items-center gap-2">
-                <MessageSquare size={20} />
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-[#e8f8ef] text-[#075e54]"><Headphones size={20} /></span>
                 {selectedConv ? `Chat com ${selectedConv.customer_name}` : 'Selecione uma conversa'}
               </span>
               {selectedConv && (
                 <span className="flex flex-wrap gap-2">
                   {selectedConv.assigned_operator_id !== operatorId && selectedConv.queue_status !== 'resolved' ? (
-                    <Button type="button" size="sm" className="gap-2 bg-[#25d366] text-[#075e54] hover:bg-[#20c45b]" onClick={() => void takeConversation(selectedConv).catch((error) => toast({ title: 'Não foi possível assumir', description: error.message, variant: 'destructive' }))}>
+                    <Button type="button" size="sm" className="rounded-xl bg-[#075e54] text-white hover:bg-[#064c44]" onClick={() => void takeConversation(selectedConv).catch((error) => toast({ title: 'Não foi possível assumir', description: error.message, variant: 'destructive' }))}>
                       <UserCheck size={16} />Assumir atendimento
                     </Button>
                   ) : null}
                   {selectedConv.queue_status !== 'resolved' ? (
-                    <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => void resolveConversation(selectedConv).catch((error) => toast({ title: 'Não foi possível resolver', description: error.message, variant: 'destructive' }))}><CheckCircle2 size={16} />Resolver</Button>
+                    <Button type="button" variant="outline" size="sm" className="rounded-xl border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100" onClick={() => void resolveConversation(selectedConv).catch((error) => toast({ title: 'Não foi possível resolver', description: error.message, variant: 'destructive' }))}><CheckCircle2 size={16} />Resolver</Button>
                   ) : null}
-                  <Button type="button" variant={isBotPaused(selectedConv) ? 'outline' : 'secondary'} size="sm" onClick={() => toggleBotPause(selectedConv.id, !isBotPaused(selectedConv))} className="gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => toggleBotPause(selectedConv.id, !isBotPaused(selectedConv))} className="rounded-xl border-slate-200 text-slate-600">
                     {isBotPaused(selectedConv) ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
                     {isBotPaused(selectedConv) ? 'Reativar robô' : 'Pausar robô'}
                   </Button>
@@ -997,11 +1005,11 @@ const WhatsAppChatbot = () => {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4">
+          <CardContent className="bg-[#efeae2] p-4">
             {selectedConversation ? (
               <div className="flex flex-col h-[460px]">
                 {/* Mensagens */}
-                <div className="flex-1 space-y-3 overflow-y-auto mb-4 p-2 border rounded-lg bg-gray-50">
+                <div className="mb-4 flex-1 space-y-3 overflow-y-auto rounded-2xl border border-white/70 bg-[#efeae2] p-3">
                   {messages.length === 0 ? (
                     <div className="text-center text-gray-500 py-8">
                       <MessageSquare className="mx-auto h-8 w-8 mb-2" />
@@ -1016,8 +1024,8 @@ const WhatsAppChatbot = () => {
                         <div
                           className={`max-w-xs px-3 py-2 rounded-lg ${
                             message.sender === 'bot' || message.sender === 'agent'
-                              ? message.sender === 'agent' ? 'bg-green-600 text-white' : 'bg-blue-500 text-white'
-                              : 'bg-white border shadow-sm'
+                              ? message.sender === 'agent' ? 'bg-[#d9fdd3] text-slate-900 shadow-sm' : 'bg-[#cfeee8] text-slate-900 shadow-sm'
+                              : 'border border-white bg-white text-slate-900 shadow-sm'
                           }`}
                         >
                           <div className="flex items-center gap-1 mb-1">
@@ -1032,7 +1040,7 @@ const WhatsAppChatbot = () => {
                           </div>
                           <p className="text-sm">{message.content}</p>
                           <p className={`text-xs mt-1 ${
-                            message.sender === 'bot' || message.sender === 'agent' ? 'text-white/80' : 'text-gray-400'
+                            'text-slate-500'
                           }`}>
                             {new Date(message.sent_at).toLocaleTimeString()}
                           </p>
@@ -1043,12 +1051,12 @@ const WhatsAppChatbot = () => {
                 </div>
 
                 {/* Input de mensagem */}
-                <div className="flex gap-2">
+                <div className="flex items-end gap-2 rounded-2xl bg-white p-2 shadow-sm">
                   <Textarea
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder="Digite sua mensagem..."
-                    className="flex-1 min-h-[60px]"
+                    className="min-h-[48px] flex-1 resize-none border-0 bg-transparent focus-visible:ring-0"
                     onKeyPress={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -1056,7 +1064,7 @@ const WhatsAppChatbot = () => {
                       }
                     }}
                   />
-                  <Button onClick={sendMessage} className="self-end">
+                  <Button aria-label="Enviar mensagem" onClick={sendMessage} className="h-11 w-11 self-end rounded-full bg-[#25d366] p-0 text-[#075e54] hover:bg-[#20c45b]">
                     <Send size={16} />
                   </Button>
                 </div>

@@ -30,7 +30,7 @@ export function WhatsAppInboxProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (summary.totalUnread <= 0 || location.pathname.startsWith('/whatsapp-bot') || /\/(menu|totem|track)/.test(location.pathname)) return;
-    const reminder = window.setInterval(() => { void soundNotifications.playSound('notification'); }, 60_000);
+    const reminder = window.setInterval(() => { void soundNotifications.playWhatsAppMessageSound(); }, 60_000);
     return () => window.clearInterval(reminder);
   }, [summary.totalUnread, location.pathname]);
 
@@ -71,7 +71,7 @@ export function WhatsAppInboxProvider({ children }: { children: ReactNode }) {
       if (!conversation || !active) return;
       const customerName = conversation.customer_name || conversation.customer_phone || 'Cliente';
       setPreview({ conversationId: conversation.id, customerName, content: String(message.content || 'Nova mensagem') });
-      await soundNotifications.playSound('notification');
+      await soundNotifications.playWhatsAppMessageSound();
       if (navigator.vibrate) navigator.vibrate([180, 90, 180]);
       try {
         if (window.electronAPI?.showNotification) {
