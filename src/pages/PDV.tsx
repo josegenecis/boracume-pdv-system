@@ -292,7 +292,7 @@ const PDV = () => {
   const [commandQuery, setCommandQuery] = useState('');
   const [commandLookup, setCommandLookup] = useState<ElectronicCommandLookup | null>(null);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { lookupCustomer, isLoading: customerLookupLoading } = useCustomerLookup(user?.id || '');
   const { isMobile } = useSidebar();
   const { settings: tefSettings } = useTefSettings();
@@ -1983,7 +1983,12 @@ const PDV = () => {
     const { data, status } = await invokeEdgeFunction<any>('nfce-operations', {
       operation: 'politica_emissao',
       model_code: modelCode,
-    }, { timeoutMs: 15000 });
+    }, {
+      timeoutMs: 15000,
+      // Usa a sessão já mantida pelo AuthContext. Isso evita disputar o lock
+      // interno do Supabase Auth durante o fechamento da venda.
+      authToken: session?.access_token || null,
+    });
 
     if (status < 200 || status >= 300 || !data?.success) {
       throw new Error(
@@ -2059,7 +2064,10 @@ const PDV = () => {
           }
         : null,
       observacoes: '',
-    }, { timeoutMs: 120000 });
+    }, {
+      timeoutMs: 120000,
+      authToken: session?.access_token || null,
+    });
 
     if (status < 200 || status >= 300) {
       throw new Error(data?.error || data?.message || `Erro ao emitir documento fiscal modelo ${modelCode}.`);
@@ -2553,22 +2561,29 @@ const PDV = () => {
       }
 
       let printResult: { fiscal: boolean; nfce: any | null } = { fiscal: fiscalActiveForSale, nfce: null };
+      let fiscalEmissionError: Error | null = null;
       try {
         printResult = await printOrderAfterSale(created, fiscalActiveForSale);
       } catch (e: any) {
         console.warn('Falha ao emitir/imprimir após a venda:', e);
+        fiscalEmissionError = e instanceof Error ? e : new Error(String(e?.message || e || 'Falha desconhecida'));
+        const fiscalModel = selectedFiscalRecipient ? 'NF-e' : 'NFC-e';
         toast({
-          title: fiscalActiveForSale ? 'Venda registrada, NFC-e não concluída' : 'Venda registrada, mas não imprimiu',
-          description: e?.message || 'Verifique as configurações fiscais e a impressora.',
+          title: fiscalActiveForSale ? `Venda registrada, ${fiscalModel} não emitida` : 'Venda registrada, mas não imprimiu',
+          description: e?.message || 'Verifique as configurações fiscais e tente reenviar o documento.',
           variant: 'destructive',
         });
       }
-      toast({
-        title: "Venda finalizada!",
-        description: printResult.fiscal && printResult.nfce
-          ? `Pedido #${orderNumber} finalizado com NFC-e emitida automaticamente.`
-          : `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
-      });
+      // Não encobrir uma rejeição/indisponibilidade fiscal com um segundo toast
+      // de sucesso. A venda permanece registrada, mas a emissão precisa ficar
+      // explicitamente pendente para o operador agir.
+      if (!fiscalEmissionError) {
+        const fiscalModel = selectedFiscalRecipient ? 'NF-e' : 'NFC-e';
+        toast({
+          title: 'Venda finalizada e documento autorizado!',
+          description: `Pedido #${orderNumber} finalizado com ${fiscalModel} emitida automaticamente.`,
+        });
+      }
       setMobileCartOpen(false);
       setCheckoutOpen(false);
       resetCurrentSale(getNextSaleOrderType());
