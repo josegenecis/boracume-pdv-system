@@ -21,6 +21,17 @@ interface PendingOrder {
   acceptance_status?: string;
 }
 
+// Um pedido antigo pode permanecer pendente por falha operacional ou de
+// sincronizacao. Ele continua visivel para ser tratado, mas nao deve deixar o
+// terminal tocando indefinidamente dias depois. O alerta sonoro fica restrito
+// a pedidos realmente recentes.
+const MAX_AUDIBLE_ORDER_AGE_MS = 30 * 60 * 1000;
+
+const isRecentEnoughToRing = (order: PendingOrder) => {
+  const createdAt = new Date(order.created_at).getTime();
+  return Number.isFinite(createdAt) && Date.now() - createdAt <= MAX_AUDIBLE_ORDER_AGE_MS;
+};
+
 const isPdvCounterOrder = (order: any) => {
   const source = String(order?.variations?.source || order?.source || '').toUpperCase();
   return order?.order_type === 'counter' && source === 'PDV';
@@ -78,6 +89,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const pendingOrdersRef = useRef<PendingOrder[]>([]);
   const pollingRef = useRef<number | null>(null);
   const visibleOrders = pendingOrders.filter((order) => !dismissedOrders.has(order.id));
+  const audibleOrders = visibleOrders.filter(isRecentEnoughToRing);
   const isAutoAcceptEnabled = () => Boolean(user?.id && localStorage.getItem(getAutoAcceptKey(user.id)) === 'true');
 
   useEffect(() => {
@@ -97,14 +109,14 @@ const GlobalNotificationSystem: React.FC = () => {
   useEffect(() => {
     // Pedidos dispensados permanecem no estado para auditoria, mas não podem
     // manter um alerta sonoro invisível tocando indefinidamente.
-    const shouldLoopAlert = !isStandaloneOrderingScreen && soundEnabled && visibleOrders.length > 0;
+    const shouldLoopAlert = !isStandaloneOrderingScreen && soundEnabled && audibleOrders.length > 0;
     if (shouldLoopAlert) {
       soundNotifications.startPersistentAlert(POPSYSTEM_ORDER_SOUND_TYPE);
       return;
     }
     soundNotifications.stopPersistentAlert();
     soundNotifications.stopAllSounds();
-  }, [visibleOrders.length, soundEnabled, isStandaloneOrderingScreen]);
+  }, [audibleOrders.length, soundEnabled, isStandaloneOrderingScreen]);
 
   useEffect(() => {
     if (!isStandaloneOrderingScreen) return;
@@ -134,7 +146,7 @@ const GlobalNotificationSystem: React.FC = () => {
 
   const handleIncomingOrderAlert = async (order: PendingOrder) => {
     if (isAutoAcceptEnabled()) return;
-    if (soundEnabledRef.current) {
+    if (soundEnabledRef.current && isRecentEnoughToRing(order)) {
       soundNotifications.startPersistentAlert(POPSYSTEM_ORDER_SOUND_TYPE);
     }
     await showBackgroundOrderNotification(order);
@@ -406,6 +418,14 @@ const GlobalNotificationSystem: React.FC = () => {
   };
 
   const handleDismiss = () => {
+    soundNotifications.stopPersistentAlert();
+    soundNotifications.stopAllSounds();
+    setDismissedOrders((previous) => {
+      const next = new Set(previous);
+      visibleOrders.forEach((order) => next.add(order.id));
+      localStorage.setItem('dismissedOrders', JSON.stringify([...next]));
+      return next;
+    });
     setIsAnimatingOut(true);
     window.setTimeout(() => {
       setIsVisible(false);
