@@ -95,14 +95,16 @@ const GlobalNotificationSystem: React.FC = () => {
   }, [soundEnabled, volume]);
 
   useEffect(() => {
-    const shouldLoopAlert = !isStandaloneOrderingScreen && soundEnabled && pendingOrders.length > 0;
+    // Pedidos dispensados permanecem no estado para auditoria, mas não podem
+    // manter um alerta sonoro invisível tocando indefinidamente.
+    const shouldLoopAlert = !isStandaloneOrderingScreen && soundEnabled && visibleOrders.length > 0;
     if (shouldLoopAlert) {
       soundNotifications.startPersistentAlert(POPSYSTEM_ORDER_SOUND_TYPE);
       return;
     }
     soundNotifications.stopPersistentAlert();
     soundNotifications.stopAllSounds();
-  }, [pendingOrders.length, soundEnabled, isStandaloneOrderingScreen]);
+  }, [visibleOrders.length, soundEnabled, isStandaloneOrderingScreen]);
 
   useEffect(() => {
     if (!isStandaloneOrderingScreen) return;
