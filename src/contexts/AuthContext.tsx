@@ -16,7 +16,6 @@ import {
 } from '@/utils/session-cache';
 import { logOAuthSessionCreated, logOAuthSessionDestroyed, logOAuthUserSync } from '../utils/oauth-security-logger';
 import { validateOAuthUser, validateProfileData } from '@/utils/oauth-validation';
-import { preloadByContext, backgroundPreload } from '@/utils/user-preloader';
 import { startTokenAutoRefresh, stopTokenAutoRefresh, checkAndRefreshToken } from '@/utils/token-refresh';
 
 

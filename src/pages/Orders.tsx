@@ -26,6 +26,7 @@ import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea
 import { formatPaymentMethodLabel } from '@/lib/orderDetails';
 import { IfoodLogo } from '@/components/icons/IfoodLogo';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
+import PageContentSkeleton from '@/components/ui/page-content-skeleton';
 
 interface Order {
   id: string;
@@ -1239,11 +1240,7 @@ const Orders = () => {
           : null;
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <PageContentSkeleton />;
   }
 
   return (

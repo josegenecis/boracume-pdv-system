@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, HashRouter, Routes, Route, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HelmetProvider } from 'react-helmet-async';
@@ -22,67 +22,66 @@ import { OperatorGate } from '@/components/auth/OperatorGate';
 import { PrinterService } from '@/utils/printerService';
 import { toast } from 'sonner';
 
-import Index from '@/pages/Index';
-import Login from '@/pages/Login';
-import ResetPassword from '@/pages/ResetPassword';
-import LandingPage from '@/pages/LandingPage';
-import LegalPage from '@/pages/LegalPage';
-import Dashboard from '@/pages/Dashboard';
-import DashboardSimple from '@/pages/DashboardSimple';
-import Products from '@/pages/Products';
-import Orders from '@/pages/Orders';
-import Kitchen from '@/pages/Kitchen';
-import PDV from '@/pages/PDV';
-import Mesas from '@/pages/Mesas';
-import Relatorios from '@/pages/Relatorios';
-import Configuracoes from '@/pages/Configuracoes';
-import Subscription from '@/pages/Subscription';
-import MenuDigital from '@/pages/MenuDigital';
-import Totem from '@/pages/Totem';
-import NotFound from '@/pages/NotFound';
-import Loyalty from '@/pages/Loyalty';
-import BairrosEntrega from '@/pages/BairrosEntrega';
-import Entregadores from '@/pages/Entregadores';
-import Garcons from '@/pages/Garcons';
-import ControlePonto from '@/pages/ControlePonto';
-import Ingredientes from '@/pages/Ingredientes';
-import InteligenciaCMV from '@/pages/InteligenciaCMV';
-import Fiscal from '@/pages/Fiscal';
-import Financeiro from '@/pages/Financeiro';
-import Despesas from '@/pages/Despesas';
-import SecurityDashboard from '@/pages/SecurityDashboard';
-import WhatsAppBot from '@/pages/WhatsAppBot';
-import Downloads from '@/pages/Downloads';
-import Menu from '@/pages/Menu';
-import DesktopApp from '@/pages/DesktopApp';
-import PixSetup from '@/pages/PixSetup';
-import SystemCheck from '@/pages/SystemCheck';
-import TestPage from '@/pages/TestPage';
-import AuthCallback from '@/pages/AuthCallback';
-import OrderTracking from '@/pages/OrderTracking';
-import MercadoPagoReturn from '@/pages/MercadoPagoReturn';
-import MpCallback from '@/pages/MpCallback';
-import { PopPayCallback } from '@/pages/PopPayCallback';
-import AgentDashboard from '@/pages/AgentDashboard';
-import WaiterLogin from '@/pages/WaiterLogin';
-import EmployeeLogin from '@/pages/EmployeeLogin';
-import OperatorLogin from '@/pages/OperatorLogin';
-import WaiterDashboard from '@/pages/WaiterDashboard';
-import WaiterSession from '@/pages/WaiterSession';
-import EmployeeTimeClock from '@/pages/EmployeeTimeClock';
-import KDSView from '@/pages/KDSView';
-import CustomerView from '@/pages/CustomerView';
-import DebugPix from '@/pages/DebugPix';
+const Index = lazy(() => import('@/pages/Index'));
+const Login = lazy(() => import('@/pages/Login'));
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
+const LandingPage = lazy(() => import('@/pages/LandingPage'));
+const LegalPage = lazy(() => import('@/pages/LegalPage'));
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Products = lazy(() => import('@/pages/Products'));
+const Orders = lazy(() => import('@/pages/Orders'));
+const Kitchen = lazy(() => import('@/pages/Kitchen'));
+const PDV = lazy(() => import('@/pages/PDV'));
+const Mesas = lazy(() => import('@/pages/Mesas'));
+const Relatorios = lazy(() => import('@/pages/Relatorios'));
+const Configuracoes = lazy(() => import('@/pages/Configuracoes'));
+const Subscription = lazy(() => import('@/pages/Subscription'));
+const MenuDigital = lazy(() => import('@/pages/MenuDigital'));
+const Totem = lazy(() => import('@/pages/Totem'));
+const NotFound = lazy(() => import('@/pages/NotFound'));
+const Loyalty = lazy(() => import('@/pages/Loyalty'));
+const BairrosEntrega = lazy(() => import('@/pages/BairrosEntrega'));
+const Entregadores = lazy(() => import('@/pages/Entregadores'));
+const Garcons = lazy(() => import('@/pages/Garcons'));
+const ControlePonto = lazy(() => import('@/pages/ControlePonto'));
+const Ingredientes = lazy(() => import('@/pages/Ingredientes'));
+const InteligenciaCMV = lazy(() => import('@/pages/InteligenciaCMV'));
+const Fiscal = lazy(() => import('@/pages/Fiscal'));
+const Financeiro = lazy(() => import('@/pages/Financeiro'));
+const Despesas = lazy(() => import('@/pages/Despesas'));
+const SecurityDashboard = lazy(() => import('@/pages/SecurityDashboard'));
+const WhatsAppBot = lazy(() => import('@/pages/WhatsAppBot'));
+const Downloads = lazy(() => import('@/pages/Downloads'));
+const Menu = lazy(() => import('@/pages/Menu'));
+const DesktopApp = lazy(() => import('@/pages/DesktopApp'));
+const PixSetup = lazy(() => import('@/pages/PixSetup'));
+const SystemCheck = lazy(() => import('@/pages/SystemCheck'));
+const TestPage = lazy(() => import('@/pages/TestPage'));
+const AuthCallback = lazy(() => import('@/pages/AuthCallback'));
+const OrderTracking = lazy(() => import('@/pages/OrderTracking'));
+const MercadoPagoReturn = lazy(() => import('@/pages/MercadoPagoReturn'));
+const MpCallback = lazy(() => import('@/pages/MpCallback'));
+const PopPayCallback = lazy(() => import('@/pages/PopPayCallback').then((module) => ({ default: module.PopPayCallback })));
+const AgentDashboard = lazy(() => import('@/pages/AgentDashboard'));
+const WaiterLogin = lazy(() => import('@/pages/WaiterLogin'));
+const EmployeeLogin = lazy(() => import('@/pages/EmployeeLogin'));
+const OperatorLogin = lazy(() => import('@/pages/OperatorLogin'));
+const WaiterDashboard = lazy(() => import('@/pages/WaiterDashboard'));
+const WaiterSession = lazy(() => import('@/pages/WaiterSession'));
+const EmployeeTimeClock = lazy(() => import('@/pages/EmployeeTimeClock'));
+const KDSView = lazy(() => import('@/pages/KDSView'));
+const CustomerView = lazy(() => import('@/pages/CustomerView'));
+const DebugPix = lazy(() => import('@/pages/DebugPix'));
 import ErrorBoundary from '@/components/ErrorBoundary';
-import Marketing from '@/pages/Marketing';
-import SystemAdminDashboard from '@/pages/SystemAdminDashboard';
-import ChecklistPublic from '@/pages/ChecklistPublic';
-import MotoboyLogin from '@/pages/MotoboyLogin';
-import MotoboyApp from '@/pages/MotoboyApp';
-import Stores from '@/pages/Stores';
-import StoreInvitation from '@/pages/StoreInvitation';
-import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
-import TableOrderFlowSettings from '@/components/settings/TableOrderFlowSettings';
+const Marketing = lazy(() => import('@/pages/Marketing'));
+const SystemAdminDashboard = lazy(() => import('@/pages/SystemAdminDashboard'));
+const ChecklistPublic = lazy(() => import('@/pages/ChecklistPublic'));
+const MotoboyLogin = lazy(() => import('@/pages/MotoboyLogin'));
+const MotoboyApp = lazy(() => import('@/pages/MotoboyApp'));
+const Stores = lazy(() => import('@/pages/Stores'));
+const StoreInvitation = lazy(() => import('@/pages/StoreInvitation'));
+const PaymentMethodsSettings = lazy(() => import('@/components/settings/PaymentMethodsSettings'));
+const TableOrderFlowSettings = lazy(() => import('@/components/settings/TableOrderFlowSettings'));
 import { useGlobalOrderAutoAccept } from '@/hooks/useGlobalOrderAutoAccept';
 import LicenseExpiredLock from '@/components/license/LicenseExpiredLock';
 import './App.css';
@@ -93,6 +92,17 @@ import { getCashSessionDeadline, isCashSessionOverdue } from '@/utils/cashSessio
 import { getLocalOperatorSession } from '@/services/operatorAuth';
 
 const queryClient = new QueryClient();
+
+function AppLoadingFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f7f9f7]" role="status" aria-live="polite">
+      <div className="flex items-center gap-3 rounded-2xl border border-emerald-950/10 bg-white px-5 py-4 text-sm font-semibold text-[#075e54] shadow-sm">
+        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#25d366]" />
+        Abrindo PopSystem…
+      </div>
+    </div>
+  );
+}
 
 const Router = (() => {
   try {
@@ -416,7 +426,9 @@ function App() {
                       <GlobalOrderAutoAccept />
                       <LicenseExpiredLock />
                       <WhatsAppInboxProvider>
-                        <AppContent />
+                        <Suspense fallback={<AppLoadingFallback />}>
+                          <AppContent />
+                        </Suspense>
                         <GlobalNotificationSystem />
                       </WhatsAppInboxProvider>
                       <SonnerToaster />

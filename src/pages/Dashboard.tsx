@@ -7,10 +7,9 @@ import OperationalChecklistDialog from '@/components/dashboard/OperationalCheckl
 import { Users, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight, Search, Activity, ArrowUpRight, CreditCard, Wallet, ChefHat, AlertTriangle, CalendarClock, UserCheck, UserX, ClipboardCheck, MessageSquareText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useNavigate } from 'react-router-dom';
 import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import CompactLoader from '@/components/ui/compact-loader';
+import PageContentSkeleton from '@/components/ui/page-content-skeleton';
 
 interface DashboardStats {
   todaySales: number;
@@ -609,11 +608,7 @@ const Dashboard = () => {
   ];
 
   if (loading) {
-    return (
-      <div className="flex min-h-[45vh] items-center justify-center">
-        <CompactLoader label="Atualizando o painel..." />
-      </div>
-    );
+    return <PageContentSkeleton />;
   }
 
   return (

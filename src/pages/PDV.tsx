@@ -51,6 +51,7 @@ import { getCashSessionDeadline } from '@/utils/cashSession';
 import FiscalRecipientsManager, { type FiscalCustomer } from '@/components/fiscal/FiscalRecipientsManager';
 import { pwaScaleService } from '@/services/ScaleService';
 import BarcodeCameraScanner from '@/components/devices/BarcodeCameraScanner';
+import PageContentSkeleton from '@/components/ui/page-content-skeleton';
 
 interface Product {
   id: string;
@@ -2611,11 +2612,7 @@ const PDV = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <PageContentSkeleton />;
   }
 
   const operatorSelected = !!getOperatorSession()?.id;

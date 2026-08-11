@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import FixedHeader from './FixedHeader';
 import CollapsibleSidebar from './CollapsibleSidebar';
 import MobileBottomNav from './MobileBottomNav';
@@ -6,8 +6,8 @@ import SoundPermissionHelper from '@/components/notifications/SoundPermissionHel
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
 import { useAuth } from '@/contexts/AuthContext';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
-import CompactLoader from '@/components/ui/compact-loader';
 import { supabase } from '@/integrations/supabase/client';
+import PageContentSkeleton from '@/components/ui/page-content-skeleton';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -17,14 +17,12 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
   const { isOpen, isMobile, isPinned, closeSidebar } = useSidebar();
   const { user, loading, refreshUser } = useAuth();
   const [showWizard, setShowWizard] = useState(false);
-  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
     const checkOnboardingStatus = async () => {
       if (!user) {
-        if (mounted) setChecking(false);
         return;
       }
       
@@ -51,8 +49,6 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
         }
       } catch (error) {
         console.error("Error checking onboarding status:", error);
-      } finally {
-        if (mounted) setChecking(false);
       }
     };
 
@@ -69,15 +65,6 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
     refreshUser();
     setShowWizard(false);
   };
-
-  // Se estiver carregando auth ou verificando status
-  if (loading || checking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-emerald-50 dark:from-[#07110d] dark:via-[#0b1512] dark:to-[#101c17]">
-        <CompactLoader label="Preparando seu painel..." />
-      </div>
-    );
-  }
 
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-slate-50 via-white to-orange-50 dark:from-[#07110d] dark:via-[#0b1512] dark:to-[#101c17]">
@@ -113,7 +100,9 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
                 ${isMobile ? 'mobile-safe-bottom px-3 py-3 pb-32' : 'px-4 py-4 sm:px-6 sm:py-6'}
               `}
             >
-              {children}
+              <Suspense fallback={<PageContentSkeleton />}>
+                {children}
+              </Suspense>
             </div>
           </div>
         </main>
