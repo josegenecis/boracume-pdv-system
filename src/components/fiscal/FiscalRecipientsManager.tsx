@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Building2, CheckCircle2, Pencil, Plus, Search, UserRound } from 'lucide-react';
+import { Building2, CheckCircle2, Loader2, Pencil, Plus, Search, UserRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,6 +36,15 @@ type FiscalRecipientsManagerProps = {
   onRecipientSelected?: (customer: FiscalCustomer) => void;
 };
 
+type CnpjStateRegistration = { ativo?: boolean; uf?: string; inscricao_estadual?: string };
+type CnpjLookupResponse = {
+  razao_social?: string; nome?: string; ddd_telefone_1?: string; telefone?: string; email?: string;
+  logradouro?: string; numero?: string; complemento?: string; bairro?: string; municipio?: string;
+  uf?: string; cep?: string; codigo_municipio_ibge?: string | number; codigo_municipio?: string | number;
+  descricao_situacao_cadastral?: string; situacao_cadastral?: string | number;
+  inscricoes_estaduais?: CnpjStateRegistration[];
+};
+
 const emptyCustomer: FiscalCustomer = {
   id: '', name: '', phone: '', cpf_cnpj: '', state_registration: '', state_registration_indicator: 9,
   email: '', address: '', address_number: '', address_complement: '', neighborhood: '', city: '',
@@ -50,6 +59,11 @@ const formatDocument = (value?: string | null) => {
   return raw;
 };
 
+const BRAZILIAN_STATES = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+  'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+];
+
 export default function FiscalRecipientsManager({ onRecipientSelected }: FiscalRecipientsManagerProps = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -58,6 +72,7 @@ export default function FiscalRecipientsManager({ onRecipientSelected }: FiscalR
   const [editing, setEditing] = useState<FiscalCustomer | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [consultingCnpj, setConsultingCnpj] = useState(false);
 
   const loadCustomers = async () => {
     if (!user?.id) return;
@@ -82,6 +97,58 @@ export default function FiscalRecipientsManager({ onRecipientSelected }: FiscalR
   }, [customers, search]);
 
   const update = (patch: Partial<FiscalCustomer>) => setEditing((current) => current ? { ...current, ...patch } : current);
+
+  const consultCnpj = async () => {
+    const cnpj = digits(editing?.cpf_cnpj);
+    if (cnpj.length !== 14) {
+      toast({ title: 'CNPJ incompleto', description: 'Informe os 14 dígitos antes de consultar.', variant: 'destructive' });
+      return;
+    }
+
+    setConsultingCnpj(true);
+    try {
+      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+      if (!response.ok) {
+        if (response.status === 404) throw new Error('CNPJ não encontrado na base cadastral.');
+        throw new Error('A consulta cadastral está temporariamente indisponível.');
+      }
+
+      const data = await response.json() as CnpjLookupResponse;
+      const stateRegistrations = Array.isArray(data?.inscricoes_estaduais) ? data.inscricoes_estaduais : [];
+      const activeStateRegistration = stateRegistrations.find((item) => item?.ativo !== false && (!data?.uf || item?.uf === data.uf))
+        || stateRegistrations.find((item) => item?.ativo !== false)
+        || stateRegistrations[0];
+      const situation = String(data?.descricao_situacao_cadastral || data?.situacao_cadastral || '').trim();
+
+      update({
+        name: data?.razao_social || data?.nome || editing?.name || '',
+        phone: data?.ddd_telefone_1 || data?.telefone || editing?.phone || '',
+        email: data?.email || editing?.email || '',
+        address: data?.logradouro || editing?.address || '',
+        address_number: data?.numero || editing?.address_number || '',
+        address_complement: data?.complemento || editing?.address_complement || '',
+        neighborhood: data?.bairro || editing?.neighborhood || '',
+        city: data?.municipio || editing?.city || '',
+        state: data?.uf || editing?.state || '',
+        postal_code: digits(data?.cep) || editing?.postal_code || '',
+        city_code: digits(data?.codigo_municipio_ibge || data?.codigo_municipio) || editing?.city_code || '',
+        state_registration: activeStateRegistration?.inscricao_estadual || editing?.state_registration || '',
+      });
+
+      const inactive = situation && !/ATIVA/i.test(situation);
+      toast({
+        title: inactive ? `Atenção: situação ${situation}` : 'Dados do CNPJ encontrados',
+        description: inactive
+          ? 'Confira a situação cadastral antes de emitir. Os dados foram preenchidos para revisão.'
+          : 'Cadastro preenchido. Revise telefone, endereço e Inscrição Estadual antes de salvar.',
+        variant: inactive ? 'destructive' : 'default',
+      });
+    } catch (error: unknown) {
+      toast({ title: 'Não foi possível consultar o CNPJ', description: error instanceof Error ? error.message : 'Tente novamente em alguns instantes.', variant: 'destructive' });
+    } finally {
+      setConsultingCnpj(false);
+    }
+  };
 
   const save = async () => {
     if (!editing || !user?.id) return;
@@ -157,7 +224,17 @@ export default function FiscalRecipientsManager({ onRecipientSelected }: FiscalR
           {editing && <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2"><Label>Nome / razão social *</Label><Input value={editing.name} onChange={(e) => update({ name: e.target.value })} /></div>
             <div className="space-y-2"><Label>Telefone *</Label><Input value={editing.phone} onChange={(e) => update({ phone: e.target.value })} /></div>
-            <div className="space-y-2"><Label>CPF/CNPJ *</Label><Input value={editing.cpf_cnpj || ''} onChange={(e) => update({ cpf_cnpj: e.target.value })} /></div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>CPF/CNPJ *</Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input value={editing.cpf_cnpj || ''} onChange={(e) => update({ cpf_cnpj: e.target.value })} placeholder="Digite o CPF ou CNPJ" />
+                <Button type="button" variant="outline" className="shrink-0" onClick={() => void consultCnpj()} disabled={consultingCnpj || digits(editing.cpf_cnpj).length !== 14}>
+                  {consultingCnpj ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                  Consultar CNPJ
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">A consulta preenche os dados cadastrais. Revise a Inscrição Estadual antes da emissão.</p>
+            </div>
             <div className="space-y-2"><Label>E-mail</Label><Input type="email" value={editing.email || ''} onChange={(e) => update({ email: e.target.value })} /></div>
             <div className="space-y-2"><Label>Indicador da IE *</Label><Select value={String(editing.state_registration_indicator || 9)} onValueChange={(value) => update({ state_registration_indicator: Number(value), state_registration: value === '1' ? editing.state_registration : '' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">Contribuinte do ICMS</SelectItem><SelectItem value="2">Contribuinte isento</SelectItem><SelectItem value="9">Não contribuinte</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label>Inscrição Estadual</Label><Input disabled={Number(editing.state_registration_indicator) !== 1} value={editing.state_registration || ''} onChange={(e) => update({ state_registration: e.target.value })} /></div>
@@ -166,7 +243,7 @@ export default function FiscalRecipientsManager({ onRecipientSelected }: FiscalR
             <div className="space-y-2"><Label>Complemento</Label><Input value={editing.address_complement || ''} onChange={(e) => update({ address_complement: e.target.value })} /></div>
             <div className="space-y-2"><Label>Bairro *</Label><Input value={editing.neighborhood || ''} onChange={(e) => update({ neighborhood: e.target.value })} /></div>
             <div className="space-y-2"><Label>Município *</Label><Input value={editing.city || ''} onChange={(e) => update({ city: e.target.value })} /></div>
-            <div className="space-y-2"><Label>UF *</Label><Input maxLength={2} value={editing.state || ''} onChange={(e) => update({ state: e.target.value.toUpperCase() })} /></div>
+            <div className="space-y-2"><Label>UF *</Label><Select value={editing.state || ''} onValueChange={(value) => update({ state: value })}><SelectTrigger><SelectValue placeholder="Selecione a UF" /></SelectTrigger><SelectContent>{BRAZILIAN_STATES.map((state) => <SelectItem key={state} value={state}>{state}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>CEP *</Label><Input value={editing.postal_code || ''} onChange={(e) => update({ postal_code: e.target.value })} /></div>
             <div className="space-y-2"><Label>Código IBGE do município *</Label><Input maxLength={7} value={editing.city_code || ''} onChange={(e) => update({ city_code: e.target.value })} /></div>
             <div className="flex items-center justify-between rounded-xl border p-3 sm:col-span-2"><div><Label>Consumidor final por padrão</Label><p className="text-xs text-muted-foreground">Pode ser alterado conforme a natureza de cada operação.</p></div><Switch checked={editing.final_consumer_default !== false} onCheckedChange={(checked) => update({ final_consumer_default: checked })} /></div>

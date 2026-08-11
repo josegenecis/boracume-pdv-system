@@ -159,6 +159,22 @@ export class SefazClient {
     };
   }
 
+  async reenviarNFeAssinada(
+    signedNFeXml: string,
+    uf: string,
+    ambiente: Ambiente,
+    modelCode: '55' | '65' = '65'
+  ): Promise<SefazResponse> {
+    if (!/<(?:[A-Za-z][\w.-]*:)?Signature[\s>]/.test(signedNFeXml)) {
+      throw new Error('O XML preservado não possui assinatura digital válida para reenvio');
+    }
+    const loteId = Date.now().toString().slice(-15);
+    const nfeXml = stripXmlDeclaration(signedNFeXml);
+    const payload = `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${loteId}</idLote><indSinc>1</indSinc>${nfeXml}</enviNFe>`;
+    const result = await this.callSefaz('autorizacao', payload, uf, ambiente, 'nfeAutorizacaoLote', modelCode);
+    return { ...result, xmlEnviado: signedNFeXml };
+  }
+
   async consultarRecibo(recibo: string, uf: string, ambiente: Ambiente): Promise<SefazResponse> {
     const tpAmb = ambiente === 'producao' ? '1' : '2';
     const payload = `<consReciNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmb}</tpAmb><nRec>${recibo}</nRec></consReciNFe>`;
