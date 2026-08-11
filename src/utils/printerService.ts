@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getOrderItemDetailGroups } from '@/lib/orderDetails';
 import { toast } from 'sonner';
+import { getPublicWebBaseUrl } from '@/utils/publicUrl';
 
 // ESC/POS Commands
 const ESC = '\x1B';
@@ -236,7 +237,8 @@ async function openAuthorizedNfeDanfe(fiscal: ReturnType<typeof normalizeNfcePri
   }
 
   try {
-    const response = await fetch('/api/nfce/danfe', {
+    const danfeEndpoint = new URL('/api/nfce/danfe', getPublicWebBaseUrl()).toString();
+    const response = await fetch(danfeEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ cupom_id: fiscal.cupomId }),
@@ -1516,6 +1518,16 @@ async function openDrawerElectron() {
 }
 
 export const PrinterService = {
+  // NF-e modelo 55 nunca passa pela rotina de cupom térmico. Este método
+  // existe de forma explícita para impedir fallback acidental para NFC-e.
+  async openNfeDanfe(document: any) {
+    const fiscal = normalizeNfcePrintData({
+      nfce: { ...(document?.cupom || {}), ...document, model_code: '55' },
+    });
+    if (!fiscal?.cupomId) throw new Error('Identificador da NF-e autorizada não encontrado.');
+    await openAuthorizedNfeDanfe({ ...fiscal, modelCode: '55', qrCodeUrl: '' });
+  },
+
   // Conectar Impressora USB
   async connectUsb() {
     if (!('usb' in navigator)) {

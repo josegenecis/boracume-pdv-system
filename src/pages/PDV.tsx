@@ -2096,7 +2096,7 @@ const PDV = () => {
     const fiscalOrder = { ...order, nfce: nfceData };
 
     if (modelCode === '55') {
-      await PrinterService.printOrder(fiscalOrder);
+      await PrinterService.openNfeDanfe(nfceData);
       return { fiscal: true as const, nfce: nfceData };
     }
 

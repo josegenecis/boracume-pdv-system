@@ -332,15 +332,21 @@ const NFCeManager: React.FC = () => {
         .single();
       if (error || !order) throw new Error('Pedido original não encontrado para reimpressão.');
 
-      await PrinterService.printOrder({ ...order, nfce: cupom });
+      if (cupom.model_code === '55') {
+        await PrinterService.openNfeDanfe({ ...cupom, model_code: '55' });
+      } else {
+        await PrinterService.printOrder({ ...order, nfce: { ...cupom, model_code: '65' } });
+      }
       toast({
         title: 'Reimpressão enviada',
-        description: `DANFE NFC-e nº ${cupom.numero} enviado para impressão.`,
+        description: cupom.model_code === '55'
+          ? `DANFE NF-e nº ${cupom.numero} aberto em PDF A4.`
+          : `DANFE NFC-e nº ${cupom.numero} enviado para impressão.`,
       });
     } catch (error: any) {
       toast({
         title: 'Erro ao reimprimir',
-        description: error?.message || 'Não foi possível reimprimir o DANFE NFC-e.',
+        description: error?.message || 'Não foi possível abrir ou reimprimir o DANFE.',
         variant: 'destructive',
       });
     } finally {
