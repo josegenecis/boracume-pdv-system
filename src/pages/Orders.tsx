@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink, QrCode, MessageCircle, Printer, GripVertical } from 'lucide-react';
+import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink, QrCode, Printer, GripVertical } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -14,7 +14,8 @@ import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import OrderDetailsModal from '@/components/orders/OrderDetailsModal';
 import OrdersBulkActionButton from '@/components/orders/OrdersBulkActionButton';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
-import { WhatsAppService } from '@/services/WhatsAppService';
+import WhatsAppOrderChat, { WhatsAppOrderButtonContent } from '@/components/orders/WhatsAppOrderChat';
+import { useWhatsAppUnreadCounts } from '@/hooks/useWhatsAppUnreadCounts';
 import { PrinterService } from '@/utils/printerService';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
@@ -117,6 +118,7 @@ const Orders = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [whatsAppOrder, setWhatsAppOrder] = useState<Order | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [adminPinOpen, setAdminPinOpen] = useState(false);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
@@ -150,6 +152,7 @@ const Orders = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
+  const { getUnread, refreshUnread } = useWhatsAppUnreadCounts(user?.id);
   const realtimeOkRef = useRef(false);
   const hasLoadedOrdersRef = useRef(false);
 
@@ -1013,7 +1016,11 @@ const Orders = () => {
   };
 
   const handleWhatsAppShare = (order: Order) => {
-    WhatsAppService.shareOrder(order);
+    if (!order.customer_phone) {
+      toast({ title: 'Cliente sem WhatsApp', description: 'Este pedido não possui telefone para iniciar a conversa.', variant: 'destructive' });
+      return;
+    }
+    setWhatsAppOrder(order);
   };
 
   const getStatusBadge = (status: string) => {
@@ -1188,9 +1195,8 @@ const Orders = () => {
                 <Eye className="mr-1.5 h-3.5 w-3.5" />
                 Ver
               </Button>
-              <Button variant="outline" className="h-9 rounded-2xl border-[#003223]/10 bg-white px-2 text-[11px] text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleWhatsAppShare(order)}>
-                <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
-                Whats
+              <Button variant="outline" className="h-9 rounded-2xl border-[#25d366]/35 bg-[#effcf3] px-2 text-[11px] font-semibold text-[#075e54] hover:bg-[#dcf8e5]" onClick={() => handleWhatsAppShare(order)}>
+                <WhatsAppOrderButtonContent unread={getUnread(order.customer_phone)} compact />
               </Button>
               <Button variant="outline" className="h-9 rounded-2xl border-[#003223]/10 bg-white px-2 text-[11px] text-[#003223] hover:bg-[#F5EBE1]" onClick={() => PrinterService.printOrder(order)}>
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
@@ -1776,14 +1782,13 @@ const Orders = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1 h-8 text-xs"
+                            className="flex-1 h-8 text-xs border-[#25d366]/35 bg-[#effcf3] font-semibold text-[#075e54] hover:bg-[#dcf8e5]"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleWhatsAppShare(order);
                             }}
                           >
-                            <MessageCircle className="h-3 w-3 mr-1" />
-                            WhatsApp
+                            <WhatsAppOrderButtonContent unread={getUnread(order.customer_phone)} />
                           </Button>
                         </div>
 
@@ -1928,14 +1933,13 @@ const Orders = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1 h-8 text-xs"
+                            className="flex-1 h-8 text-xs border-[#25d366]/35 bg-[#effcf3] font-semibold text-[#075e54] hover:bg-[#dcf8e5]"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleWhatsAppShare(order);
                             }}
                           >
-                            <MessageCircle className="h-3 w-3 mr-1" />
-                            WhatsApp
+                            <WhatsAppOrderButtonContent unread={getUnread(order.customer_phone)} />
                           </Button>
                         </div>
 
@@ -2189,6 +2193,12 @@ const Orders = () => {
             setSelectedOrder(null);
           }}
           onStatusChange={handleOrderStatusChange}
+        />
+        <WhatsAppOrderChat
+          order={whatsAppOrder}
+          open={Boolean(whatsAppOrder)}
+          onOpenChange={(open) => { if (!open) setWhatsAppOrder(null); }}
+          onRead={() => { void refreshUnread(); }}
         />
       </div>
     </div>
