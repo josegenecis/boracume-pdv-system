@@ -125,7 +125,7 @@ const GlobalNotificationSystem: React.FC = () => {
 
     try {
       if (document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body });
+        new Notification(title, { body, silent: true });
       }
     } catch {}
   };

@@ -569,8 +569,6 @@ ipcMain.handle('disconnect-scale', async (event, deviceId) => {
 
 ipcMain.handle('show-notification', async (event, title, body) => {
   try {
-    const notificationText = `${title || ''} ${body || ''}`;
-    const isWhatsAppNotification = /whats\s*app|mensagem\s+(?:nova|recebida)|nova\s+mensagem/i.test(notificationText);
     if (mainWindow && (mainWindow.isMinimized() || !mainWindow.isFocused())) {
       mainWindow.flashFrame(true);
       mainWindow.once('focus', () => {
@@ -580,7 +578,10 @@ ipcMain.handle('show-notification', async (event, title, body) => {
       });
     }
     if (Notification.isSupported()) {
-      new Notification({ title, body, icon: path.join(__dirname, '../assets/icon.png'), silent: isWhatsAppNotification }).show();
+      // O áudio operacional é controlado pela aplicação (ex.: alerta de pedido).
+      // A notificação nativa deve ser sempre silenciosa para não produzir um
+      // segundo toque do Windows nem confundir mensagens com novos pedidos.
+      new Notification({ title, body, icon: path.join(__dirname, '../assets/icon.png'), silent: true }).show();
     }
     return { success: true };
   } catch (error) {
