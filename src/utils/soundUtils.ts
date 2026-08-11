@@ -170,35 +170,9 @@ export class SoundNotifications {
   }
 
   async playWhatsAppMessageSound() {
-    if (!this.isEnabled) return;
-    try {
-      if (!this.unlocked) {
-        try { await this.enableSound(); } catch {}
-      }
-      const context = this.getAudioContext();
-      if (context.state !== 'running') await context.resume();
-      const start = context.currentTime;
-      const notes = [
-        { frequency: 880, offset: 0, duration: 0.11, gain: 0.13 },
-        { frequency: 1174.66, offset: 0.105, duration: 0.17, gain: 0.1 },
-      ];
-      for (const note of notes) {
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(note.frequency, start + note.offset);
-        gain.gain.setValueAtTime(0.0001, start + note.offset);
-        gain.gain.exponentialRampToValueAtTime(this.volume * note.gain, start + note.offset + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + note.offset + note.duration);
-        oscillator.connect(gain);
-        gain.connect(context.destination);
-        oscillator.start(start + note.offset);
-        oscillator.stop(start + note.offset + note.duration);
-      }
-    } catch (error) {
-      console.warn('Falha ao reproduzir alerta curto do WhatsApp:', error);
-      this.createFallbackSound();
-    }
+    // O WhatsApp permanece silencioso até existir um som aprovado para esse canal.
+    // Mantemos o método como no-op para evitar que chamadas antigas acionem fallbacks.
+    return Promise.resolve();
   }
 
   startPersistentAlert(_soundType: string = 'bell', _intervalMs: number = 4000) {

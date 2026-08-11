@@ -64,14 +64,6 @@ export function WhatsAppInboxProvider({ children }: { children: ReactNode }) {
       if (!conversation || !active) return;
       const customerName = conversation.customer_name || conversation.customer_phone || 'Cliente';
       setPreview({ conversationId: conversation.id, customerName, content: String(message.content || 'Nova mensagem') });
-      if (navigator.vibrate) navigator.vibrate([180, 90, 180]);
-      try {
-        if (window.electronAPI?.showNotification) {
-          await window.electronAPI.showNotification('Nova mensagem no WhatsApp', `${customerName}: ${String(message.content || '').slice(0, 100)}`);
-        } else if ('Notification' in window && Notification.permission === 'granted' && (document.hidden || !document.hasFocus())) {
-          new Notification('Nova mensagem no WhatsApp', { body: `${customerName}: ${String(message.content || '').slice(0, 100)}` });
-        }
-      } catch {}
     };
 
     void loadSummary();
