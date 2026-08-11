@@ -4,17 +4,10 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { buildBrazilPhoneCandidates, phonesAreEquivalent } from '@/utils/phoneCandidates';
 
 type ChatOrder = { order_number?: string; customer_name?: string; customer_phone?: string };
-type ChatMessage = { id: string; content: string; sender: string; sent_at: string; delivered?: boolean | null };
-
-const onlyDigits = (value?: string | null) => String(value || '').replace(/\D/g, '');
-const phoneCandidates = (value?: string | null) => {
-  const normalized = onlyDigits(value);
-  const withCountry = normalized.startsWith('55') ? normalized : `55${normalized}`;
-  const local = withCountry.slice(2);
-  return Array.from(new Set([withCountry, local, local.slice(-11), local.slice(-10)].filter(Boolean)));
-};
+type ChatMessage = { id: string; content: string; sender: string; sent_at: string; delivered?: boolean | null; conversation_id?: string };
 
 function WhatsAppLogo({ className = 'h-5 w-5' }: { className?: string }) {
   return (
@@ -53,17 +46,18 @@ export default function WhatsAppOrderChat({ order, open, onOpenChange, onRead }:
       setLoading(true);
       setMessages([]);
       try {
-        const candidates = phoneCandidates(order.customer_phone);
-        let { data: conversations, error } = await (supabase as any)
+        const candidates = buildBrazilPhoneCandidates(order.customer_phone);
+        const { data: allConversations, error } = await (supabase as any)
           .from('whatsapp_conversations')
-          .select('id')
+          .select('id,customer_phone,updated_at')
           .eq('user_id', user.id)
-          .in('customer_phone', candidates)
           .order('updated_at', { ascending: false })
-          .limit(1);
+          .limit(2000);
         if (error) throw error;
-        let id = conversations?.[0]?.id as string | undefined;
-        if (!id) {
+        let conversations = (allConversations || []).filter((conversation: any) =>
+          phonesAreEquivalent(conversation.customer_phone, order.customer_phone)
+        );
+        if (conversations.length === 0) {
           const created = await (supabase as any).from('whatsapp_conversations').insert({
             user_id: user.id,
             customer_phone: candidates[0],
@@ -71,34 +65,38 @@ export default function WhatsAppOrderChat({ order, open, onOpenChange, onRead }:
             status: 'active',
           }).select('id').single();
           if (created.error) throw created.error;
-          id = created.data.id;
+          conversations = [{ id: created.data.id, customer_phone: candidates[0], updated_at: new Date().toISOString() }];
         }
-        if (!active || !id) return;
-        setConversationId(id);
+        const conversationIds = conversations.map((conversation: any) => conversation.id);
+        if (!active || conversationIds.length === 0) return;
         const result = await (supabase as any)
           .from('whatsapp_messages')
-          .select('id,content,sender,sent_at,delivered,message_type')
-          .eq('conversation_id', id)
+          .select('id,conversation_id,content,sender,sent_at,delivered,message_type')
+          .in('conversation_id', conversationIds)
           .neq('message_type', 'order_draft')
           .order('sent_at', { ascending: true })
           .limit(200);
         if (result.error) throw result.error;
-        if (active) setMessages(result.data || []);
+        const history = result.data || [];
+        const primaryId = history.at(-1)?.conversation_id || conversationIds[0];
+        setConversationId(primaryId);
+        if (active) setMessages(history);
         await (supabase as any).from('whatsapp_conversations').update({
           unread_count: 0,
           last_read_at: new Date().toISOString(),
-        }).eq('id', id).eq('user_id', user.id);
+        }).in('id', conversationIds).eq('user_id', user.id);
         onReadRef.current?.();
 
-        channel = supabase.channel(`order-chat-${id}`)
+        channel = supabase.channel(`order-chat-${primaryId}`)
           .on('postgres_changes', {
-            event: 'INSERT', schema: 'public', table: 'whatsapp_messages', filter: `conversation_id=eq.${id}`,
+            event: 'INSERT', schema: 'public', table: 'whatsapp_messages',
           }, (payload) => {
             const message = payload.new as ChatMessage & { message_type?: string };
+            if (!message.conversation_id || !conversationIds.includes(message.conversation_id)) return;
             if (message.message_type === 'order_draft') return;
             setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
             if (message.sender === 'customer') {
-              void (supabase as any).from('whatsapp_conversations').update({ unread_count: 0, last_read_at: new Date().toISOString() }).eq('id', id).eq('user_id', user.id);
+              void (supabase as any).from('whatsapp_conversations').update({ unread_count: 0, last_read_at: new Date().toISOString() }).in('id', conversationIds).eq('user_id', user.id);
               onReadRef.current?.();
             }
           }).subscribe();

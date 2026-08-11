@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-
-const digits = (value?: string | null) => String(value || '').replace(/\D/g, '');
-const phoneKeys = (value?: string | null) => {
-  const normalized = digits(value);
-  const local = normalized.startsWith('55') ? normalized.slice(2) : normalized;
-  return Array.from(new Set([normalized, local, local.slice(-11), local.slice(-10)].filter(Boolean)));
-};
+import { buildBrazilPhoneCandidates } from '@/utils/phoneCandidates';
 
 export function useWhatsAppUnreadCounts(userId?: string) {
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -24,7 +18,7 @@ export function useWhatsAppUnreadCounts(userId?: string) {
     const next: Record<string, number> = {};
     for (const conversation of data || []) {
       const unread = Math.max(0, Number(conversation.unread_count || 0));
-      for (const key of phoneKeys(conversation.customer_phone)) next[key] = Math.max(next[key] || 0, unread);
+      for (const key of buildBrazilPhoneCandidates(conversation.customer_phone)) next[key] = (next[key] || 0) + unread;
     }
     setCounts(next);
   }, [userId]);
@@ -48,7 +42,7 @@ export function useWhatsAppUnreadCounts(userId?: string) {
   }, [load, userId]);
 
   const getUnread = useCallback((phone?: string | null) => {
-    return phoneKeys(phone).reduce((largest, key) => Math.max(largest, counts[key] || 0), 0);
+    return buildBrazilPhoneCandidates(phone).reduce((largest, key) => Math.max(largest, counts[key] || 0), 0);
   }, [counts]);
 
   return { getUnread, refreshUnread: load };

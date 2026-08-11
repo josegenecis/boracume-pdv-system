@@ -51,9 +51,13 @@ export function extractPhoneFromRemoteJid(value: string | null | undefined) {
 export function buildPhoneCandidates(value: string | null | undefined) {
   const normalized = normalizePhone(value);
   const withoutCountry = normalized.startsWith("55") ? normalized.slice(2) : normalized;
-  const candidates = [normalized, withoutCountry, withoutCountry.slice(-11), withoutCountry.slice(-10)]
-    .map((item) => String(item || "").replace(/\D/g, ""))
-    .filter(Boolean);
+  const localVariants = [withoutCountry];
+  if (withoutCountry.length === 11 && withoutCountry[2] === "9") {
+    localVariants.push(`${withoutCountry.slice(0, 2)}${withoutCountry.slice(3)}`);
+  } else if (withoutCountry.length === 10) {
+    localVariants.push(`${withoutCountry.slice(0, 2)}9${withoutCountry.slice(2)}`);
+  }
+  const candidates = localVariants.flatMap((item) => [item, `55${item}`]).filter(Boolean);
 
   return Array.from(new Set(candidates));
 }
