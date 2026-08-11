@@ -1103,7 +1103,8 @@ function buildNfeDanfeA4Html(order: any, store?: any) {
               const quantity = Number(item.quantity || 1);
               const unitPrice = Number(item.price || item.unit_price || 0);
               const total = Number(item.subtotal || item.total || unitPrice * quantity);
-              return `<tr><td>${escapeHtml(String(item.product_id || '').slice(0, 8))}</td><td>${escapeHtml(item.product_name || item.name || 'Produto')}</td><td class="center">${escapeHtml(item.fiscal_ncm || '')}</td><td class="center">${escapeHtml(item.fiscal_csosn || '')}</td><td class="center">${escapeHtml(item.fiscal_cfop || '')}</td><td class="center">${escapeHtml(item.sale_unit || 'UN')}</td><td class="right">${quantity.toFixed(3)}</td><td class="right">${formatCurrencyValue(unitPrice)}</td><td class="right">${formatCurrencyValue(total)}</td></tr>`;
+              const productCode = item.internal_code || item.codigo_produto || item.sku || String(item.product_id || '').slice(0, 8);
+              return `<tr><td>${escapeHtml(productCode)}</td><td>${escapeHtml(item.product_name || item.name || 'Produto')}</td><td class="center">${escapeHtml(item.fiscal_ncm || '')}</td><td class="center">${escapeHtml(item.fiscal_csosn || '')}</td><td class="center">${escapeHtml(item.fiscal_cfop || '')}</td><td class="center">${escapeHtml(item.sale_unit || 'UN')}</td><td class="right">${quantity.toFixed(3)}</td><td class="right">${formatCurrencyValue(unitPrice)}</td><td class="right">${formatCurrencyValue(total)}</td></tr>`;
             }).join('')}</tbody>
           </table>
           <div class="section">CÁLCULO DO IMPOSTO</div>
