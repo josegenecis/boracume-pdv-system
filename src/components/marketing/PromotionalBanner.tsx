@@ -206,7 +206,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   if (clickables.length === 0) {
     if (variant === 'wide' && fallbackImage) {
       return (
-        <div className="relative h-[190px] w-full overflow-hidden rounded-[28px] border border-white/80 bg-slate-100 shadow-[0_20px_48px_-28px_rgba(15,23,42,0.55)] sm:h-[270px] lg:h-[330px]">
+        <div className="relative h-[180px] w-full overflow-hidden rounded-[22px] border border-white/80 bg-slate-100 shadow-[0_20px_48px_-28px_rgba(15,23,42,0.55)] sm:h-[270px] sm:rounded-[28px] lg:h-[330px]">
           <img src={fallbackImage} alt="Oferta em destaque" className="h-full w-full object-cover" loading="eager" />
           <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-transparent" />
         </div>
@@ -285,7 +285,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
 
   return (
     <>
-      <div className="relative h-[190px] w-full overflow-hidden rounded-[28px] border border-white/80 bg-slate-100 shadow-[0_20px_48px_-28px_rgba(15,23,42,0.55)] sm:h-[270px] lg:h-[330px]">
+      <div className="relative h-[180px] w-full overflow-hidden rounded-[22px] border border-white/80 bg-slate-100 shadow-[0_20px_48px_-28px_rgba(15,23,42,0.55)] sm:h-[270px] sm:rounded-[28px] lg:h-[330px]">
         <div
           className="flex h-full w-full transition-transform duration-700 ease-in-out"
           style={{ transform: `translateX(-${(currentIndex % clickables.length) * 100}%)` }}

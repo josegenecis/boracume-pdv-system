@@ -779,10 +779,10 @@ const MenuDigital = () => {
   return (
     <div className="min-h-screen pb-28" style={{ backgroundColor: 'color-mix(in srgb, var(--menu-bg, #F7EEDF) 78%, white)' }}>
       <MarketingPixels userId={finalUserId} />
-      <div className="mx-auto max-w-6xl px-4 pb-4 pt-5 sm:px-6 sm:pt-8">
-          <header className="rounded-[28px] border border-white/80 bg-white/90 p-4 shadow-[0_18px_50px_-35px_rgba(15,23,42,.45)] backdrop-blur sm:p-5">
+      <div className="mx-auto max-w-6xl px-3 pb-3 pt-3 sm:px-6 sm:pb-4 sm:pt-8">
+          <header className="rounded-[22px] border border-white/80 bg-white/90 p-3 shadow-[0_18px_50px_-35px_rgba(15,23,42,.45)] backdrop-blur sm:rounded-[28px] sm:p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-2xl bg-[#f5f2eb] shadow-sm sm:h-16 sm:w-16">
+              <div className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-xl bg-[#f5f2eb] shadow-sm sm:h-16 sm:w-16 sm:rounded-2xl">
                 {(profile as any)?.logo_url ? (
                   <img
                     src={String((profile as any).logo_url)}
@@ -798,43 +798,43 @@ const MenuDigital = () => {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold uppercase tracking-[.18em] text-slate-400">Bem-vindo ao cardápio</p>
-                <h1 className="line-clamp-2 text-lg font-black leading-tight sm:text-2xl" style={{ color: 'var(--menu-secondary, #063D2E)' }}>
+                <p className="text-[8px] font-bold uppercase tracking-[.16em] text-slate-400 sm:text-[10px]">Bem-vindo ao cardápio</p>
+                <h1 className="line-clamp-2 text-sm font-black leading-tight sm:text-2xl" style={{ color: 'var(--menu-secondary, #063D2E)' }}>
                   {profile?.restaurant_name || 'Cardápio'}
                 </h1>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <Badge className={storeOpenInfo.isOpen ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 'bg-red-100 text-red-700 hover:bg-red-100'}>
                     {storeOpenInfo.label}
                   </Badge>
-                  <span className="text-xs font-medium text-gray-500">{storeOpenInfo.detail}</span>
+                  <span className="text-[9px] font-medium text-gray-500 sm:text-xs">{storeOpenInfo.detail}</span>
                 </div>
               </div>
-              <button type="button" onClick={() => setShowCartModal(true)} className="relative flex h-12 w-12 flex-none items-center justify-center rounded-2xl bg-[#f8f6f1] shadow-sm" aria-label="Abrir sacola">
+              <button type="button" onClick={() => setShowCartModal(true)} className="relative flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#f8f6f1] shadow-sm sm:h-12 sm:w-12 sm:rounded-2xl" aria-label="Abrir sacola">
                 <ShoppingBag className="h-5 w-5" style={{ color: 'var(--menu-secondary, #063D2E)' }} />
                 {getCartItemCount() > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-black text-white" style={{ backgroundColor: 'var(--menu-accent, #EF6C20)' }}>{getCartItemCount()}</span>}
               </button>
             </div>
-            {(profile as any)?.address && <p className="mt-3 flex items-center gap-1.5 truncate text-xs text-slate-500"><MapPin className="h-3.5 w-3.5 flex-none" />{String((profile as any).address)}</p>}
-            <div className="mt-4 flex gap-2">
+            {(profile as any)?.address && <p className="mt-2 flex items-center gap-1 truncate text-[9px] text-slate-500 sm:mt-3 sm:gap-1.5 sm:text-xs"><MapPin className="h-3 w-3 flex-none sm:h-3.5 sm:w-3.5" />{String((profile as any).address)}</p>}
+            <div className="mt-3 flex gap-2 sm:mt-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input
                   placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-12 w-full rounded-2xl border-0 bg-[#f7f5f0] pl-10 pr-4 text-sm shadow-inner transition-all focus:ring-2"
+                  className="h-10 w-full rounded-xl border-0 bg-[#f7f5f0] pl-9 pr-3 text-[11px] shadow-inner transition-all focus:ring-2 sm:h-12 sm:rounded-2xl sm:pl-10 sm:pr-4 sm:text-sm"
                   style={{
                     borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 40%, #d1d5db)',
                     boxShadow: '0 1px 0 rgba(0,0,0,0.02)'
                   }}
                 />
               </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f7f5f0] text-slate-600"><SlidersHorizontal className="h-5 w-5" /></div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7f5f0] text-slate-600 sm:h-12 sm:w-12 sm:rounded-2xl"><SlidersHorizontal className="h-4 w-4 sm:h-5 sm:w-5" /></div>
             </div>
           </header>
       </div>
 
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+      <div className="mx-auto max-w-6xl px-3 sm:px-6">
         <div>
           <MarketingBanners
             restaurantId={finalUserId}
@@ -848,7 +848,7 @@ const MenuDigital = () => {
           />
         </div>
 
-        <div className="sticky top-0 z-40 mt-3 rounded-3xl bg-[color-mix(in_srgb,var(--menu-bg,#F7EEDF)_78%,white)]/95 py-1 backdrop-blur">
+        <div className="sticky top-0 z-40 mt-2 rounded-3xl bg-[color-mix(in_srgb,var(--menu-bg,#F7EEDF)_78%,white)]/95 backdrop-blur sm:mt-3 sm:py-1">
           {categories.length > 0 && (
             <CategoryTabs
               categories={visualCategories}
@@ -858,7 +858,7 @@ const MenuDigital = () => {
           )}
         </div>
 
-        <div className="h-5" />
+        <div className="h-3 sm:h-5" />
         {/* Seção de Destaques */}
         {featuredProducts.length > 0 && (
           <HighlightsSection
@@ -867,10 +867,10 @@ const MenuDigital = () => {
           />
         )}
 
-        <div className="h-3" />
+        <div className="h-1 sm:h-3" />
 
         {/* Produtos por Categoria */}
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           {productsByCategory.map((category) => (
             <section
               key={category.id}
@@ -880,11 +880,11 @@ const MenuDigital = () => {
               }}
               className="scroll-mt-32"
             >
-              <h2 className="mb-1 text-xl font-black sm:text-2xl" style={{ color: 'var(--menu-secondary, #063D2E)' }}>
+              <h2 className="mb-1 text-lg font-black sm:text-2xl" style={{ color: 'var(--menu-secondary, #063D2E)' }}>
                 {category.name}
               </h2>
               {category.description && <p className="mb-4 text-sm text-slate-500">{category.description}</p>}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
                 {category.products.map((product) => (
                   <ProductCard
                     key={product.id}
