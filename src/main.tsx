@@ -20,6 +20,13 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // Service Worker: registrar sempre em produção para habilitar PWA
 if ('serviceWorker' in navigator) {
+  let reloadingForServiceWorkerUpdate = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloadingForServiceWorkerUpdate) return;
+    reloadingForServiceWorkerUpdate = true;
+    window.location.reload();
+  });
+
   window.addEventListener('load', () => {
     (async () => {
       try {
