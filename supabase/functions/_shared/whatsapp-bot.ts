@@ -1344,10 +1344,21 @@ async function loadExistingWhatsAppConversation(supabase: any, restaurantId: str
     .eq('user_id', restaurantId)
     .in('customer_phone', phoneCandidates)
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(20);
 
-  if (!fullResult.error) return fullResult.data || null;
+  if (!fullResult.error) {
+    const conversations = fullResult.data || [];
+    if (conversations.length <= 1) return conversations[0] || null;
+    const ids = conversations.map((item: any) => item.id);
+    const { data: latestMessage } = await supabase
+      .from('whatsapp_messages')
+      .select('conversation_id')
+      .in('conversation_id', ids)
+      .order('sent_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return conversations.find((item: any) => item.id === latestMessage?.conversation_id) || conversations[0] || null;
+  }
 
   const message = String(fullResult.error?.message || '').toLowerCase();
   const canFallback = message.includes('bot_paused') || message.includes('schema cache') || message.includes('column');
@@ -1359,13 +1370,14 @@ async function loadExistingWhatsAppConversation(supabase: any, restaurantId: str
     .eq('user_id', restaurantId)
     .in('customer_phone', phoneCandidates)
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(20);
 
   if (fallbackResult.error) return null;
-  return fallbackResult.data
+  const fallbackConversations = fallbackResult.data || [];
+  const fallbackConversation = fallbackConversations[0] || null;
+  return fallbackConversation
     ? {
-        ...fallbackResult.data,
+        ...fallbackConversation,
         bot_paused: false,
         bot_paused_at: null,
         bot_paused_by: null
@@ -2176,7 +2188,7 @@ export async function processRestaurantBotMessage(params: {
   const recentBotReplyMinutes = minutesSince(lastBotMessage?.sent_at);
   const menuWasSent = Boolean(lastMenuMessage?.id);
   const menuWasSentRecently = menuWasSent && minutesSince(lastMenuMessage?.sent_at) < getMenuGreetingCooldownMinutes();
-  const shouldSendFirstMenuGreeting = !menuWasSentRecently && (isFirstConversationTouch || greetingIntent);
+  const shouldSendFirstMenuGreeting = !menuWasSentRecently && isFirstConversationTouch;
   const canSendMenuReply = explicitMenuIntent || shouldSendFirstMenuGreeting;
   const menuLink = buildMenuShareUrl(restaurantId);
   const firstMenuGreetingText = buildConfiguredSmartMenuGreeting(context, restaurantId, customerName, true);

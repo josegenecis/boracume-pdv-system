@@ -11,6 +11,7 @@ import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import { RouteGuard } from '@/components/auth/RouteGuard';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
+import { WhatsAppInboxProvider } from '@/contexts/WhatsAppInboxContext';
 import { soundNotifications } from '@/utils/soundUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { ConfirmDialogProvider } from '@/contexts/ConfirmDialogContext';
@@ -414,8 +415,10 @@ function App() {
                       <DesktopCashSessionGuard />
                       <GlobalOrderAutoAccept />
                       <LicenseExpiredLock />
-                      <AppContent />
-                      <GlobalNotificationSystem />
+                      <WhatsAppInboxProvider>
+                        <AppContent />
+                        <GlobalNotificationSystem />
+                      </WhatsAppInboxProvider>
                       <SonnerToaster />
                       <ShadcnToaster />
                     </FeatureGateProvider>

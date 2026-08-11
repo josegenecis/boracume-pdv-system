@@ -31,6 +31,7 @@ import { FeatureKey } from '@/lib/featureAccess';
 import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
 import StoreSwitcher from '@/components/multistore/StoreSwitcher';
 import { AssistantPopButton } from '@/components/agent/AssistantPopButton';
+import { useWhatsAppInbox } from '@/contexts/WhatsAppInboxContext';
 
 const FixedHeader = () => {
   const { user } = useAuth();
@@ -39,6 +40,7 @@ const FixedHeader = () => {
   const { canAccessFeature, openFeatureDialog } = useFeatureGate();
   const [cashStatus, setCashStatus] = useState<'open' | 'closed'>('closed');
   const [whatsAppConnected, setWhatsAppConnected] = useState(false);
+  const { totalUnread, urgentConversations } = useWhatsAppInbox();
 
   useEffect(() => {
     if (!user?.id) return;
@@ -191,12 +193,13 @@ const FixedHeader = () => {
                   <Icon size={15} className="mr-2" />
                   {shortcut.label}
                   {isWhatsApp && (
-                    <span
-                      className={`ml-2 h-2.5 w-2.5 rounded-full border border-white ${
-                        whatsAppConnected ? 'bg-[#22c55e]' : 'bg-red-500'
-                      }`}
-                      aria-label={whatsAppConnected ? 'WhatsApp conectado' : 'WhatsApp desconectado'}
-                    />
+                    totalUnread > 0 ? (
+                      <span className={`ml-2 grid min-h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white ${urgentConversations > 0 ? 'animate-pulse' : ''}`} aria-label={`${totalUnread} mensagens não lidas`}>
+                        {totalUnread > 99 ? '99+' : totalUnread}
+                      </span>
+                    ) : (
+                      <span className={`ml-2 h-2.5 w-2.5 rounded-full border border-white ${whatsAppConnected ? 'bg-[#22c55e]' : 'bg-red-500'}`} aria-label={whatsAppConnected ? 'WhatsApp conectado' : 'WhatsApp desconectado'} />
+                    )
                   )}
                 </Button>
               );

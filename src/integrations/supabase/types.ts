@@ -1876,11 +1876,17 @@ export type Database = {
           bot_paused: boolean
           bot_paused_at: string | null
           bot_paused_by: string | null
+          assigned_at: string | null
+          assigned_operator_id: string | null
+          assigned_operator_name: string | null
           created_at: string
           customer_name: string | null
           customer_phone: string
           id: string
           last_read_at: string | null
+          first_response_at: string | null
+          queue_status: string
+          resolved_at: string | null
           status: string | null
           unread_count: number
           updated_at: string
@@ -1890,11 +1896,17 @@ export type Database = {
           bot_paused?: boolean
           bot_paused_at?: string | null
           bot_paused_by?: string | null
+          assigned_at?: string | null
+          assigned_operator_id?: string | null
+          assigned_operator_name?: string | null
           created_at?: string
           customer_name?: string | null
           customer_phone: string
           id?: string
           last_read_at?: string | null
+          first_response_at?: string | null
+          queue_status?: string
+          resolved_at?: string | null
           status?: string | null
           unread_count?: number
           updated_at?: string
@@ -1904,11 +1916,17 @@ export type Database = {
           bot_paused?: boolean
           bot_paused_at?: string | null
           bot_paused_by?: string | null
+          assigned_at?: string | null
+          assigned_operator_id?: string | null
+          assigned_operator_name?: string | null
           created_at?: string
           customer_name?: string | null
           customer_phone?: string
           id?: string
           last_read_at?: string | null
+          first_response_at?: string | null
+          queue_status?: string
+          resolved_at?: string | null
           status?: string | null
           unread_count?: number
           updated_at?: string

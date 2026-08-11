@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MessageSquare, Send, Phone, Bot, User, Users, Mail, Search, PauseCircle, PlayCircle, Sparkles, Settings, Activity, Save, RefreshCw } from 'lucide-react';
+import { MessageSquare, Send, Phone, Bot, User, Users, Mail, Search, PauseCircle, PlayCircle, Sparkles, Settings, Activity, Save, RefreshCw, Clock3, UserCheck, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useSearchParams } from 'react-router-dom';
+import { getLocalOperatorSession } from '@/services/operatorAuth';
 
 interface Message {
   id: string;
@@ -31,6 +33,12 @@ interface Conversation {
   human_required?: boolean | null;
   owner?: string | null;
   current_state?: string | null;
+  unread_count?: number;
+  queue_status?: 'new' | 'assigned' | 'waiting_customer' | 'resolved';
+  assigned_operator_id?: string | null;
+  assigned_operator_name?: string | null;
+  assigned_at?: string | null;
+  last_customer_message_at?: string | null;
 }
 
 interface AiSettings {
@@ -110,6 +118,7 @@ const isBotPaused = (conversation: {
 const WhatsAppChatbot = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -124,6 +133,10 @@ const WhatsAppChatbot = () => {
   const [savingAiSettings, setSavingAiSettings] = useState(false);
   const [aiLogs, setAiLogs] = useState<AiLog[]>([]);
   const [loadingAiLogs, setLoadingAiLogs] = useState(false);
+  const [queueFilter, setQueueFilter] = useState<'open' | 'mine' | 'waiting_customer' | 'resolved' | 'all'>('open');
+  const operator = getLocalOperatorSession();
+  const operatorId = operator?.id || user?.id || '';
+  const operatorName = operator?.name || user?.email || 'Administrador';
 
   const buildTemporaryHumanPausePayload = () => {
     const now = new Date();
@@ -162,8 +175,32 @@ const WhatsAppChatbot = () => {
     if (selectedConversation) {
       fetchMessages(selectedConversation);
       fetchAiLogs();
+      void (supabase as any).from('whatsapp_conversations').update({
+        unread_count: 0,
+        last_read_at: new Date().toISOString(),
+      }).eq('id', selectedConversation).eq('user_id', user?.id);
     }
-  }, [selectedConversation]);
+  }, [selectedConversation, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const refreshTimer = window.setInterval(() => {
+      void fetchConversations();
+    }, 30_000);
+    const channel = supabase.channel(`whatsapp-service-queue:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_conversations', filter: `user_id=eq.${user.id}` }, () => {
+        void fetchConversations();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'whatsapp_messages' }, (payload) => {
+        const message = payload.new as any;
+        if (message.conversation_id === selectedConversation && message.message_type !== 'order_draft') void fetchMessages(selectedConversation);
+      })
+      .subscribe();
+    return () => {
+      window.clearInterval(refreshTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id, selectedConversation]);
 
   const fetchConversations = async () => {
     try {
@@ -188,10 +225,22 @@ const WhatsAppChatbot = () => {
         ai_status: (conv as any).ai_status || null,
         human_required: (conv as any).human_required || false,
         owner: (conv as any).owner || null,
-        current_state: (conv as any).current_state || null
+        current_state: (conv as any).current_state || null,
+        unread_count: Number((conv as any).unread_count || 0),
+        queue_status: (conv as any).queue_status || 'new',
+        assigned_operator_id: (conv as any).assigned_operator_id || null,
+        assigned_operator_name: (conv as any).assigned_operator_name || null,
+        assigned_at: (conv as any).assigned_at || null,
+        last_customer_message_at: (conv as any).last_customer_message_at || null,
       }));
       
       setConversations(typedConversations);
+      const requestedConversation = searchParams.get('conversation');
+      if (requestedConversation && typedConversations.some((item) => item.id === requestedConversation)) {
+        setSelectedConversation(requestedConversation);
+        setActiveTab('conversations');
+        setSearchParams({}, { replace: true });
+      }
     } catch (error: any) {
       console.error('Erro ao buscar conversas:', error);
       toast({
@@ -202,6 +251,58 @@ const WhatsAppChatbot = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const takeConversation = async (conversation: Conversation) => {
+    const now = new Date().toISOString();
+    const query = (supabase as any)
+      .from('whatsapp_conversations')
+      .update({
+        queue_status: 'assigned',
+        assigned_operator_id: operatorId,
+        assigned_operator_name: operatorName,
+        assigned_at: now,
+        unread_count: 0,
+        last_read_at: now,
+        owner: 'HUMAN',
+        human_required: true,
+        updated_at: now,
+      })
+      .eq('id', conversation.id)
+      .eq('user_id', user?.id)
+      .or(`assigned_operator_id.is.null,assigned_operator_id.eq.${operatorId}`)
+      .select('id')
+      .maybeSingle();
+    const { data, error } = await query;
+    if (error) throw error;
+    if (!data) throw new Error(`Esta conversa já foi assumida por ${conversation.assigned_operator_name || 'outro atendente'}.`);
+    setConversations((current) => current.map((item) => item.id === conversation.id ? {
+      ...item,
+      queue_status: 'assigned',
+      assigned_operator_id: operatorId,
+      assigned_operator_name: operatorName,
+      assigned_at: now,
+      unread_count: 0,
+    } : item));
+  };
+
+  const resolveConversation = async (conversation: Conversation) => {
+    const now = new Date().toISOString();
+    const { error } = await (supabase as any).from('whatsapp_conversations').update({
+      queue_status: 'resolved',
+      resolved_at: now,
+      unread_count: 0,
+      last_read_at: now,
+      updated_at: now,
+    }).eq('id', conversation.id).eq('user_id', user?.id);
+    if (error) throw error;
+    setConversations((current) => current.map((item) => item.id === conversation.id ? { ...item, queue_status: 'resolved', unread_count: 0 } : item));
+    toast({ title: 'Conversa resolvida', description: 'Ela continuará disponível no histórico.' });
+  };
+
+  const waitingMinutes = (conversation: Conversation) => {
+    const value = conversation.last_customer_message_at || conversation.created_at;
+    return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
   };
 
   const fetchMessages = async (conversationId: string) => {
@@ -240,6 +341,7 @@ const WhatsAppChatbot = () => {
     const messageToSend = newMessage.trim();
 
     try {
+      if (conversation.assigned_operator_id !== operatorId) await takeConversation(conversation);
       const pausePayload = buildTemporaryHumanPausePayload();
 
       let { error: pauseError } = await supabase
@@ -729,6 +831,21 @@ const WhatsAppChatbot = () => {
     customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     customer.phone.includes(customerSearch)
   );
+  const queueCounts = conversations.reduce((counts, conversation) => {
+    counts.all += 1;
+    if (conversation.queue_status !== 'resolved' && conversation.queue_status !== 'waiting_customer') counts.open += 1;
+    if (conversation.assigned_operator_id === operatorId && conversation.queue_status !== 'resolved') counts.mine += 1;
+    if (conversation.queue_status === 'waiting_customer') counts.waiting_customer += 1;
+    if (conversation.queue_status === 'resolved') counts.resolved += 1;
+    return counts;
+  }, { open: 0, mine: 0, waiting_customer: 0, resolved: 0, all: 0 });
+  const visibleConversations = conversations.filter((conversation) => {
+    if (queueFilter === 'all') return true;
+    if (queueFilter === 'mine') return conversation.assigned_operator_id === operatorId && conversation.queue_status !== 'resolved';
+    if (queueFilter === 'waiting_customer') return conversation.queue_status === 'waiting_customer';
+    if (queueFilter === 'resolved') return conversation.queue_status === 'resolved';
+    return conversation.queue_status !== 'resolved' && conversation.queue_status !== 'waiting_customer';
+  });
 
   return (
     <div className="space-y-6">
@@ -788,18 +905,33 @@ const WhatsAppChatbot = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
+            <div className="grid grid-cols-2 gap-1.5 border-b p-3 text-xs">
+              {([
+                ['all', 'Todas', queueCounts.all],
+                ['open', 'Novas', queueCounts.open],
+                ['mine', 'Minhas', queueCounts.mine],
+                ['waiting_customer', 'Aguardando cliente', queueCounts.waiting_customer],
+                ['resolved', 'Resolvidas', queueCounts.resolved],
+              ] as const).map(([value, label, count]) => (
+                <button key={value} type="button" onClick={() => setQueueFilter(value)} className={`rounded-lg px-2 py-2 font-semibold transition ${queueFilter === value ? 'bg-[#075e54] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  {label} ({count})
+                </button>
+              ))}
+            </div>
             <div className="space-y-2 max-h-[500px] overflow-y-auto">
-              {conversations.length === 0 ? (
+              {visibleConversations.length === 0 ? (
                 <div className="p-4 text-center text-gray-500">
                   <MessageSquare className="mx-auto h-8 w-8 mb-2" />
-                  <p>Nenhuma conversa ainda</p>
-                  <p className="text-xs">Clique em "Criar Conversa Teste"</p>
+                  <p>Nenhuma conversa nesta fila.</p>
                 </div>
               ) : (
-                conversations.map((conversation) => (
+                visibleConversations.map((conversation) => {
+                  const minutes = waitingMinutes(conversation);
+                  const priorityClass = minutes >= 5 ? 'border-l-red-500' : minutes >= 2 ? 'border-l-amber-400' : 'border-l-emerald-500';
+                  return (
                   <div
                     key={conversation.id}
-                    className={`p-3 border-b cursor-pointer hover:bg-gray-50 ${
+                    className={`border-b border-l-4 p-3 cursor-pointer hover:bg-gray-50 ${priorityClass} ${
                       selectedConversation === conversation.id ? 'bg-blue-50 border-blue-200' : ''
                     }`}
                     onClick={() => setSelectedConversation(conversation.id)}
@@ -808,11 +940,15 @@ const WhatsAppChatbot = () => {
                       <div>
                         <p className="font-medium">{conversation.customer_name}</p>
                         <p className="text-sm text-gray-500">{conversation.customer_phone}</p>
+                        {conversation.assigned_operator_name ? <p className="mt-1 text-xs font-semibold text-[#075e54]">Com {conversation.assigned_operator_name}</p> : null}
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        <Badge variant={conversation.status === 'active' ? 'default' : 'secondary'}>
-                          {conversation.status}
-                        </Badge>
+                        {Number(conversation.unread_count || 0) > 0 ? <Badge className="bg-red-500 text-white">{conversation.unread_count} nova(s)</Badge> : null}
+                        {conversation.queue_status !== 'resolved' && conversation.queue_status !== 'waiting_customer' ? (
+                          <Badge variant="outline" className={minutes >= 5 ? 'border-red-300 bg-red-50 text-red-700' : minutes >= 2 ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-emerald-300 bg-emerald-50 text-emerald-700'}>
+                            <Clock3 className="mr-1 h-3 w-3" />{minutes} min
+                          </Badge>
+                        ) : null}
                         {conversation.bot_paused && (
                           <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
                             Robô pausado
@@ -829,7 +965,7 @@ const WhatsAppChatbot = () => {
                       {new Date(conversation.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                ))
+                );})
               )}
             </div>
           </CardContent>
@@ -844,16 +980,20 @@ const WhatsAppChatbot = () => {
                 {selectedConv ? `Chat com ${selectedConv.customer_name}` : 'Selecione uma conversa'}
               </span>
               {selectedConv && (
-                <Button
-                  type="button"
-                  variant={isBotPaused(selectedConv) ? 'outline' : 'secondary'}
-                  size="sm"
-                  onClick={() => toggleBotPause(selectedConv.id, !isBotPaused(selectedConv))}
-                  className="gap-2"
-                >
-                  {isBotPaused(selectedConv) ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
-                  {isBotPaused(selectedConv) ? 'Reativar robô' : 'Pausar robô'}
-                </Button>
+                <span className="flex flex-wrap gap-2">
+                  {selectedConv.assigned_operator_id !== operatorId && selectedConv.queue_status !== 'resolved' ? (
+                    <Button type="button" size="sm" className="gap-2 bg-[#25d366] text-[#075e54] hover:bg-[#20c45b]" onClick={() => void takeConversation(selectedConv).catch((error) => toast({ title: 'Não foi possível assumir', description: error.message, variant: 'destructive' }))}>
+                      <UserCheck size={16} />Assumir atendimento
+                    </Button>
+                  ) : null}
+                  {selectedConv.queue_status !== 'resolved' ? (
+                    <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => void resolveConversation(selectedConv).catch((error) => toast({ title: 'Não foi possível resolver', description: error.message, variant: 'destructive' }))}><CheckCircle2 size={16} />Resolver</Button>
+                  ) : null}
+                  <Button type="button" variant={isBotPaused(selectedConv) ? 'outline' : 'secondary'} size="sm" onClick={() => toggleBotPause(selectedConv.id, !isBotPaused(selectedConv))} className="gap-2">
+                    {isBotPaused(selectedConv) ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
+                    {isBotPaused(selectedConv) ? 'Reativar robô' : 'Pausar robô'}
+                  </Button>
+                </span>
               )}
             </CardTitle>
           </CardHeader>

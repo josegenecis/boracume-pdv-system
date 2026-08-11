@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { buildBrazilPhoneCandidates, phonesAreEquivalent } from '@/utils/phoneCandidates';
+import { getLocalOperatorSession } from '@/services/operatorAuth';
 
 type ChatOrder = { order_number?: string; customer_name?: string; customer_phone?: string };
 type ChatMessage = { id: string; content: string; sender: string; sent_at: string; delivered?: boolean | null; conversation_id?: string };
@@ -120,6 +121,21 @@ export default function WhatsAppOrderChat({ order, open, onOpenChange, onRead }:
     if (!content || !conversationId || !order?.customer_phone || sending) return;
     setSending(true);
     try {
+      const operator = getLocalOperatorSession();
+      const operatorId = operator?.id || user?.id || '';
+      const operatorName = operator?.name || user?.email || 'Administrador';
+      const assigned = await (supabase as any).from('whatsapp_conversations').update({
+        queue_status: 'assigned',
+        assigned_operator_id: operatorId,
+        assigned_operator_name: operatorName,
+        assigned_at: new Date().toISOString(),
+        owner: 'HUMAN',
+        human_required: true,
+      }).eq('id', conversationId).eq('user_id', user?.id)
+        .or(`assigned_operator_id.is.null,assigned_operator_id.eq.${operatorId}`)
+        .select('id').maybeSingle();
+      if (assigned.error) throw assigned.error;
+      if (!assigned.data) throw new Error('Esta conversa já está sendo atendida por outro operador. Abra a Central do WhatsApp para verificar.');
       const { data, error } = await supabase.functions.invoke('whatsapp-send', {
         body: { number: order.customer_phone, message: content },
       });
