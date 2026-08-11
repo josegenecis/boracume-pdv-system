@@ -54,10 +54,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
         onPointerEnter={prefetchOnIntent}
         onPointerDown={prefetchOnIntent}
         onTouchStart={prefetchOnIntent}
-        className="bg-white rounded-2xl shadow-sm border border-boracume-light overflow-hidden cursor-pointer hover:shadow-md transition-shadow group"
+        className="group cursor-pointer overflow-hidden rounded-[22px] border border-white bg-white shadow-[0_14px_35px_-27px_rgba(15,23,42,.7)] transition-all hover:-translate-y-0.5 hover:shadow-lg"
       >
         <div className="relative">
-          <div className="aspect-square w-full bg-boracume-light/50">
+          <div className="aspect-[4/3] w-full bg-[#f8f5ef]">
             {imageUrl && !imageError ? (
               isVideoAsset(imageUrl) ? (
                 <AutoplayVideo
@@ -94,7 +94,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
           </Button>
         </div>
 
-        <div className="p-4">
+        <div className="p-3.5 sm:p-4">
           <h3 className="font-semibold text-sm leading-snug line-clamp-2 transition-colors" style={{ color: 'var(--menu-secondary, #063D2E)' }}>
             {product.name}
           </h3>
