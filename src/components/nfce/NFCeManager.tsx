@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Receipt, Search, Download, Eye, X, RotateCcw, PlayCircle, AlertTriangle, Printer } from 'lucide-react';
+import { Receipt, Search, Download, Eye, X, RotateCcw, PlayCircle, AlertTriangle, Printer, Send, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -47,6 +47,7 @@ const NFCeManager: React.FC = () => {
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [adminPinOpen, setAdminPinOpen] = useState(false);
   const [pendingCancelCupomId, setPendingCancelCupomId] = useState<string | null>(null);
+  const [resendingCupomId, setResendingCupomId] = useState<string | null>(null);
   const { toast } = useToast();
   const confirm = useConfirmDialog();
   const { user } = useAuth();
@@ -209,6 +210,35 @@ const NFCeManager: React.FC = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendRejected = async (cupom: NFCeCupom) => {
+    const confirmed = await confirm({
+      title: `Reenviar ${cupom.model_code === '55' ? 'NF-e' : 'NFC-e'} rejeitada`,
+      description: `O sistema consultará a chave antes e reenviará o mesmo documento nº ${cupom.numero}, sem consumir uma nova numeração.`,
+      confirmText: 'Reenviar à SEFAZ',
+      cancelText: 'Voltar',
+    });
+    if (!confirmed) return;
+
+    setResendingCupomId(cupom.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('nfce-operations', {
+        body: { _storeId: user?.id, operation: 'reenviar_rejeitado', cupom_id: cupom.id },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.motivo || 'A SEFAZ rejeitou novamente o documento.');
+      toast({
+        title: data?.recovered ? 'Autorização recuperada' : 'Documento autorizado',
+        description: data?.recovered ? 'A nota já estava autorizada na SEFAZ e o status foi corrigido.' : 'A SEFAZ autorizou o reenvio da nota.',
+      });
+      await loadCupons();
+    } catch (error: any) {
+      toast({ title: 'Não foi possível autorizar o reenvio', description: error?.message || 'Confira o motivo atualizado da rejeição.', variant: 'destructive' });
+      await loadCupons();
+    } finally {
+      setResendingCupomId(null);
     }
   };
 
@@ -593,15 +623,16 @@ const NFCeManager: React.FC = () => {
                   )}
 
                   {cupom.status === 'rejeitado' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleConsultarCupom(cupom.id)}
-                      disabled={loading}
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      Ver Detalhes
-                    </Button>
+                    <>
+                      <Button size="sm" onClick={() => void handleResendRejected(cupom)} disabled={loading || resendingCupomId === cupom.id}>
+                        {resendingCupomId === cupom.id ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Send className="mr-1 h-4 w-4" />}
+                        {resendingCupomId === cupom.id ? 'Reenviando…' : 'Reenviar nota'}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleConsultarCupom(cupom.id)} disabled={loading}>
+                        <Eye className="w-4 h-4 mr-1" />
+                        Ver Detalhes
+                      </Button>
+                    </>
                   )}
                 </div>
               </CardContent>

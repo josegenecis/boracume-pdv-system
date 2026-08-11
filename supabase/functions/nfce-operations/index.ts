@@ -28,6 +28,7 @@ const MUNICIPALITY_CODE_OVERRIDES: Record<string, string> = {
 interface NFCeData {
   operation:
     | 'emitir'
+    | 'reenviar_rejeitado'
     | 'consultar'
     | 'cancelar'
     | 'download_xml'
@@ -84,6 +85,8 @@ export async function handleRequest(req: Request) {
     switch (requestData.operation) {
       case 'emitir':
         return await emitirNFCe(supabase, storeUserId, requestData);
+      case 'reenviar_rejeitado':
+        return await reenviarDocumentoRejeitado(supabase, storeUserId, required(requestData.cupom_id, 'cupom_id'));
       case 'consultar':
         return await consultarNFCe(supabase, storeUserId, required(requestData.cupom_id, 'cupom_id'));
       case 'cancelar':
@@ -360,6 +363,82 @@ async function consultarNFCe(supabase: any, userId: string, cupomId: string) {
     }]);
 
     return json({ success: result.success, status, protocolo: result.protocolo, motivo: result.xMotivo });
+  } finally {
+    sefazClient.close();
+  }
+}
+
+async function reenviarDocumentoRejeitado(supabase: any, userId: string, cupomId: string) {
+  const { data: cupom, error: cupomError } = await supabase
+    .from('nfce_cupons')
+    .select('*')
+    .eq('id', cupomId)
+    .eq('user_id', userId)
+    .single();
+  if (cupomError || !cupom) throw new Error('Documento fiscal não encontrado');
+  if (cupom.status !== 'rejeitado') throw new Error('Somente documentos rejeitados podem ser reenviados');
+  if (!cupom.chave_acesso || !cupom.xml_content) throw new Error('O documento rejeitado não possui XML e chave preservados para reenvio');
+
+  const modelCode: '55' | '65' = cupom.model_code === '55' ? '55' : '65';
+  const fiscalSettings = await loadFiscalSettings(supabase, userId, false);
+  const modelSettings = await loadFiscalModel(supabase, userId, modelCode);
+  if (modelSettings?.environment) fiscalSettings.ambiente = modelSettings.environment;
+  const { sefazClient } = loadSefazClient(fiscalSettings);
+
+  try {
+    // Evita duplicidade quando a autorizacao ocorreu, mas a resposta original se perdeu.
+    const consultation = await sefazClient.consultarNFCe(
+      cupom.chave_acesso,
+      fiscalSettings.endereco_uf,
+      fiscalSettings.ambiente as Ambiente,
+      modelCode,
+    );
+    if (['100', '150'].includes(consultation.cStat)) {
+      await supabase.from('nfce_cupons').update({
+        status: 'autorizado',
+        protocolo_autorizacao: consultation.protocolo || cupom.protocolo_autorizacao,
+        motivo_rejeicao: null,
+        data_hora_autorizacao: cupom.data_hora_autorizacao || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', cupomId).eq('user_id', userId);
+      return json({ success: true, recovered: true, status: 'autorizado', motivo: 'Documento já constava como autorizado na SEFAZ.' });
+    }
+
+    const result = await sefazClient.reenviarNFeAssinada(
+      cupom.xml_content,
+      fiscalSettings.endereco_uf,
+      fiscalSettings.ambiente as Ambiente,
+      modelCode,
+    );
+    const authorized = result.success && ['100', '150'].includes(result.cStat);
+    const updateData: Record<string, unknown> = {
+      status: authorized ? 'autorizado' : 'rejeitado',
+      motivo_rejeicao: authorized ? null : `${result.cStat} - ${result.xMotivo}`,
+      updated_at: new Date().toISOString(),
+    };
+    if (authorized) {
+      updateData.protocolo_autorizacao = result.protocolo;
+      updateData.data_hora_autorizacao = new Date().toISOString();
+      updateData.xml_autorizado = result.xmlRetorno;
+      try {
+        updateData.xml_processado = buildProcessedNFeXml(cupom.xml_content, result.xmlRetorno);
+      } catch (processedXmlError) {
+        // A autorizacao e o protocolo prevalecem; o XML processado pode ser reconstruido no download.
+        console.error('Falha ao montar nfeProc apos reenvio:', processedXmlError);
+      }
+    }
+    await supabase.from('nfce_cupons').update(updateData).eq('id', cupomId).eq('user_id', userId);
+    await supabase.from('nfce_transmissions').insert([{
+      cupom_id: cupomId,
+      tipo_operacao: 'reenvio',
+      xml_enviado: cupom.xml_content,
+      xml_retorno: result.xmlRetorno,
+      codigo_status: result.cStat,
+      motivo: result.xMotivo,
+      protocolo: result.protocolo,
+      sucesso: authorized,
+    }]);
+    return json({ success: authorized, status: authorized ? 'autorizado' : 'rejeitado', motivo: result.xMotivo, codigo_status: result.cStat });
   } finally {
     sefazClient.close();
   }
