@@ -28,6 +28,8 @@ export type FiscalCustomer = {
   state?: string | null;
   postal_code?: string | null;
   city_code?: string | null;
+  country_code?: string | null;
+  country_name?: string | null;
   final_consumer_default?: boolean | null;
   fiscal_profile_enabled?: boolean | null;
 };
@@ -48,7 +50,7 @@ type CnpjLookupResponse = {
 const emptyCustomer: FiscalCustomer = {
   id: '', name: '', phone: '', cpf_cnpj: '', state_registration: '', state_registration_indicator: 9,
   email: '', address: '', address_number: '', address_complement: '', neighborhood: '', city: '',
-  state: '', postal_code: '', city_code: '', final_consumer_default: true, fiscal_profile_enabled: true,
+  state: '', postal_code: '', city_code: '', country_code: '1058', country_name: 'BRASIL', final_consumer_default: true, fiscal_profile_enabled: true,
 };
 
 const digits = (value?: string | null) => String(value || '').replace(/\D/g, '');
