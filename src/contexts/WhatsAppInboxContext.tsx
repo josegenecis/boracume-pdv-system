@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { MessageCircle, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { soundNotifications } from '@/utils/soundUtils';
 
 type InboxSummary = {
   totalUnread: number;
@@ -27,12 +26,6 @@ export function WhatsAppInboxProvider({ children }: { children: ReactNode }) {
   const [preview, setPreview] = useState<IncomingPreview | null>(null);
   const locationRef = useRef(location.pathname);
   useEffect(() => { locationRef.current = location.pathname; }, [location.pathname]);
-
-  useEffect(() => {
-    if (summary.totalUnread <= 0 || location.pathname.startsWith('/whatsapp-bot') || /\/(menu|totem|track)/.test(location.pathname)) return;
-    const reminder = window.setInterval(() => { void soundNotifications.playWhatsAppMessageSound(); }, 60_000);
-    return () => window.clearInterval(reminder);
-  }, [summary.totalUnread, location.pathname]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -71,7 +64,6 @@ export function WhatsAppInboxProvider({ children }: { children: ReactNode }) {
       if (!conversation || !active) return;
       const customerName = conversation.customer_name || conversation.customer_phone || 'Cliente';
       setPreview({ conversationId: conversation.id, customerName, content: String(message.content || 'Nova mensagem') });
-      await soundNotifications.playWhatsAppMessageSound();
       if (navigator.vibrate) navigator.vibrate([180, 90, 180]);
       try {
         if (window.electronAPI?.showNotification) {
