@@ -186,7 +186,7 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
     if (productIds.length > 0) {
       const { data: productFiscalRows, error: productFiscalError } = await supabase
         .from('products')
-        .select('id,fiscal_ncm,fiscal_cfop,fiscal_csosn,fiscal_cst_pis,fiscal_cst_cofins,fiscal_origem,fiscal_cest,fiscal_beneficio,fiscal_observacao,fiscal_ibs_cbs_cst,fiscal_cclass_trib,fiscal_reducao_ibs,fiscal_reducao_cbs')
+        .select('id,internal_code,fiscal_ncm,fiscal_cfop,fiscal_csosn,fiscal_cst_pis,fiscal_cst_cofins,fiscal_origem,fiscal_cest,fiscal_beneficio,fiscal_observacao,fiscal_ibs_cbs_cst,fiscal_cclass_trib,fiscal_reducao_ibs,fiscal_reducao_cbs')
         .in('id', productIds)
         .eq('user_id', userId);
       if (productFiscalError) throw new Error(`Erro ao carregar tributacao dos produtos: ${productFiscalError.message}`);
@@ -803,7 +803,7 @@ export function buildFiscalItems(orderItems: any[], settings: any, productFiscal
     const valorIbsMun = money(baseIbsCbs * aliquotaEfetivaIbsMun / 100);
     return {
       product_id: item.product_id || null,
-      codigo_produto: sanitizeCode(item.sku || item.codigo_produto || item.product_id || String(index + 1).padStart(6, '0')),
+      codigo_produto: sanitizeCode(item.internal_code || productFiscal.internal_code || item.sku || item.codigo_produto || item.product_id || String(index + 1).padStart(6, '0')),
       descricao: String(item.product_name || item.name || item.descricao || `Item ${index + 1}`),
       ncm,
       cfop: String(item.cfop || item.fiscal_cfop || productFiscal.fiscal_cfop || settings.cfop_padrao || '5102'),
