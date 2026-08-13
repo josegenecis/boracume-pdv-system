@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { perfStart } from '@/utils/perf';
 import { hydrateSimpleVariationsCache, primeSimpleVariationPresence } from '@/hooks/useSimpleVariations';
 import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
+import { applyEffectivePrices, type PricingChannel } from '@/services/pricingEngine';
 
 interface Product {
   id: string;
@@ -22,6 +23,12 @@ interface Product {
   track_stock?: boolean;
   stock_quantity?: number;
   low_stock_threshold?: number;
+  base_price?: number;
+  effective_price?: number;
+  price_table_id?: string | null;
+  price_rule_id?: string | null;
+  price_table_name?: string | null;
+  price_source?: 'base' | 'price_table';
 }
 
 interface Category {
@@ -78,6 +85,7 @@ interface UseMenuDataOptions {
   userId: string;
   enableCache?: boolean;
   cacheTTL?: number;
+  pricingChannel?: PricingChannel;
 }
 
 const CACHE_PREFIX = 'boracume_menu_data_v5';
@@ -91,9 +99,9 @@ function safeParse<T>(value: string | null): T | null {
   }
 }
 
-function readCache(userId: string, cacheTTLMinutes: number) {
+function readCache(userId: string, pricingChannel: PricingChannel, cacheTTLMinutes: number) {
   try {
-    const key = `${CACHE_PREFIX}_${userId}`;
+    const key = `${CACHE_PREFIX}_${userId}_${pricingChannel}`;
     const cached = safeParse<{ ts: number; data: MenuPayload }>(localStorage.getItem(key));
     if (!cached) return null;
     const ttlMs = Math.max(1, cacheTTLMinutes) * 60 * 1000;
@@ -104,9 +112,9 @@ function readCache(userId: string, cacheTTLMinutes: number) {
   }
 }
 
-function writeCache(userId: string, data: MenuPayload) {
+function writeCache(userId: string, pricingChannel: PricingChannel, data: MenuPayload) {
   try {
-    const key = `${CACHE_PREFIX}_${userId}`;
+    const key = `${CACHE_PREFIX}_${userId}_${pricingChannel}`;
     localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
   } catch {}
 }
@@ -240,25 +248,26 @@ async function fetchMenuDataDirect(userId: string): Promise<MenuPayload> {
   }
 }
 
-async function fetchMenuData(userId: string): Promise<MenuPayload> {
+async function fetchMenuData(userId: string, pricingChannel: PricingChannel): Promise<MenuPayload> {
   try {
     const fromApi = await fetchMenuDataFromApi(userId);
-    if (fromApi) return fromApi;
+    if (fromApi) return { ...fromApi, products: await applyEffectivePrices(fromApi.products, userId, pricingChannel) };
   } catch {}
 
-  return fetchMenuDataDirect(userId);
+  const direct = await fetchMenuDataDirect(userId);
+  return { ...direct, products: await applyEffectivePrices(direct.products, userId, pricingChannel) };
 }
 
-export const useMenuData = ({ userId, enableCache = false, cacheTTL = 1 }: UseMenuDataOptions): MenuData => {
+export const useMenuData = ({ userId, enableCache = false, cacheTTL = 1, pricingChannel = 'delivery' }: UseMenuDataOptions): MenuData => {
   const queryClient = useQueryClient();
   const recoverAttemptRef = useRef(false);
 
-  const initialData = enableCache && userId ? readCache(userId, cacheTTL) : null;
+  const initialData = enableCache && userId ? readCache(userId, pricingChannel, cacheTTL) : null;
 
   const query = useQuery({
-    queryKey: ['menuData', userId],
+    queryKey: ['menuData', userId, pricingChannel],
     enabled: Boolean(userId),
-    queryFn: () => fetchMenuData(userId),
+    queryFn: () => fetchMenuData(userId, pricingChannel),
     staleTime: 0,
     gcTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
@@ -276,8 +285,8 @@ export const useMenuData = ({ userId, enableCache = false, cacheTTL = 1 }: UseMe
     const nextCount = Array.isArray(query.data.products) ? query.data.products.length : 0;
     const prevCount = Array.isArray(initialData?.products) ? initialData!.products.length : 0;
     if (nextCount === 0 && prevCount > 0) return;
-    writeCache(userId, query.data);
-  }, [userId, enableCache, query.data, initialData]);
+    writeCache(userId, pricingChannel, query.data);
+  }, [userId, pricingChannel, enableCache, query.data, initialData]);
 
   useEffect(() => {
     if (!userId) return;
@@ -288,11 +297,11 @@ export const useMenuData = ({ userId, enableCache = false, cacheTTL = 1 }: UseMe
     if (!(nextCount === 0 && prevCount > 0)) return;
 
     recoverAttemptRef.current = true;
-    queryClient.setQueryData(['menuData', userId], initialData);
+      queryClient.setQueryData(['menuData', userId, pricingChannel], initialData);
     void supabase.auth.refreshSession().finally(() => {
       void refetch();
     });
-  }, [userId, query.isSuccess, query.data, queryClient, initialData, refetch]);
+  }, [userId, pricingChannel, query.isSuccess, query.data, queryClient, initialData, refetch]);
 
   useEffect(() => {
     if (!userId) return;
@@ -307,7 +316,7 @@ export const useMenuData = ({ userId, enableCache = false, cacheTTL = 1 }: UseMe
     if (!userId) return;
 
     const patch = (updater: (prev: MenuPayload) => MenuPayload) => {
-      queryClient.setQueryData(['menuData', userId], (prev: MenuPayload | undefined) => {
+      queryClient.setQueryData(['menuData', userId, pricingChannel], (prev: MenuPayload | undefined) => {
         const base: MenuPayload = prev || { products: [], categories: [], profile: null, deliveryZones: [], deliverySettings: null };
         return updater(base);
       });
@@ -346,6 +355,7 @@ export const useMenuData = ({ userId, enableCache = false, cacheTTL = 1 }: UseMe
           next.sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
           return { ...prev, products: next as any };
         });
+        void queryClient.invalidateQueries({ queryKey: ['menuData', userId, pricingChannel] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'product_categories', filter: `user_id=eq.${userId}` }, (payload: any) => {
         patch((prev) => {
@@ -408,12 +418,18 @@ export const useMenuData = ({ userId, enableCache = false, cacheTTL = 1 }: UseMe
           return { ...prev, deliveryZones: next as any };
         });
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_tables', filter: `user_id=eq.${userId}` }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['menuData', userId, pricingChannel] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_table_items', filter: `user_id=eq.${userId}` }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['menuData', userId, pricingChannel] });
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, queryClient]);
+  }, [userId, pricingChannel, queryClient]);
 
   const payload = query.data || { products: [], categories: [], profile: null, deliveryZones: [], deliverySettings: null };
 

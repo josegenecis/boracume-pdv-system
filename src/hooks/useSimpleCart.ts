@@ -6,6 +6,12 @@ interface CartProduct {
   name: string;
   price: number;
   image_url?: string;
+  base_price?: number;
+  effective_price?: number;
+  price_table_id?: string | null;
+  price_rule_id?: string | null;
+  price_table_name?: string | null;
+  price_source?: 'base' | 'price_table';
 }
 
 interface CartItem {

@@ -93,7 +93,7 @@ export default function Totem() {
   const [selectionContext, setSelectionContext] = useState<'normal' | 'product-upsell' | 'checkout-upsell'>('normal');
   const [checkoutUpsellHandled, setCheckoutUpsellHandled] = useState(false);
 
-  const { products, categories, profile, isLoading: menuLoading, error: menuError } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 60 });
+  const { products, categories, profile, isLoading: menuLoading, error: menuError } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 60, pricingChannel: 'totem' });
   useTotemPwa(finalUserId);
   const { settings: totemSettings, cssVariables } = useTotemTheme(finalUserId);
 
