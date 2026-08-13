@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, Wallet, ChevronLeft, ChevronRight, Scale, AlertTriangle, ScanLine } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, Wallet, ChevronLeft, ChevronRight, Scale, AlertTriangle, ScanLine, Keyboard } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -58,6 +58,7 @@ interface Product {
   id: string;
   name: string;
   barcode?: string | null;
+  internal_code?: string | null;
   price: number;
   image_url?: string;
   available: boolean;
@@ -183,6 +184,23 @@ const getPaymentMethodLabel = (method: PdvPaymentMethod | string) => {
 const normalizeProductLookupCode = (value: unknown) =>
   String(value || '').trim().replace(/\s+/g, '').toLowerCase();
 
+const matchesInternalProductCode = (internalCode: unknown, typedCode: unknown) => {
+  const stored = normalizeProductLookupCode(internalCode);
+  const typed = normalizeProductLookupCode(typedCode);
+  if (!stored || !typed) return false;
+  if (stored === typed) return true;
+
+  // O código automático P000017 também pode ser digitado como 17 no caixa.
+  if (!/^\d+$/.test(typed)) return false;
+  const storedNumber = stored.match(/^(?:p)?0*(\d+)$/)?.[1];
+  return storedNumber ? Number(storedNumber) === Number(typed) : false;
+};
+
+const resolvePdvFunctionKey = (event: KeyboardEvent) => {
+  const candidates = [event.key, event.code].map((value) => String(value || '').toUpperCase());
+  return (['F1', 'F2', 'F3', 'F4'] as const).find((key) => candidates.includes(key)) || null;
+};
+
 const formatFiscalDocument = (value: unknown) => {
   const digits = String(value || '').replace(/\D/g, '');
   if (digits.length === 11) return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
@@ -257,6 +275,8 @@ const PDV = () => {
   const [receivableDueDate, setReceivableDueDate] = useState('');
   const [receivableNotes, setReceivableNotes] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [productCodeQuery, setProductCodeQuery] = useState('');
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -316,6 +336,8 @@ const PDV = () => {
   const scannerLastKeyAtRef = useRef(0);
   const scannerClearTimerRef = useRef<number | null>(null);
   const scannerInputTargetRef = useRef<{ element: HTMLInputElement | HTMLTextAreaElement; value: string } | null>(null);
+  const productSearchInputRef = useRef<HTMLInputElement>(null);
+  const productCodeInputRef = useRef<HTMLInputElement>(null);
 
   const getPdvDraftKey = () => `boracume_pdv_draft_v1:${user?.id || 'anonymous'}`;
 
@@ -1129,7 +1151,8 @@ const PDV = () => {
     return products.filter((product) => {
       const matchesSearch = !query ||
         product.name.toLowerCase().includes(query) ||
-        normalizeProductLookupCode(product.barcode).includes(codeQuery);
+        normalizeProductLookupCode(product.barcode).includes(codeQuery) ||
+        normalizeProductLookupCode(product.internal_code).includes(codeQuery);
       const matchesCategory =
         activeCategoryId === 'all' ||
         (activeCategoryId === 'uncategorized' && (!product.category_id || !categoryById.has(product.category_id))) ||
@@ -1404,6 +1427,7 @@ const PDV = () => {
 
     const product = products.find((item) =>
       normalizeProductLookupCode(item.barcode) === code ||
+      matchesInternalProductCode(item.internal_code, code) ||
       normalizeProductLookupCode(item.id) === code
     );
 
@@ -1990,6 +2014,84 @@ const PDV = () => {
     setMobileCartOpen(false);
     setCheckoutOpen(true);
   };
+
+  const addProductByTypedCode = async () => {
+    const rawCode = productCodeQuery.trim();
+    const code = normalizeProductLookupCode(rawCode);
+    if (!code) return;
+
+    const product = products.find((item) =>
+      matchesInternalProductCode(item.internal_code, code) ||
+      normalizeProductLookupCode(item.barcode) === code
+    );
+
+    if (!product) {
+      toast({
+        title: 'Produto não encontrado',
+        description: `Nenhum produto possui o código ${rawCode}.`,
+        variant: 'destructive',
+      });
+      productCodeInputRef.current?.select();
+      return;
+    }
+
+    await handleProductClick(product);
+    setProductCodeQuery('');
+    window.requestAnimationFrame(() => productCodeInputRef.current?.focus());
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'products') return;
+
+    const handlePdvShortcut = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      const isEditing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable);
+      const hasBlockingDialog = showVariationModal || weightDialogOpen || cashDialogOpen || adminPinOpen || tefOpen || tableLaunchOpen || commandLookupOpen || commandQueryOpen || checkoutOpen || shortcutsOpen;
+      if (hasBlockingDialog) return;
+
+      const shortcut = resolvePdvFunctionKey(event);
+
+      // Fora de campos de edição, o primeiro número já inicia a digitação do
+      // código do produto. Assim o operador não precisa clicar nem apertar F3.
+      if (!shortcut && !isEditing && /^\d$/.test(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        setProductCodeQuery(event.key);
+        window.requestAnimationFrame(() => {
+          productCodeInputRef.current?.focus();
+          productCodeInputRef.current?.setSelectionRange(1, 1);
+        });
+        return;
+      }
+
+      if (!shortcut) return;
+
+      if (shortcut === 'F1') {
+        event.preventDefault();
+        event.stopPropagation();
+        setShortcutsOpen(true);
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (shortcut === 'F2') {
+        productSearchInputRef.current?.focus();
+        productSearchInputRef.current?.select();
+      } else if (shortcut === 'F3') {
+        productCodeInputRef.current?.focus();
+        productCodeInputRef.current?.select();
+      } else if (shortcut === 'F4') {
+        void openCheckout();
+      }
+    };
+
+    // Capture garante que o Electron/navegador não consuma a tecla antes do PDV.
+    window.addEventListener('keydown', handlePdvShortcut, true);
+    return () => window.removeEventListener('keydown', handlePdvShortcut, true);
+  }, [activeTab, adminPinOpen, cashDialogOpen, checkoutOpen, commandLookupOpen, commandQueryOpen, shortcutsOpen, showVariationModal, tableLaunchOpen, tefOpen, weightDialogOpen, cart, openCheckout]);
 
   const isFiscalEmissionActive = async (modelCode: '55' | '65' = '65') => {
     if (!user?.id) return false;
@@ -2675,10 +2777,30 @@ const PDV = () => {
                 <div className="relative w-[150px] shrink-0 sm:w-[210px] xl:w-[240px]">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#003223]/40" />
                   <Input
+                    ref={productSearchInputRef}
                     placeholder="Buscar produtos..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/90 pl-9 text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
+                  />
+                </div>
+                <div className="relative hidden w-[150px] shrink-0 md:block xl:w-[180px]">
+                  <Keyboard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#003223]/40" />
+                  <Input
+                    ref={productCodeInputRef}
+                    aria-label="Código do produto"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="Código + Enter"
+                    value={productCodeQuery}
+                    onChange={(event) => setProductCodeQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter') return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void addProductByTypedCode();
+                    }}
+                    className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/90 pl-9 font-mono text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
                   />
                 </div>
                 <Button
@@ -2690,6 +2812,17 @@ const PDV = () => {
                   onClick={() => setCameraScannerOpen(true)}
                 >
                   <ScanLine className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="hidden h-9 w-9 shrink-0 rounded-xl md:inline-flex"
+                  title="Atalhos do teclado (F1)"
+                  aria-label="Ver atalhos do teclado"
+                  onClick={() => setShortcutsOpen(true)}
+                >
+                  <Keyboard className="h-4 w-4" />
                 </Button>
                 {(categories.length > 0 || categoryOptions.hasUncategorized) && (
                   <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -3500,6 +3633,37 @@ const PDV = () => {
               Consultar conta
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Keyboard className="h-5 w-5 text-[#FF6400]" />
+              Atalhos do PDV
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            {[
+              ['F1', 'Mostrar esta lista de atalhos'],
+              ['F2', 'Buscar produto pelo nome'],
+              ['F3', 'Digitar código interno ou código de barras'],
+              ['F4', 'Fechar o pedido e abrir o pagamento'],
+              ['0–9', 'Iniciar a digitação direta do código'],
+              ['Enter', 'Confirmar o código digitado'],
+            ].map(([key, description]) => (
+              <div key={key} className="flex items-center justify-between gap-4 rounded-xl border border-[#003223]/10 bg-[#F8FAF8] px-3 py-2.5">
+                <span className="text-[#003223]/75">{description}</span>
+                <kbd className="min-w-14 rounded-lg border border-[#003223]/15 bg-white px-2 py-1 text-center font-mono font-bold text-[#003223] shadow-sm">
+                  {key}
+                </kbd>
+              </div>
+            ))}
+            <p className="pt-1 text-xs leading-relaxed text-muted-foreground">
+              Os atalhos não são executados enquanto você estiver preenchendo outro campo ou com uma janela aberta.
+            </p>
+          </div>
         </DialogContent>
       </Dialog>
 
