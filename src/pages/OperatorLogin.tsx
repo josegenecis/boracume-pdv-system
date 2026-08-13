@@ -31,7 +31,7 @@ const buildSessionPayload = (operator: WaiterOperator, restaurantUserId: string)
 });
 
 const OperatorLogin = () => {
-  const { user, isLoading, activeStoreId, storesLoading } = useAuth();
+  const { user, isLoading, activeStoreId } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,25 +65,19 @@ const OperatorLogin = () => {
       try {
         setLoading(true);
         setLoadError(null);
-        let result: any = null;
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-          const controller = new AbortController();
-          const timeout = window.setTimeout(() => controller.abort(), 8000);
-          try {
-            result = await supabase
-              .from('waiters' as any)
-              .select('id, name, pin, active, role, permissions')
-              .eq('user_id', user.id)
-              .eq('active', true)
-              .order('name')
-              .abortSignal(controller.signal);
-          } catch (attemptError) {
-            result = { data: null, error: attemptError };
-          } finally {
-            window.clearTimeout(timeout);
-          }
-          if (!result?.error) break;
-          if (attempt === 0) await new Promise((resolve) => window.setTimeout(resolve, 500));
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 4000);
+        let result: any;
+        try {
+          result = await supabase
+            .from('waiters' as any)
+            .select('id, name, pin, active, role, permissions')
+            .eq('user_id', activeStoreId)
+            .eq('active', true)
+            .order('name')
+            .abortSignal(controller.signal);
+        } finally {
+          window.clearTimeout(timeout);
         }
 
         const { data, error } = result || {};
@@ -209,7 +203,7 @@ const OperatorLogin = () => {
                 <p className="mt-2 text-sm text-slate-500">Conta do restaurante autenticada. Agora informe quem esta operando.</p>
               </div>
 
-              {isLoading || storesLoading || !activeStoreId || loading ? (
+              {isLoading || !activeStoreId || loading ? (
                 <div className="flex min-h-[240px] items-center justify-center">
                   <Loader2 className="h-7 w-7 animate-spin text-[#FF6400]" />
                 </div>

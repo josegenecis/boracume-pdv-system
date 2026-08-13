@@ -22,7 +22,10 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: 'esnext',
-    minify: false,
+    // Builds publicados eram enviados sem minificação. Isso fazia a tela de
+    // login baixar e interpretar um App chunk desnecessariamente grande,
+    // sobretudo perceptível no desktop e em conexões móveis.
+    minify: mode === 'development' ? false : 'esbuild',
     sourcemap: false,
     rollupOptions: {
       output: {},

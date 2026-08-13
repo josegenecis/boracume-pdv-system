@@ -147,15 +147,34 @@ const readCachedAuthSession = (): Session | null => {
 
 const initialCachedSession = readCachedAuthSession();
 
+const buildFallbackStore = (authenticatedUser: User): StoreAccess => ({
+  network_id: null,
+  network_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
+  store_user_id: authenticatedUser.id,
+  store_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
+  store_email: authenticatedUser.email || null,
+  is_primary: true,
+  store_status: 'active',
+  billing_owner_id: authenticatedUser.id,
+  can_manage: false,
+});
+
+const initialFallbackStore = initialCachedSession?.user
+  ? buildFallbackStore(initialCachedSession.user)
+  : null;
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [accountUser, setAccountUser] = useState<User | null>(() => initialCachedSession?.user || null);
   const [session, setSession] = useState<Session | null>(() => initialCachedSession);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(() => !initialCachedSession?.user);
-  const [stores, setStores] = useState<StoreAccess[]>([]);
-  const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
-  const [billingOwnerId, setBillingOwnerId] = useState<string | null>(null);
+  // A loja da própria conta é uma informação segura que já existe na sessão.
+  // Disponibilizá-la imediatamente evita bloquear a entrada do operador enquanto
+  // a lista de lojas da rede é atualizada em segundo plano.
+  const [stores, setStores] = useState<StoreAccess[]>(() => initialFallbackStore ? [initialFallbackStore] : []);
+  const [activeStoreId, setActiveStoreId] = useState<string | null>(() => initialFallbackStore?.store_user_id || null);
+  const [billingOwnerId, setBillingOwnerId] = useState<string | null>(() => initialFallbackStore?.billing_owner_id || null);
   const [storesLoading, setStoresLoading] = useState(false);
   const { toast } = useToast();
 
@@ -183,26 +202,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const authSubscriptionRef = useRef<any>(null);
   const isMountedRef = useRef(true);
   const lastInitTimeRef = useRef<number>(0);
+  const storeAccessRequestRef = useRef<{ userId: string; promise: Promise<StoreAccess> } | null>(null);
 
-  const loadStoreAccess = async (authenticatedUser: User): Promise<StoreAccess> => {
-    setStoresLoading(true);
-    try {
+  const primeSingleStoreAccess = useCallback((authenticatedUser: User) => {
+    const fallback = buildFallbackStore(authenticatedUser);
+    setStores((current) => current.some((store) => store.store_user_id === authenticatedUser.id) ? current : [fallback]);
+    setActiveStoreId(fallback.store_user_id);
+    setBillingOwnerId(fallback.billing_owner_id);
+    localStorage.setItem('popsystem_active_store_id', fallback.store_user_id);
+  }, []);
+
+  const loadStoreAccess = (authenticatedUser: User): Promise<StoreAccess> => {
+    const inFlight = storeAccessRequestRef.current;
+    if (inFlight?.userId === authenticatedUser.id) return inFlight.promise;
+
+    const request = (async () => {
+      setStoresLoading(true);
+      try {
       const { data, error } = await withAuthTimeout((supabase as any).rpc('get_my_store_access'));
       if (error) throw error;
       const rows = (Array.isArray(data) ? data : []).filter(
         (row: StoreAccess) => row?.store_user_id && row?.store_status === 'active'
       ) as StoreAccess[];
-      const fallback: StoreAccess = {
-        network_id: null,
-        network_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
-        store_user_id: authenticatedUser.id,
-        store_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
-        store_email: authenticatedUser.email || null,
-        is_primary: true,
-        store_status: 'active',
-        billing_owner_id: authenticatedUser.id,
-        can_manage: false,
-      };
+      const fallback = buildFallbackStore(authenticatedUser);
       const availableStores = rows.length ? rows : [fallback];
       const storageKey = `popsystem_active_store_${authenticatedUser.id}`;
       const savedStoreId = localStorage.getItem(storageKey);
@@ -216,20 +238,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('popsystem_active_store_id', selected.store_user_id);
       }
       return selected;
-    } catch (error) {
+      } catch (error) {
       // Compatibility while the multi-store migration is not present yet.
       console.warn('[MULTILOJAS] Usando loja única:', error);
-      const fallback: StoreAccess = {
-        network_id: null,
-        network_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
-        store_user_id: authenticatedUser.id,
-        store_name: String(authenticatedUser.user_metadata?.restaurant_name || 'Meu restaurante'),
-        store_email: authenticatedUser.email || null,
-        is_primary: true,
-        store_status: 'active',
-        billing_owner_id: authenticatedUser.id,
-        can_manage: false,
-      };
+      const fallback = buildFallbackStore(authenticatedUser);
       if (isMountedRef.current) {
         setStores([fallback]);
         setActiveStoreId(authenticatedUser.id);
@@ -237,10 +249,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('popsystem_active_store_id', authenticatedUser.id);
       }
       return fallback;
-    } finally {
-      if (isMountedRef.current) setStoresLoading(false);
-    }
+      } finally {
+        if (isMountedRef.current) setStoresLoading(false);
+      }
+    })();
+
+    storeAccessRequestRef.current = { userId: authenticatedUser.id, promise: request };
+    void request.then(
+      () => {
+        if (storeAccessRequestRef.current?.promise === request) storeAccessRequestRef.current = null;
+      },
+      () => {
+        if (storeAccessRequestRef.current?.promise === request) storeAccessRequestRef.current = null;
+      },
+    );
+    return request;
   };
+
+  // O primeiro acesso deve poder avançar com a loja da própria conta sem
+  // depender da latência do RPC de redes/multilojas. A confirmação completa
+  // continua ocorrendo em background e substitui este fallback quando chega.
+  useEffect(() => {
+    if (!accountUser) return;
+    if (activeStoreId && stores.some((store) => store.store_user_id === activeStoreId)) return;
+    primeSingleStoreAccess(accountUser);
+  }, [accountUser, activeStoreId, stores, primeSingleStoreAccess]);
 
   useEffect(() => {
     debugLogger.auth('provider_mounted', { timestamp: Date.now() });
@@ -643,6 +676,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.session?.user && isMountedRef.current) {
         setAccountUser(data.session.user);
         setSession(data.session);
+        primeSingleStoreAccess(data.session.user);
         setLoading(false);
       }
       
