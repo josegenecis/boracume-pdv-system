@@ -75,3 +75,28 @@ export async function convertSqliteToImportFile(file: File) {
     database.close();
   }
 }
+
+export type FirebirdConnectionOptions = {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  charset: 'UTF8' | 'WIN1252' | 'ISO8859_1' | 'NONE';
+};
+
+export async function convertFirebirdToImportFile(options: FirebirdConnectionOptions) {
+  const api = window.electronAPI;
+  if (!api?.isElectron || !api.analyzeFirebirdDatabase) {
+    throw new Error('Para ler Firebird, abra esta tela no aplicativo PopSystem Desktop atualizado.');
+  }
+  const response = await api.analyzeFirebirdDatabase(options);
+  if (!response.success || !response.payload) throw new Error(response.error || 'Não foi possível ler o banco Firebird.');
+  const payload = JSON.stringify(response.payload);
+  const outputName = `${(response.sourceName || 'banco-firebird').replace(/\.[^.]+$/, '')}-popsystem.json`;
+  return {
+    file: new File([payload], outputName, { type: 'application/json' }),
+    tableCount: response.tableCount || 0,
+    rowCount: response.rowCount || 0,
+  };
+}

@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   previewPdf: (html, fileName) => ipcRenderer.invoke('preview-pdf', { html, fileName }),
   previewPdfBuffer: (pdfBytes, fileName) => ipcRenderer.invoke('preview-pdf-buffer', { pdfBytes, fileName }),
   printRawSystem: (deviceName, text) => ipcRenderer.invoke('print-raw-system', { deviceName, text }),
+
+  // Local database migration (read-only)
+  selectFirebirdDatabase: () => ipcRenderer.invoke('select-firebird-database'),
+  analyzeFirebirdDatabase: (options) => ipcRenderer.invoke('analyze-firebird-database', options),
   
   // Scale operations
   connectScale: (deviceId, protocol, options) => ipcRenderer.invoke('connect-scale', deviceId, protocol, options),

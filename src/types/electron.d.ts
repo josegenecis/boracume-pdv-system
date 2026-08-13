@@ -69,6 +69,8 @@ export interface ElectronAPI {
   printSystem: (deviceName: string, html: string, silent?: boolean) => Promise<DeviceResponse>;
   previewPdf: (html: string, fileName?: string) => Promise<DeviceResponse & { path?: string }>;
   previewPdfBuffer: (pdfBytes: Uint8Array, fileName?: string) => Promise<DeviceResponse & { path?: string }>;
+  selectFirebirdDatabase: () => Promise<{ success: boolean; canceled?: boolean; path?: string; name?: string; error?: string }>;
+  analyzeFirebirdDatabase: (options: FirebirdConnectionOptions) => Promise<FirebirdAnalysisResponse>;
   
   // Scale operations
   connectScale: (deviceId: string, protocol?: string, options?: any) => Promise<DeviceResponse>;
@@ -92,6 +94,27 @@ export interface ElectronAPI {
 
   isElectron: boolean;
   platform: string;
+}
+
+export interface FirebirdConnectionOptions {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  charset: 'UTF8' | 'WIN1252' | 'ISO8859_1' | 'NONE';
+}
+
+export interface FirebirdAnalysisResponse {
+  success: boolean;
+  error?: string;
+  sourceName?: string;
+  tableCount?: number;
+  rowCount?: number;
+  payload?: {
+    origem: { engine: 'firebird'; filename: string; tables: number; rows: number };
+    tabelas: Record<string, Array<Record<string, unknown>>>;
+  };
 }
 
 declare global {
