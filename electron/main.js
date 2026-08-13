@@ -12,6 +12,7 @@ let DeviceManager = null;
 let PrinterService = null;
 let ScaleService = null;
 let PrintAgentServer = null;
+let FirebirdMigrationService = null;
 let hardwareModulesLoadError = null;
 
 let mainWindow;
@@ -41,6 +42,12 @@ function loadHardwareModules() {
     console.error('Módulos de hardware indisponíveis; o aplicativo continuará sem integração local:', error);
     return false;
   }
+}
+
+function loadFirebirdMigrationService() {
+  if (FirebirdMigrationService) return FirebirdMigrationService;
+  FirebirdMigrationService = require('./services/FirebirdMigrationService');
+  return FirebirdMigrationService;
 }
 
 function focusMainWindow() {
@@ -678,6 +685,33 @@ ipcMain.handle('get-available-printers', async () => {
   } catch (error) {
     console.error('Erro ao listar impressoras:', error);
     return { success: false, error: error.message, printers: [] };
+  }
+});
+
+ipcMain.handle('select-firebird-database', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Selecione o banco Firebird do sistema anterior',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Banco Firebird', extensions: ['fdb', 'gdb'] },
+        { name: 'Todos os arquivos', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || !result.filePaths?.[0]) return { success: false, canceled: true };
+    const databasePath = result.filePaths[0];
+    return { success: true, path: databasePath, name: path.basename(databasePath) };
+  } catch (error) {
+    return { success: false, error: error?.message || 'Não foi possível selecionar o banco Firebird.' };
+  }
+});
+
+ipcMain.handle('analyze-firebird-database', async (_event, options = {}) => {
+  try {
+    return await loadFirebirdMigrationService().analyze(options);
+  } catch (error) {
+    console.error('Erro ao analisar banco Firebird:', error?.message || error);
+    return { success: false, error: error?.message || 'Não foi possível analisar o banco Firebird.' };
   }
 });
 

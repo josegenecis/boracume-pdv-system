@@ -6,12 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, ArrowLeft, CheckCircle2, Database, Download, FileSpreadsheet, HardDrive, Link2, Loader2, UploadCloud } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Database, Download, FileSpreadsheet, HardDrive, Link2, Loader2, Server, UploadCloud } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { convertSqliteToImportFile, detectOfflineDatabaseEngine } from '@/utils/offlineDatabaseImport';
+import { convertFirebirdToImportFile, convertSqliteToImportFile, detectOfflineDatabaseEngine, type FirebirdConnectionOptions } from '@/utils/offlineDatabaseImport';
 
 type DatasetType = 'products' | 'customers' | 'orders' | 'order_items' | 'sales' | 'unknown' | 'ignore';
 
@@ -103,6 +103,12 @@ const DataMigrationModal: React.FC<DataMigrationModalProps> = ({ isOpen, onClose
   const [result, setResult] = useState<MigrationResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [statusText, setStatusText] = useState('');
+  const [offlineEngine, setOfflineEngine] = useState<'sqlite' | 'firebird'>('sqlite');
+  const [firebirdFile, setFirebirdFile] = useState<{ path: string; name: string } | null>(null);
+  const [firebird, setFirebird] = useState<FirebirdConnectionOptions>({
+    host: '127.0.0.1', port: 3050, database: '', user: 'SYSDBA', password: '', charset: 'UTF8',
+  });
+  const desktopFirebirdAvailable = Boolean(window.electronAPI?.isElectron && window.electronAPI?.selectFirebirdDatabase && window.electronAPI?.analyzeFirebirdDatabase);
 
   useEffect(() => {
     if (isOpen) return;
@@ -114,6 +120,9 @@ const DataMigrationModal: React.FC<DataMigrationModalProps> = ({ isOpen, onClose
     setResult(null);
     setBusy(false);
     setStatusText('');
+    setOfflineEngine('sqlite');
+    setFirebirdFile(null);
+    setFirebird({ host: '127.0.0.1', port: 3050, database: '', user: 'SYSDBA', password: '', charset: 'UTF8' });
   }, [isOpen]);
 
   useEffect(() => {
@@ -121,6 +130,7 @@ const DataMigrationModal: React.FC<DataMigrationModalProps> = ({ isOpen, onClose
     setFile(initialFile);
     const engine = detectOfflineDatabaseEngine(initialFile.name);
     setSourceMode(engine === 'sqlite' || engine === 'firebird' ? 'offline' : 'upload');
+    if (engine === 'sqlite' || engine === 'firebird') setOfflineEngine(engine);
     setSourceSystem((current) => current || initialFile.name.replace(/\.[^.]+$/, ''));
   }, [initialFile, isOpen, job]);
 
@@ -135,8 +145,20 @@ const DataMigrationModal: React.FC<DataMigrationModalProps> = ({ isOpen, onClose
 
   const analyze = async () => {
     if (!user?.id) return;
-    if ((sourceMode === 'upload' || sourceMode === 'offline') && !file) {
+    if (sourceMode === 'upload' && !file) {
       toast({ title: 'Selecione o arquivo', description: 'Envie um CSV, Excel ou JSON.', variant: 'destructive' });
+      return;
+    }
+    if (sourceMode === 'offline' && offlineEngine === 'sqlite' && !file) {
+      toast({ title: 'Selecione o banco SQLite', description: 'Envie um arquivo .sqlite, .sqlite3, .db ou .db3.', variant: 'destructive' });
+      return;
+    }
+    if (sourceMode === 'offline' && offlineEngine === 'firebird' && !desktopFirebirdAvailable) {
+      toast({ title: 'Abra no PopSystem Desktop', description: 'O navegador não consegue acessar o servidor Firebird instalado neste computador.', variant: 'destructive' });
+      return;
+    }
+    if (sourceMode === 'offline' && offlineEngine === 'firebird' && !firebird.database) {
+      toast({ title: 'Selecione o banco Firebird', description: 'Escolha o arquivo .FDB ou .GDB pelo botão desta tela.', variant: 'destructive' });
       return;
     }
     if (sourceMode === 'url' && !/^https?:\/\//i.test(url.trim())) {
@@ -152,17 +174,24 @@ const DataMigrationModal: React.FC<DataMigrationModalProps> = ({ isOpen, onClose
     setStatusText(sourceMode === 'offline' ? 'Lendo o banco local com segurança...' : sourceMode === 'upload' ? 'Enviando arquivo com segurança...' : 'Baixando dados do link...');
     try {
       let source: Record<string, string>;
-      if ((sourceMode === 'upload' || sourceMode === 'offline') && file) {
-        let uploadFile = file;
+      if (sourceMode === 'upload' || sourceMode === 'offline') {
+        let uploadFile: File;
         if (sourceMode === 'offline') {
-          const engine = detectOfflineDatabaseEngine(file.name);
-          if (engine === 'firebird') {
-            throw new Error('Firebird detectado. Esta primeira etapa lê SQLite diretamente; o Firebird será conectado pelo aplicativo desktop, pois depende do servidor local do banco.');
+          if (offlineEngine === 'firebird') {
+            const converted = await convertFirebirdToImportFile(firebird);
+            uploadFile = converted.file;
+            setStatusText(`${converted.tableCount} tabelas e ${converted.rowCount.toLocaleString('pt-BR')} registros encontrados. Enviando para análise...`);
+          } else {
+            if (!file) throw new Error('Selecione o banco SQLite.');
+            const engine = detectOfflineDatabaseEngine(file.name);
+            if (engine !== 'sqlite') throw new Error('Selecione um banco SQLite (.sqlite, .sqlite3, .db ou .db3).');
+            const converted = await convertSqliteToImportFile(file);
+            uploadFile = converted.file;
+            setStatusText(`${converted.tableCount} tabelas e ${converted.rowCount.toLocaleString('pt-BR')} registros encontrados. Enviando para análise...`);
           }
-          if (engine !== 'sqlite') throw new Error('Selecione um banco SQLite (.sqlite, .sqlite3, .db ou .db3).');
-          const converted = await convertSqliteToImportFile(file);
-          uploadFile = converted.file;
-          setStatusText(`${converted.tableCount} tabelas e ${converted.rowCount.toLocaleString('pt-BR')} registros encontrados. Enviando para análise...`);
+        } else {
+          if (!file) throw new Error('Selecione o arquivo de importação.');
+          uploadFile = file;
         }
         if (uploadFile.size > 50 * 1024 * 1024) throw new Error('Os dados convertidos ultrapassam 50 MB. Divida o banco ou use o conector desktop.');
         const path = `${user.id}/${crypto.randomUUID()}/${safeFilename(uploadFile.name)}`;
@@ -186,6 +215,19 @@ const DataMigrationModal: React.FC<DataMigrationModalProps> = ({ isOpen, onClose
     } finally {
       setBusy(false);
       setStatusText('');
+    }
+  };
+
+  const selectFirebirdDatabase = async () => {
+    try {
+      const response = await window.electronAPI?.selectFirebirdDatabase();
+      if (!response || response.canceled) return;
+      if (!response.success || !response.path || !response.name) throw new Error(response.error || 'Não foi possível selecionar o banco.');
+      setFirebirdFile({ path: response.path, name: response.name });
+      setFirebird((current) => ({ ...current, database: response.path }));
+      setSourceSystem((current) => current || response.name!.replace(/\.[^.]+$/, ''));
+    } catch (error: any) {
+      toast({ title: 'Não foi possível selecionar', description: error?.message || 'Tente novamente.', variant: 'destructive' });
     }
   };
 
@@ -298,16 +340,41 @@ const DataMigrationModal: React.FC<DataMigrationModalProps> = ({ isOpen, onClose
               </TabsContent>
               <TabsContent value="url" className="space-y-3 pt-4"><Label>Link público do arquivo ou da API</Label><Input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://sistema-antigo.com/exportacao/vendas.xlsx" /><div className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-900">O link precisa abrir diretamente um CSV, Excel ou JSON. Links que exigem login ainda precisam ser baixados e enviados como arquivo.</div></TabsContent>
               <TabsContent value="offline" className="space-y-3 pt-4">
-                <label className="relative flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#006B4A]/35 bg-emerald-50/50 p-6 text-center hover:border-[#006B4A]">
-                  <HardDrive className="mb-3 h-9 w-9 text-[#006B4A]" />
-                  <p className="font-bold text-[#003223]">{file ? file.name : 'Selecione o banco de dados offline'}</p>
-                  <p className="mt-1 text-sm text-slate-500">SQLite: .sqlite, .sqlite3, .db ou .db3 • até 50 MB</p>
-                  <input type="file" accept=".sqlite,.sqlite3,.db,.db3,.fdb,.gdb,.fbk" className="absolute inset-0 cursor-pointer opacity-0" onChange={(event) => { const selected = event.target.files?.[0] || null; setFile(selected); if (selected && !sourceSystem) setSourceSystem(selected.name.replace(/\.[^.]+$/, '')); }} />
-                </label>
-                <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900"><strong>SQLite já disponível para teste.</strong> A leitura ocorre neste dispositivo e somente as tabelas convertidas seguem para a análise. Firebird (.fdb/.gdb) já é reconhecido e será habilitado pelo conector desktop.</div>
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+                  <Button type="button" variant="ghost" className={offlineEngine === 'sqlite' ? 'bg-white text-[#003223] shadow-sm hover:bg-white' : 'text-slate-500'} onClick={() => { setOfflineEngine('sqlite'); setFile(null); }}><Database className="mr-2 h-4 w-4" />SQLite</Button>
+                  <Button type="button" variant="ghost" className={offlineEngine === 'firebird' ? 'bg-white text-[#003223] shadow-sm hover:bg-white' : 'text-slate-500'} onClick={() => { setOfflineEngine('firebird'); setFile(null); }}><Server className="mr-2 h-4 w-4" />Firebird</Button>
+                </div>
+                {offlineEngine === 'sqlite' ? (
+                  <label className="relative flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#006B4A]/35 bg-emerald-50/50 p-6 text-center hover:border-[#006B4A]">
+                    <HardDrive className="mb-3 h-9 w-9 text-[#006B4A]" />
+                    <p className="font-bold text-[#003223]">{file ? file.name : 'Selecione o banco SQLite'}</p>
+                    <p className="mt-1 text-sm text-slate-500">.sqlite, .sqlite3, .db ou .db3 • até 50 MB</p>
+                    <input type="file" accept=".sqlite,.sqlite3,.db,.db3" className="absolute inset-0 cursor-pointer opacity-0" onChange={(event) => { const selected = event.target.files?.[0] || null; setFile(selected); if (selected && !sourceSystem) setSourceSystem(selected.name.replace(/\.[^.]+$/, '')); }} />
+                  </label>
+                ) : desktopFirebirdAvailable ? (
+                  <div className="space-y-4 rounded-2xl border border-[#006B4A]/20 bg-emerald-50/40 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div><p className="font-bold text-[#003223]">{firebirdFile?.name || 'Banco Firebird não selecionado'}</p><p className="text-xs text-slate-500">A leitura é local, somente leitura, e o arquivo original não será alterado.</p></div>
+                      <Button type="button" variant="outline" onClick={selectFirebirdDatabase}><HardDrive className="mr-2 h-4 w-4" />Selecionar .FDB</Button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5"><Label>Servidor</Label><Input value={firebird.host} onChange={(event) => setFirebird((current) => ({ ...current, host: event.target.value }))} placeholder="127.0.0.1" /></div>
+                      <div className="space-y-1.5"><Label>Porta</Label><Input type="number" min={1} max={65535} value={firebird.port} onChange={(event) => setFirebird((current) => ({ ...current, port: Number(event.target.value) }))} /></div>
+                      <div className="space-y-1.5"><Label>Usuário</Label><Input value={firebird.user} onChange={(event) => setFirebird((current) => ({ ...current, user: event.target.value }))} placeholder="SYSDBA" autoComplete="off" /></div>
+                      <div className="space-y-1.5"><Label>Senha</Label><Input type="password" value={firebird.password} onChange={(event) => setFirebird((current) => ({ ...current, password: event.target.value }))} placeholder="Senha usada pelo sistema antigo" autoComplete="new-password" /></div>
+                    </div>
+                    <div className="space-y-1.5"><Label>Codificação do banco</Label><Select value={firebird.charset} onValueChange={(value) => setFirebird((current) => ({ ...current, charset: value as FirebirdConnectionOptions['charset'] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="UTF8">UTF-8 (padrão)</SelectItem><SelectItem value="WIN1252">Windows 1252</SelectItem><SelectItem value="ISO8859_1">ISO-8859-1</SelectItem><SelectItem value="NONE">Sem conversão (NONE)</SelectItem></SelectContent></Select></div>
+                    <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">O serviço Firebird do sistema antigo precisa estar aberto. Na maioria das instalações, servidor e porta são <strong>127.0.0.1:3050</strong>.</div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+                    <p className="font-bold">Firebird precisa do PopSystem Desktop atualizado</p>
+                    <p className="mt-1 text-sm">O navegador não pode acessar o arquivo pelo servidor local. Abra esta mesma tela no aplicativo desktop para selecionar o .FDB e informar as credenciais.</p>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
-            <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600"><p className="font-bold text-slate-800">Outros bancos</p><p className="mt-1">Firebird e SQL Server precisam do conector desktop para acessar o serviço local com usuário e senha. Essa integração está sendo construída sobre o mesmo analisador, mantendo prévia e proteção contra duplicidades.</p></div>
+            <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600"><p className="font-bold text-slate-800">Importação protegida</p><p className="mt-1">Primeiro o PopSystem mostra uma prévia das tabelas e identifica produtos, clientes e vendas. Nenhum dado é gravado antes de você confirmar a importação.</p></div>
           </div>
         )}
 
