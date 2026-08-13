@@ -88,7 +88,7 @@
       {
         "provider": "github",
         "owner": "josegenecis",
-        "repo": "boracume-pdv-system",
+        "repo": "PopSystem",
         "releaseType": "release"
       }
     ],

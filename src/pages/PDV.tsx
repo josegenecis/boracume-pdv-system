@@ -52,6 +52,7 @@ import FiscalRecipientsManager, { type FiscalCustomer } from '@/components/fisca
 import { pwaScaleService } from '@/services/ScaleService';
 import BarcodeCameraScanner from '@/components/devices/BarcodeCameraScanner';
 import PageContentSkeleton from '@/components/ui/page-content-skeleton';
+import { applyEffectivePrices } from '@/services/pricingEngine';
 
 interface Product {
   id: string;
@@ -74,6 +75,12 @@ interface Product {
   fiscal_origem?: string | null;
   fiscal_cest?: string | null;
   fiscal_beneficio?: string | null;
+  base_price?: number;
+  effective_price?: number;
+  price_table_id?: string | null;
+  price_rule_id?: string | null;
+  price_table_name?: string | null;
+  price_source?: 'base' | 'price_table';
 }
 
 const ProductCardImage: React.FC<{ product: Product }> = ({ product }) => {
@@ -1054,7 +1061,8 @@ const PDV = () => {
       }
 
       if (error) throw error;
-      setProducts(data || []);
+      const pricedProducts = await applyEffectivePrices((data || []) as Product[], user?.id || '', 'pdv');
+      setProducts(pricedProducts);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
       if (!hasLoadedDataRef.current) setProducts([]);
@@ -1820,6 +1828,12 @@ const PDV = () => {
         product_id: item.id,
         product_name: item.name,
         price: item.price,
+        base_price: item.base_price ?? item.price,
+        effective_price: item.effective_price ?? item.price,
+        price_table_id: item.price_table_id ?? null,
+        price_rule_id: item.price_rule_id ?? null,
+        price_table_name: item.price_table_name ?? null,
+        price_source: item.price_source ?? 'base',
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
         sale_unit: item.weight_based ? 'kg' : 'un',
@@ -2279,6 +2293,12 @@ const PDV = () => {
         product_id: item.id,
         product_name: item.name,
         price: item.price,
+        base_price: item.base_price ?? item.price,
+        effective_price: item.effective_price ?? item.price,
+        price_table_id: item.price_table_id ?? null,
+        price_rule_id: item.price_rule_id ?? null,
+        price_table_name: item.price_table_name ?? null,
+        price_source: item.price_source ?? 'base',
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
         sale_unit: item.weight_based ? 'kg' : 'un',
