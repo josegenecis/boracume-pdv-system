@@ -281,11 +281,29 @@ async function runAutoUpdateFlow() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
+  // O repositório foi renomeado. Não dependemos do redirecionamento legado,
+  // pois alguns clientes/versões do updater não o seguem de forma confiável.
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'josegenecis',
+    repo: 'PopSystem',
+  });
+  const updateLogPath = path.join(app.getPath('userData'), 'desktop-updater.log');
+  const writeUpdateLog = (level, args) => {
+    try {
+      const line = `${new Date().toISOString()} [${level}] ${args.map((value) => {
+        if (value instanceof Error) return value.stack || value.message;
+        if (typeof value === 'string') return value;
+        try { return JSON.stringify(value); } catch { return String(value); }
+      }).join(' ')}\n`;
+      fs.appendFileSync(updateLogPath, line, 'utf8');
+    } catch {}
+  };
   autoUpdater.logger = {
-    info: (...args) => console.log('[auto-update]', ...args),
-    warn: (...args) => console.warn('[auto-update]', ...args),
-    error: (...args) => console.error('[auto-update]', ...args),
-    debug: (...args) => console.log('[auto-update]', ...args),
+    info: (...args) => { console.log('[auto-update]', ...args); writeUpdateLog('info', args); },
+    warn: (...args) => { console.warn('[auto-update]', ...args); writeUpdateLog('warn', args); },
+    error: (...args) => { console.error('[auto-update]', ...args); writeUpdateLog('error', args); },
+    debug: (...args) => { console.log('[auto-update]', ...args); writeUpdateLog('debug', args); },
   };
   const showUi = !isAgentMode;
 
@@ -300,9 +318,6 @@ async function runAutoUpdateFlow() {
         clearTimeout(checkTimeout);
         checkTimeout = null;
       }
-      try {
-        autoUpdater.removeAllListeners();
-      } catch {}
       if (updateWindow) {
         try {
           updateWindow.close();
@@ -330,11 +345,11 @@ async function runAutoUpdateFlow() {
       setProgress(10);
     }
 
-    autoUpdater.on('checking-for-update', () => {
+    const onCheckingForUpdate = () => {
       setStatus('Verificando atualizações...');
       setProgress(15);
-    });
-    autoUpdater.on('update-available', (info) => {
+    };
+    const onUpdateAvailable = (info) => {
       updateInProgress = true;
       if (checkTimeout) {
         clearTimeout(checkTimeout);
@@ -342,19 +357,19 @@ async function runAutoUpdateFlow() {
       }
       setStatus(`Baixando atualização ${info?.version || ''}...`.trim());
       setProgress(20);
-    });
-    autoUpdater.on('update-not-available', () => {
+    };
+    const onUpdateNotAvailable = () => {
       setStatus('Aplicativo atualizado.');
       setProgress(100);
       setTimeout(() => done(true), 400);
-    });
-    autoUpdater.on('download-progress', (p) => {
+    };
+    const onDownloadProgress = (p) => {
       updateInProgress = true;
       const percent = Number(p?.percent || 0);
       setStatus(`Baixando atualização... ${Math.round(percent)}%`);
       setProgress(20 + (percent * 0.8));
-    });
-    autoUpdater.on('update-downloaded', (info) => {
+    };
+    const onUpdateDownloaded = (info) => {
       setStatus('Instalando atualização...');
       setProgress(100);
       console.log('[auto-update] Atualização baixada', info?.version || '');
@@ -365,11 +380,19 @@ async function runAutoUpdateFlow() {
           done(true);
         }
       }, 500);
-    });
-    autoUpdater.on('error', (e) => {
+    };
+    const onError = (e) => {
       console.error('Auto-update error:', e);
+      writeUpdateLog('error', [e]);
       done(true);
-    });
+    };
+
+    autoUpdater.once('checking-for-update', onCheckingForUpdate);
+    autoUpdater.once('update-available', onUpdateAvailable);
+    autoUpdater.once('update-not-available', onUpdateNotAvailable);
+    autoUpdater.on('download-progress', onDownloadProgress);
+    autoUpdater.once('update-downloaded', onUpdateDownloaded);
+    autoUpdater.once('error', onError);
 
     autoUpdater.checkForUpdates().catch((e) => {
       console.error('Auto-update check failed:', e);

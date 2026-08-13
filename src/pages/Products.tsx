@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Eye, EyeOff, Plus, SlidersHorizontal, Copy, Database } from 'lucide-react';
+import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Eye, EyeOff, Plus, SlidersHorizontal, Copy, Database, Tags } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -18,7 +18,7 @@ import DataMigrationModal from '@/components/products/DataMigrationModal';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 import GlobalVariationManager from '@/components/products/GlobalVariationManager';
 import CategoryManager from '@/components/products/CategoryManager';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 import { formatBRL } from '@/lib/currency';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -70,6 +70,7 @@ interface InlineProductDraft {
 }
 
 const Products = () => {
+  const navigate = useNavigate();
   const normalizeImageUrl = normalizeImageUrlForDisplay;
 
   const FALLBACK_PIXEL =
@@ -1199,6 +1200,10 @@ const Products = () => {
           </div>
 
           <div className="hidden items-center justify-end gap-2 lg:flex">
+            <Button variant="outline" onClick={() => navigate('/precos')} className="h-9 rounded-xl border-[#003223]/15 bg-white px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
+              <Tags className="mr-2 h-4 w-4" />
+              Preços e promoções
+            </Button>
             <Button variant="outline" onClick={() => setShowDataMigrationModal(true)} className="h-9 rounded-xl border-[#003223]/15 bg-white px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
               <Database className="mr-2 h-4 w-4" />
               Migrar sistema
@@ -1216,6 +1221,21 @@ const Products = () => {
               Novo produto
             </Button>
           </div>
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-2 lg:hidden">
+          <Button variant="outline" onClick={() => navigate('/precos')} className="h-10 rounded-xl border-[#003223]/15 bg-white text-sm font-semibold text-[#003223]">
+            <Tags className="mr-2 h-4 w-4" />
+            Preços e promoções
+          </Button>
+          <Button className="h-10 rounded-xl bg-[#8CC850] text-sm font-semibold text-white hover:bg-[#79b541]" onClick={() => {
+            setEditingProduct(null);
+            setShowForm(true);
+            setIsSheetOpen(true);
+          }}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo produto
+          </Button>
         </div>
         
         <TabsContent value="products" className="space-y-5 pt-1">
