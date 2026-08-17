@@ -1,5 +1,5 @@
 import { gerarPDF } from '@mmachadosantos/nfe-danfe-pdf';
-import { getSupabaseRuntimeEnv } from '../_lib/runtime-env';
+import { getSupabaseRuntimeEnv } from '../_lib/runtime-env.js';
 
 const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = getSupabaseRuntimeEnv();
 

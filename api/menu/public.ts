@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { enrichCategoryWithMetadata } from '../../src/lib/category-metadata.js';
-import { getSupabaseRuntimeEnv } from '../_lib/runtime-env';
+import { getSupabaseRuntimeEnv } from '../_lib/runtime-env.js';
 
 const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = getSupabaseRuntimeEnv();
 

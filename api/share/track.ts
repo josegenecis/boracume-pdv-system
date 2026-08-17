@@ -1,4 +1,4 @@
-import { getPublicWebBaseUrl, getSupabaseRuntimeEnv } from '../_lib/runtime-env';
+import { getPublicWebBaseUrl, getSupabaseRuntimeEnv } from '../_lib/runtime-env.js';
 
 const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = getSupabaseRuntimeEnv();
 const PUBLIC_BASE_URL = getPublicWebBaseUrl();
