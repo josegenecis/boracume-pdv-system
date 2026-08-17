@@ -4,10 +4,14 @@ import {
   getSoapNamespace,
   parseSefazResponse,
   SefazResponse,
-} from './sefaz-endpoints.ts';
-import { XMLSigner } from './xml-signer.ts';
-import { CertificateInfo } from './certificate-utils.ts';
-import { generateQRCodeData, getQRCodeBaseUrl, validateQRCodeMatchesAccessKey } from './qrcode-generator.ts';
+} from "./sefaz-endpoints.ts";
+import { XMLSigner } from "./xml-signer.ts";
+import { CertificateInfo } from "./certificate-utils.ts";
+import {
+  generateQRCodeData,
+  getQRCodeBaseUrl,
+  validateQRCodeMatchesAccessKey,
+} from "./qrcode-generator.ts";
 
 const ICP_BRASIL_ROOT_V10_CA = `-----BEGIN CERTIFICATE-----
 MIIGrDCCBJSgAwIBAgIJANLVi0S/gZNCMA0GCSqGSIb3DQEBDQUAMIGYMQswCQYD
@@ -122,35 +126,50 @@ export class SefazClient {
       cscId?: string;
       cscToken?: string;
     },
-    modelCode: '55' | '65' = '65'
+    modelCode: "55" | "65" = "65",
   ): Promise<SefazResponse> {
     const signedNFe = this.xmlSigner.signXML(xmlNFCe);
-    const digestValue = signedNFe.match(/<DigestValue>([^<]+)<\/DigestValue>/)?.[1];
-    const generatedQrCodeUrl = qrCode ? generateQRCodeData(
-      qrCode.chaveAcesso,
-      uf,
-      ambiente,
-      qrCode.dataEmissao,
-      qrCode.valorTotal,
-      qrCode.cpfCnpjConsumidor,
-      qrCode.cscId,
-      qrCode.cscToken,
-      digestValue
-    ) : undefined;
+    const digestValue = signedNFe.match(/<DigestValue>([^<]+)<\/DigestValue>/)
+      ?.[1];
+    const generatedQrCodeUrl = qrCode
+      ? generateQRCodeData(
+        qrCode.chaveAcesso,
+        uf,
+        ambiente,
+        qrCode.dataEmissao,
+        qrCode.valorTotal,
+        qrCode.cpfCnpjConsumidor,
+        qrCode.cscId,
+        qrCode.cscToken,
+        digestValue,
+      )
+      : undefined;
     if (qrCode && generatedQrCodeUrl) {
       validateQRCodeMatchesAccessKey(generatedQrCodeUrl, qrCode.chaveAcesso);
     }
     const finalNFe = qrCode && generatedQrCodeUrl
       ? addNFCeSupplement(signedNFe, {
-          qrCodeUrl: generatedQrCodeUrl,
-          consultaUrl: getQRCodeBaseUrl(uf, ambiente),
-        })
+        qrCodeUrl: generatedQrCodeUrl,
+        consultaUrl: getQRCodeBaseUrl(uf, ambiente),
+      })
       : signedNFe;
     const loteId = Date.now().toString().slice(-15);
     const nfeXml = stripXmlDeclaration(finalNFe);
-    const payload = `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${loteId}</idLote><indSinc>1</indSinc>${nfeXml}</enviNFe>`;
-    const result = await this.callSefaz('autorizacao', payload, uf, ambiente, 'nfeAutorizacaoLote', modelCode);
-    const enrichedResult = enrichQrCodeSchemaError(result, generatedQrCodeUrl, finalNFe);
+    const payload =
+      `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${loteId}</idLote><indSinc>1</indSinc>${nfeXml}</enviNFe>`;
+    const result = await this.callSefaz(
+      "autorizacao",
+      payload,
+      uf,
+      ambiente,
+      "nfeAutorizacaoLote",
+      modelCode,
+    );
+    const enrichedResult = enrichQrCodeSchemaError(
+      result,
+      generatedQrCodeUrl,
+      finalNFe,
+    );
     return {
       ...enrichedResult,
       xmlEnviado: finalNFe,
@@ -163,35 +182,79 @@ export class SefazClient {
     signedNFeXml: string,
     uf: string,
     ambiente: Ambiente,
-    modelCode: '55' | '65' = '65'
+    modelCode: "55" | "65" = "65",
   ): Promise<SefazResponse> {
     if (!/<(?:[A-Za-z][\w.-]*:)?Signature[\s>]/.test(signedNFeXml)) {
-      throw new Error('O XML preservado não possui assinatura digital válida para reenvio');
+      throw new Error(
+        "O XML preservado não possui assinatura digital válida para reenvio",
+      );
     }
     const loteId = Date.now().toString().slice(-15);
     const nfeXml = stripXmlDeclaration(signedNFeXml);
-    const payload = `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${loteId}</idLote><indSinc>1</indSinc>${nfeXml}</enviNFe>`;
-    const result = await this.callSefaz('autorizacao', payload, uf, ambiente, 'nfeAutorizacaoLote', modelCode);
+    const payload =
+      `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${loteId}</idLote><indSinc>1</indSinc>${nfeXml}</enviNFe>`;
+    const result = await this.callSefaz(
+      "autorizacao",
+      payload,
+      uf,
+      ambiente,
+      "nfeAutorizacaoLote",
+      modelCode,
+    );
     return { ...result, xmlEnviado: signedNFeXml };
   }
 
-  async consultarRecibo(recibo: string, uf: string, ambiente: Ambiente): Promise<SefazResponse> {
-    const tpAmb = ambiente === 'producao' ? '1' : '2';
-    const payload = `<consReciNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmb}</tpAmb><nRec>${recibo}</nRec></consReciNFe>`;
-    return await this.callSefaz('retAutorizacao', payload, uf, ambiente, 'nfeRetAutorizacaoLote');
+  async consultarRecibo(
+    recibo: string,
+    uf: string,
+    ambiente: Ambiente,
+  ): Promise<SefazResponse> {
+    const tpAmb = ambiente === "producao" ? "1" : "2";
+    const payload =
+      `<consReciNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmb}</tpAmb><nRec>${recibo}</nRec></consReciNFe>`;
+    return await this.callSefaz(
+      "retAutorizacao",
+      payload,
+      uf,
+      ambiente,
+      "nfeRetAutorizacaoLote",
+    );
   }
 
-  async consultarNFCe(chaveAcesso: string, uf: string, ambiente: Ambiente, modelCode: '55' | '65' = '65'): Promise<SefazResponse> {
-    const tpAmb = ambiente === 'producao' ? '1' : '2';
-    const payload = `<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chaveAcesso}</chNFe></consSitNFe>`;
-    return await this.callSefaz('consulta', payload, uf, ambiente, 'nfeConsultaNF', modelCode);
+  async consultarNFCe(
+    chaveAcesso: string,
+    uf: string,
+    ambiente: Ambiente,
+    modelCode: "55" | "65" = "65",
+  ): Promise<SefazResponse> {
+    const tpAmb = ambiente === "producao" ? "1" : "2";
+    const payload =
+      `<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chaveAcesso}</chNFe></consSitNFe>`;
+    return await this.callSefaz(
+      "consulta",
+      payload,
+      uf,
+      ambiente,
+      "nfeConsultaNF",
+      modelCode,
+    );
   }
 
-  async consultarStatusServico(uf: string, ambiente: Ambiente): Promise<SefazResponse> {
-    const tpAmb = ambiente === 'producao' ? '1' : '2';
+  async consultarStatusServico(
+    uf: string,
+    ambiente: Ambiente,
+  ): Promise<SefazResponse> {
+    const tpAmb = ambiente === "producao" ? "1" : "2";
     const cUF = getCodigoUF(uf);
-    const payload = `<consStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmb}</tpAmb><cUF>${cUF}</cUF><xServ>STATUS</xServ></consStatServ>`;
-    return await this.callSefaz('status', payload, uf, ambiente, 'nfeStatusServicoNF');
+    const payload =
+      `<consStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmb}</tpAmb><cUF>${cUF}</cUF><xServ>STATUS</xServ></consStatServ>`;
+    return await this.callSefaz(
+      "status",
+      payload,
+      uf,
+      ambiente,
+      "nfeStatusServicoNF",
+    );
   }
 
   async cancelarNFCe(
@@ -201,50 +264,84 @@ export class SefazClient {
     uf: string,
     ambiente: Ambiente,
     cnpj: string,
-    modelCode: '55' | '65' = '65'
+    modelCode: "55" | "65" = "65",
   ): Promise<SefazResponse> {
-    const tpAmb = ambiente === 'producao' ? '1' : '2';
+    const tpAmb = ambiente === "producao" ? "1" : "2";
     const timestamp = formatNfeDate(new Date());
-    const sequence = '1';
-    const eventId = `ID110111${chaveAcesso}${sequence.padStart(2, '0')}`;
-    const eventXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><infEvento Id="${eventId}"><cOrgao>${getCodigoUF(uf)}</cOrgao><tpAmb>${tpAmb}</tpAmb><CNPJ>${onlyDigits(cnpj)}</CNPJ><chNFe>${chaveAcesso}</chNFe><dhEvento>${timestamp}</dhEvento><tpEvento>110111</tpEvento><nSeqEvento>${sequence}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Cancelamento</descEvento><nProt>${protocolo}</nProt><xJust>${escapeXml(motivo).slice(0, 255)}</xJust></detEvento></infEvento></evento>`;
+    const sequence = "1";
+    const eventId = `ID110111${chaveAcesso}${sequence.padStart(2, "0")}`;
+    const eventXml =
+      `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><infEvento Id="${eventId}"><cOrgao>${
+        getCodigoUF(uf)
+      }</cOrgao><tpAmb>${tpAmb}</tpAmb><CNPJ>${
+        onlyDigits(cnpj)
+      }</CNPJ><chNFe>${chaveAcesso}</chNFe><dhEvento>${timestamp}</dhEvento><tpEvento>110111</tpEvento><nSeqEvento>${sequence}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Cancelamento</descEvento><nProt>${protocolo}</nProt><xJust>${
+        escapeXml(motivo).slice(0, 255)
+      }</xJust></detEvento></infEvento></evento>`;
     const signedEvent = this.xmlSigner.signXML(eventXml);
-    const payload = `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>${Date.now().toString().slice(-15)}</idLote>${signedEvent}</envEvento>`;
-    return await this.callSefaz('evento', payload, uf, ambiente, 'nfeRecepcaoEvento', modelCode);
+    const payload =
+      `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>${
+        Date.now().toString().slice(-15)
+      }</idLote>${signedEvent}</envEvento>`;
+    return await this.callSefaz(
+      "evento",
+      payload,
+      uf,
+      ambiente,
+      "nfeRecepcaoEvento",
+      modelCode,
+    );
   }
 
   private async callSefaz(
-    operation: 'autorizacao' | 'retAutorizacao' | 'consulta' | 'status' | 'evento',
+    operation:
+      | "autorizacao"
+      | "retAutorizacao"
+      | "consulta"
+      | "status"
+      | "evento",
     payload: string,
     uf: string,
     ambiente: Ambiente,
     soapAction: string,
-    modelCode: '55' | '65' = '65'
+    modelCode: "55" | "65" = "65",
   ): Promise<SefazResponse> {
     const endpoint = getSefazEndpoint(uf, ambiente, operation, modelCode);
     const namespace = getSoapNamespace(operation);
     const action = `${namespace}/${soapAction}`;
     const soapEnvelope = this.createSoapEnvelope(payload, namespace, uf);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45_000);
 
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': `application/soap+xml; charset=utf-8; action="${action}"`,
-          SOAPAction: `"${action}"`,
-          Accept: 'application/soap+xml, text/xml, */*',
-        },
-        body: soapEnvelope,
-        client: this.httpClient,
-      } as RequestInit & { client?: Deno.HttpClient });
+      const response = await fetch(
+        endpoint,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              `application/soap+xml; charset=utf-8; action="${action}"`,
+            SOAPAction: `"${action}"`,
+            Accept: "application/soap+xml, text/xml, */*",
+          },
+          body: soapEnvelope,
+          signal: controller.signal,
+          client: this.httpClient,
+        } as RequestInit & { client?: Deno.HttpClient },
+      );
 
       const xmlResponse = await response.text();
       if (!response.ok) {
-        const rawMessage = xmlResponse.replace(/\s+/g, ' ').trim().slice(0, 700);
+        const rawMessage = xmlResponse.replace(/\s+/g, " ").trim().slice(
+          0,
+          700,
+        );
         return {
           success: false,
           cStat: String(response.status),
-          xMotivo: `Sefaz respondeu HTTP ${response.status}: ${rawMessage || response.statusText || 'sem detalhe'}`,
+          xMotivo: `Sefaz respondeu HTTP ${response.status}: ${
+            rawMessage || response.statusText || "sem detalhe"
+          }`,
           xmlRetorno: xmlResponse,
         };
       }
@@ -253,53 +350,78 @@ export class SefazClient {
     } catch (error) {
       return {
         success: false,
-        cStat: '999',
-        xMotivo: `Erro de comunicacao com a Sefaz (${endpoint}): ${getErrorMessage(error)}`,
-        xmlRetorno: '',
+        cStat: "999",
+        xMotivo: controller.signal.aborted
+          ? `Tempo limite excedido ao comunicar com a Sefaz (${endpoint}). Consulte a mesma chave antes de tentar novamente.`
+          : `Erro de comunicacao com a Sefaz (${endpoint}): ${
+            getErrorMessage(error)
+          }`,
+        xmlRetorno: "",
       };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
-  private createSoapEnvelope(payload: string, namespace: string, uf: string): string {
-    return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header><nfeCabecMsg xmlns="${namespace}"><cUF>${getCodigoUF(uf)}</cUF><versaoDados>4.00</versaoDados></nfeCabecMsg></soap12:Header><soap12:Body><nfeDadosMsg xmlns="${namespace}">${payload}</nfeDadosMsg></soap12:Body></soap12:Envelope>`;
+  private createSoapEnvelope(
+    payload: string,
+    namespace: string,
+    uf: string,
+  ): string {
+    return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header><nfeCabecMsg xmlns="${namespace}"><cUF>${
+      getCodigoUF(uf)
+    }</cUF><versaoDados>4.00</versaoDados></nfeCabecMsg></soap12:Header><soap12:Body><nfeDadosMsg xmlns="${namespace}">${payload}</nfeDadosMsg></soap12:Body></soap12:Envelope>`;
   }
 }
 
 function buildClientCertificateChain(certInfo: CertificateInfo): string {
   let chain = certInfo.certificateChainPem || certInfo.certificatePem;
-  const issuer = String(certInfo.issuer || '').toUpperCase();
-  const hasSafeweb = chain.includes('AC SAFEWEB RFB v5') || chain.includes(AC_SAFEWEB_RFB_V5_CA.trim());
-  if (issuer.includes('AC SAFEWEB RFB V5') && !hasSafeweb) {
+  const issuer = String(certInfo.issuer || "").toUpperCase();
+  const hasSafeweb = chain.includes("AC SAFEWEB RFB v5") ||
+    chain.includes(AC_SAFEWEB_RFB_V5_CA.trim());
+  if (issuer.includes("AC SAFEWEB RFB V5") && !hasSafeweb) {
     chain += AC_SAFEWEB_RFB_V5_CA;
   }
   return chain;
 }
 
 function onlyDigits(value: string): string {
-  return String(value || '').replace(/\D/g, '');
+  return String(value || "").replace(/\D/g, "");
 }
 
 function escapeXml(value: string): string {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
-function addNFCeSupplement(signedNFe: string, data: { qrCodeUrl: string; consultaUrl: string }): string {
-  if (signedNFe.includes('<infNFeSupl>')) return signedNFe;
-  const supplemental = `<infNFeSupl><qrCode>${escapeXml(data.qrCodeUrl)}</qrCode><urlChave>${escapeXml(data.consultaUrl)}</urlChave></infNFeSupl>`;
-  if (signedNFe.includes('<Signature')) {
+function addNFCeSupplement(
+  signedNFe: string,
+  data: { qrCodeUrl: string; consultaUrl: string },
+): string {
+  if (signedNFe.includes("<infNFeSupl>")) return signedNFe;
+  const supplemental = `<infNFeSupl><qrCode>${
+    escapeXml(data.qrCodeUrl)
+  }</qrCode><urlChave>${escapeXml(data.consultaUrl)}</urlChave></infNFeSupl>`;
+  if (signedNFe.includes("<Signature")) {
     return signedNFe.replace(/(<Signature\b)/, `${supplemental}$1`);
   }
-  return signedNFe.replace('</NFe>', `${supplemental}</NFe>`);
+  return signedNFe.replace("</NFe>", `${supplemental}</NFe>`);
 }
 
-function enrichQrCodeSchemaError(result: SefazResponse, qrCodeUrl?: string, xml?: string): SefazResponse {
-  const motivo = String(result.xMotivo || '');
-  if (result.cStat !== '225' || !motivo.includes('infNFeSupl/qrCode') || !qrCodeUrl) {
+function enrichQrCodeSchemaError(
+  result: SefazResponse,
+  qrCodeUrl?: string,
+  xml?: string,
+): SefazResponse {
+  const motivo = String(result.xMotivo || "");
+  if (
+    result.cStat !== "225" || !motivo.includes("infNFeSupl/qrCode") ||
+    !qrCodeUrl
+  ) {
     return result;
   }
   return {
@@ -309,31 +431,59 @@ function enrichQrCodeSchemaError(result: SefazResponse, qrCodeUrl?: string, xml?
 }
 
 function stripXmlDeclaration(xml: string): string {
-  return String(xml || '').replace(/^\s*<\?xml[^>]*\?>\s*/i, '').trim();
+  return String(xml || "").replace(/^\s*<\?xml[^>]*\?>\s*/i, "").trim();
 }
 
 function formatNfeDate(date: Date): string {
   const offsetMinutes = -date.getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const sign = offsetMinutes >= 0 ? "+" : "-";
   const abs = Math.abs(offsetMinutes);
-  const offset = `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+  const offset = `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${
+    String(abs % 60).padStart(2, "0")
+  }`;
   return date.toISOString().replace(/\.\d{3}Z$/, offset);
 }
 
 function getCodigoUF(uf: string): string {
   const codigos: Record<string, string> = {
-    AC: '12', AL: '27', AP: '16', AM: '13', BA: '29', CE: '23',
-    DF: '53', ES: '32', GO: '52', MA: '21', MT: '51', MS: '50',
-    MG: '31', PA: '15', PB: '25', PR: '41', PE: '26', PI: '22',
-    RJ: '33', RN: '24', RS: '43', RO: '11', RR: '14', SC: '42',
-    SP: '35', SE: '28', TO: '17',
+    AC: "12",
+    AL: "27",
+    AP: "16",
+    AM: "13",
+    BA: "29",
+    CE: "23",
+    DF: "53",
+    ES: "32",
+    GO: "52",
+    MA: "21",
+    MT: "51",
+    MS: "50",
+    MG: "31",
+    PA: "15",
+    PB: "25",
+    PR: "41",
+    PE: "26",
+    PI: "22",
+    RJ: "33",
+    RN: "24",
+    RS: "43",
+    RO: "11",
+    RR: "14",
+    SC: "42",
+    SP: "35",
+    SE: "28",
+    TO: "17",
   };
-  const normalizedUf = String(uf || '').toUpperCase();
+  const normalizedUf = String(uf || "").toUpperCase();
   const codigo = codigos[normalizedUf];
-  if (!codigo) throw new Error(`UF fiscal invalida ou nao suportada: ${uf || '(vazia)'}`);
+  if (!codigo) {
+    throw new Error(`UF fiscal invalida ou nao suportada: ${uf || "(vazia)"}`);
+  }
   return codigo;
 }
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error || 'Erro desconhecido');
+  return error instanceof Error
+    ? error.message
+    : String(error || "Erro desconhecido");
 }

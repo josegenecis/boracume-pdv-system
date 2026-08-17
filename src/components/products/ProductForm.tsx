@@ -68,13 +68,6 @@ interface ProductItem {
   fiscal_reducao_cbs?: number;
 }
 
-const RTC_TAX_PRESETS = [
-  { value: '000001', cst: '000', ibsReduction: 0, cbsReduction: 0, label: '000001 - Tributação integral' },
-  { value: '200047', cst: '200', ibsReduction: 40, cbsReduction: 40, label: '200047 - Bares e restaurantes (redução de 40%)' },
-  { value: '200034', cst: '200', ibsReduction: 60, cbsReduction: 60, label: '200034 - Alimentos do Anexo VII (redução de 60%)' },
-  { value: '200003', cst: '200', ibsReduction: 100, cbsReduction: 100, label: '200003 - Cesta básica do Anexo I (redução de 100%)' },
-] as const;
-
 interface ProductVariant {
   id?: string;
   name: string;
@@ -167,8 +160,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     fiscal_cest: '',
     fiscal_beneficio: '',
     fiscal_observacao: '',
-    fiscal_ibs_cbs_cst: '000',
-    fiscal_cclass_trib: '000001',
+    fiscal_ibs_cbs_cst: '',
+    fiscal_cclass_trib: '',
     fiscal_reducao_ibs: 0,
     fiscal_reducao_cbs: 0,
     ...product
@@ -846,8 +839,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (!isUnsupported('fiscal_cest')) baseData.fiscal_cest = formData.fiscal_cest?.replace(/\D/g, '').slice(0, 7) || null;
     if (!isUnsupported('fiscal_beneficio')) baseData.fiscal_beneficio = formData.fiscal_beneficio?.trim() || null;
     if (!isUnsupported('fiscal_observacao')) baseData.fiscal_observacao = formData.fiscal_observacao?.trim() || null;
-    if (!isUnsupported('fiscal_ibs_cbs_cst')) baseData.fiscal_ibs_cbs_cst = formData.fiscal_ibs_cbs_cst?.replace(/\D/g, '').slice(0, 3) || '000';
-    if (!isUnsupported('fiscal_cclass_trib')) baseData.fiscal_cclass_trib = formData.fiscal_cclass_trib?.replace(/\D/g, '').slice(0, 6) || '000001';
+    if (!isUnsupported('fiscal_ibs_cbs_cst')) baseData.fiscal_ibs_cbs_cst = formData.fiscal_ibs_cbs_cst?.replace(/\D/g, '').slice(0, 3) || null;
+    if (!isUnsupported('fiscal_cclass_trib')) baseData.fiscal_cclass_trib = formData.fiscal_cclass_trib?.replace(/\D/g, '').slice(0, 6) || null;
     if (!isUnsupported('fiscal_reducao_ibs')) baseData.fiscal_reducao_ibs = Math.min(100, Math.max(0, Number(formData.fiscal_reducao_ibs) || 0));
     if (!isUnsupported('fiscal_reducao_cbs')) baseData.fiscal_reducao_cbs = Math.min(100, Math.max(0, Number(formData.fiscal_reducao_cbs) || 0));
 
@@ -2431,35 +2424,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                     <Label htmlFor="fiscal_cclass_trib" className="text-boracume-dark-green font-semibold">
                       IBS/CBS — classificação tributária
                     </Label>
-                    <p className="mt-1 text-xs text-[#003223]/65">
-                      Selecione conforme o produto e a operação. A classificação fica gravada no item da nota.
-                    </p>
+                    <p className="mt-1 text-xs text-[#003223]/65">Informe apenas após conferir a tabela oficial vigente. A regra aprovada da operação prevalece sobre este cadastro.</p>
                   </div>
-                  <Select
-                    value={formData.fiscal_cclass_trib || '000001'}
-                    onValueChange={(value) => {
-                      const preset = RTC_TAX_PRESETS.find((option) => option.value === value);
-                      if (!preset) return;
-                      setFormData(prev => ({
-                        ...prev,
-                        fiscal_ibs_cbs_cst: preset.cst,
-                        fiscal_cclass_trib: preset.value,
-                        fiscal_reducao_ibs: preset.ibsReduction,
-                        fiscal_reducao_cbs: preset.cbsReduction,
-                      }));
-                    }}
-                  >
-                    <SelectTrigger id="fiscal_cclass_trib" className="h-11 rounded-xl bg-[#FFFDF9] font-semibold">
-                      <SelectValue placeholder="Selecione o cClassTrib" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RTC_TAX_PRESETS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="grid gap-2 text-xs font-medium text-[#003223]/75 sm:grid-cols-3">
-                    <span>CST: {formData.fiscal_ibs_cbs_cst || '000'}</span>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1"><Label htmlFor="fiscal_ibs_cbs_cst">CST IBS/CBS</Label><Input id="fiscal_ibs_cbs_cst" value={formData.fiscal_ibs_cbs_cst || ''} onChange={(event) => setFormData(prev => ({ ...prev, fiscal_ibs_cbs_cst: event.target.value.replace(/\D/g, '').slice(0, 3) }))} placeholder="3 dígitos" className="h-11 rounded-xl bg-[#FFFDF9] font-semibold" /></div>
+                    <div className="space-y-1"><Label htmlFor="fiscal_cclass_trib">cClassTrib</Label><Input id="fiscal_cclass_trib" value={formData.fiscal_cclass_trib || ''} onChange={(event) => setFormData(prev => ({ ...prev, fiscal_cclass_trib: event.target.value.replace(/\D/g, '').slice(0, 6) }))} placeholder="6 dígitos" className="h-11 rounded-xl bg-[#FFFDF9] font-semibold" /></div>
+                  </div>
+                  <div className="grid gap-2 text-xs font-medium text-[#003223]/75 sm:grid-cols-2">
                     <span>Redução IBS: {Number(formData.fiscal_reducao_ibs || 0).toLocaleString('pt-BR')}%</span>
                     <span>Redução CBS: {Number(formData.fiscal_reducao_cbs || 0).toLocaleString('pt-BR')}%</span>
                   </div>

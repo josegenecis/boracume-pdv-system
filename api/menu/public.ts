@@ -1,11 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { enrichCategoryWithMetadata } from '../../src/lib/category-metadata.js';
+import { getSupabaseRuntimeEnv } from '../_lib/runtime-env';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://auth.popsystem.com.br';
-const SUPABASE_ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_PUBLISHABLE_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjZnlyY3B1Z21kdWNwdGt0amljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5MzAwNjUsImV4cCI6MjA2MzUwNjA2NX0.G9l2LEE6DtnSGChmGx5sTCQhC7yVHZJtq6rTTsti2aE';
+const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = getSupabaseRuntimeEnv();
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -49,10 +46,10 @@ function buildLinkedGlobalVariation(link: any, globalVariation: any) {
 
 async function fetchProducts(userId: string) {
   const selectAttempts = [
-    'id,name,description,price,original_price,discount_percentage,image_url,available,is_available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold',
-    'id,name,description,price,original_price,discount_percentage,image_url,available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold',
-    'id,name,description,price,original_price,discount_percentage,image_url,is_available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold',
-    'id,name,description,price,image_url,available,show_in_delivery,category_id'
+    'id,name,description,price,original_price,discount_percentage,image_url,available,is_available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold,display_order',
+    'id,name,description,price,original_price,discount_percentage,image_url,available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold,display_order',
+    'id,name,description,price,original_price,discount_percentage,image_url,is_available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold,display_order',
+    'id,name,description,price,image_url,available,show_in_delivery,category_id,display_order'
   ];
 
   let lastError: any = null;
@@ -62,6 +59,7 @@ async function fetchProducts(userId: string) {
       .select(selectClause)
       .eq('user_id', userId)
       .eq('show_in_delivery', true)
+      .order('display_order', { ascending: true, nullsFirst: false })
       .order('name', { ascending: true });
 
     if (!result.error) {

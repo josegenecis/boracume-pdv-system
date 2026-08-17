@@ -1,16 +1,17 @@
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Building2, FileText, Landmark, ReceiptText, Settings2, Users } from 'lucide-react';
+import { Building2, FileText, Landmark, ReceiptText, Settings2, ShieldCheck, Users } from 'lucide-react';
 import FiscalSettings from '@/components/fiscal/FiscalSettings';
 import NFCeManager from '@/components/nfce/NFCeManager';
 import { useSearchParams } from 'react-router-dom';
 import FiscalDocumentModelSettings from '@/components/fiscal/FiscalDocumentModelSettings';
 import FiscalRecipientsManager from '@/components/fiscal/FiscalRecipientsManager';
+import FiscalRtcValidation from '@/components/fiscal/FiscalRtcValidation';
 
 const Fiscal = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get('tab');
-  const activeTab = ['issuer', 'models', 'recipients', 'documents'].includes(String(requestedTab)) ? String(requestedTab) : 'issuer';
+  const activeTab = ['issuer', 'models', 'recipients', 'rtc', 'documents'].includes(String(requestedTab)) ? String(requestedTab) : 'issuer';
 
   return (
     <div className="space-y-6">
@@ -34,12 +35,14 @@ const Fiscal = () => {
           <TabsTrigger value="issuer" className="flex items-center gap-2"><Building2 className="h-4 w-4" />Emitente e certificado</TabsTrigger>
           <TabsTrigger value="models" className="flex items-center gap-2"><Settings2 className="h-4 w-4" />Modelos e numeração</TabsTrigger>
           <TabsTrigger value="recipients" className="flex items-center gap-2"><Users className="h-4 w-4" />Destinatários NF-e</TabsTrigger>
+          <TabsTrigger value="rtc" className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />IBS, CBS e IS</TabsTrigger>
           <TabsTrigger value="documents" className="flex items-center gap-2"><ReceiptText className="h-4 w-4" />Cupons e documentos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="issuer"><FiscalSettings modelSettingsVisible={false} recentDocumentsVisible={false} /></TabsContent>
         <TabsContent value="models"><FiscalDocumentModelSettings /></TabsContent>
         <TabsContent value="recipients"><FiscalRecipientsManager /></TabsContent>
+        <TabsContent value="rtc"><FiscalRtcValidation /></TabsContent>
         <TabsContent value="documents" className="space-y-4"><div className="rounded-xl border bg-white p-4"><div className="flex items-center gap-2 font-semibold"><FileText className="h-4 w-4 text-emerald-600" />Documentos emitidos</div><p className="mt-1 text-sm text-muted-foreground">Consulte, imprima, cancele e acompanhe documentos por modelo e situação.</p></div><NFCeManager /></TabsContent>
       </Tabs>
     </div>
