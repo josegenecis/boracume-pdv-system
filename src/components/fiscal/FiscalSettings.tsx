@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import forge from 'node-forge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,7 @@ type ParsedCertificateInfo = {
 };
 
 type CnpjRegistrationData = {
+  cnpj?: string;
   razao_social?: string;
   nome_fantasia?: string;
   logradouro?: string;
@@ -62,7 +63,12 @@ type CnpjRegistrationData = {
   cep?: string;
   codigo_municipio?: string;
   inscricao_estadual?: string;
+  regime_tributario?: number;
+  situacao_cadastral?: string;
+  source?: 'cnpj_ws' | 'brasil_api';
 };
+
+type CertificateRegistrationStatus = 'idle' | 'loading' | 'complete' | 'unavailable';
 
 type FiscalReadiness = {
   ready: boolean;
@@ -304,26 +310,19 @@ const fetchCnpjRegistrationData = async (cnpj: string): Promise<CnpjRegistration
   const digits = onlyDigits(cnpj);
   if (digits.length !== 14) return null;
 
-  const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`);
-  if (!response.ok) return null;
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error('Sessão expirada. Entre novamente para consultar o CNPJ.');
 
-  const data = await response.json();
-  const inscricoesEstaduais = Array.isArray(data?.inscricoes_estaduais) ? data.inscricoes_estaduais : [];
-  const activeIe = inscricoesEstaduais.find((item: any) => item?.ativo !== false) || inscricoesEstaduais[0];
+  const response = await fetch(`/api/fiscal/cnpj-lookup?cnpj=${digits}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.registration) {
+    throw new Error(payload?.error || 'Não foi possível consultar os dados públicos do CNPJ.');
+  }
 
-  return {
-    razao_social: data?.razao_social || data?.nome,
-    nome_fantasia: data?.nome_fantasia || data?.fantasia,
-    logradouro: data?.logradouro,
-    numero: data?.numero,
-    complemento: data?.complemento,
-    bairro: data?.bairro,
-    municipio: data?.municipio,
-    uf: data?.uf,
-    cep: data?.cep,
-    codigo_municipio: data?.codigo_municipio || data?.municipio_codigo,
-    inscricao_estadual: activeIe?.inscricao_estadual || activeIe?.ie,
-  };
+  return payload.registration as CnpjRegistrationData;
 };
 
 const isRegistrationCompatibleWithCertificate = (
@@ -331,6 +330,7 @@ const isRegistrationCompatibleWithCertificate = (
   info: ParsedCertificateInfo
 ) => {
   if (!registration) return false;
+  if (registration.cnpj && onlyDigits(registration.cnpj) !== onlyDigits(info.cnpj)) return false;
 
   const registrationName = String(registration.razao_social || registration.nome_fantasia || '').trim();
   if (!registrationName) return true;
@@ -372,6 +372,9 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificateInfo, setCertificateInfo] = useState<ParsedCertificateInfo | null>(null);
   const [certificateAutofillLoading, setCertificateAutofillLoading] = useState(false);
+  const [certificateRegistrationStatus, setCertificateRegistrationStatus] = useState<CertificateRegistrationStatus>('idle');
+  const [certificateRegistrationSource, setCertificateRegistrationSource] = useState<CnpjRegistrationData['source']>();
+  const certificateAutofillRequestRef = useRef(0);
   const [nfceNumeroRaw, setNfceNumeroRaw] = useState('1');
   const [readiness, setReadiness] = useState<FiscalReadiness | null>(null);
   const [nfceCupons, setNfceCupons] = useState<NfceCupomSummary[]>([]);
@@ -487,6 +490,8 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       const base64String = e.target?.result as string;
       const base64Content = base64String.split(',')[1]; // Remove data:application/... prefix
       setCertificateInfo(null);
+      setCertificateRegistrationStatus('idle');
+      setCertificateRegistrationSource(undefined);
       setSettings(prev => ({ ...prev, certificado_a1_base64: base64Content }));
       if (settings.certificado_senha) {
         void tryApplyCertificateAutofill(base64Content, settings.certificado_senha);
@@ -507,8 +512,8 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       ...prev,
       cnpj: info.cnpj ? formatCnpj(info.cnpj) : prev.cnpj,
       inscricao_estadual: safeRegistration?.inscricao_estadual || prev.inscricao_estadual,
-      razao_social: safeRegistration?.razao_social || prev.razao_social,
-      nome_fantasia: safeRegistration?.nome_fantasia || prev.nome_fantasia || '',
+      razao_social: safeRegistration?.razao_social || info.razaoSocial || prev.razao_social,
+      nome_fantasia: safeRegistration?.nome_fantasia || info.nomeFantasia || prev.nome_fantasia || '',
       endereco_logradouro: safeRegistration?.logradouro || prev.endereco_logradouro,
       endereco_numero: safeRegistration?.numero || prev.endereco_numero,
       endereco_complemento: safeRegistration?.complemento || prev.endereco_complemento,
@@ -517,6 +522,7 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       endereco_uf: safeRegistration?.uf || prev.endereco_uf,
       endereco_cep: safeRegistration?.cep || prev.endereco_cep,
       codigo_municipio: safeRegistration?.codigo_municipio ? onlyDigits(String(safeRegistration.codigo_municipio)) : prev.codigo_municipio,
+      regime_tributario: safeRegistration?.regime_tributario || prev.regime_tributario,
     }));
   };
 
@@ -527,8 +533,10 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
   ) => {
     if (!base64Content || !password) return;
 
+    const requestId = ++certificateAutofillRequestRef.current;
     try {
       setCertificateAutofillLoading(true);
+      setCertificateRegistrationStatus('loading');
       const info = parseCertificateBase64(base64Content, password);
       let registration: CnpjRegistrationData | null = null;
       try {
@@ -536,15 +544,23 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       } catch (registrationError) {
         console.warn('Nao foi possivel consultar dados publicos do CNPJ', registrationError);
       }
+      if (requestId !== certificateAutofillRequestRef.current) return;
       applyCertificateInfo(info, registration);
+      setCertificateRegistrationStatus(registration ? 'complete' : 'unavailable');
+      setCertificateRegistrationSource(registration?.source);
       if (!options.silent) {
         toast({
           title: "Dados preenchidos pelo certificado",
-          description: `${registration?.razao_social || 'Empresa identificada'}${info.cnpj ? ` - ${formatCnpj(info.cnpj)}` : ''}`,
+          description: registration
+            ? `${registration.razao_social || 'Empresa identificada'} - cadastro empresarial preenchido para revisão.`
+            : `${formatCnpj(info.cnpj)} identificado. Revise os campos que não puderam ser consultados.`,
         });
       }
     } catch (error: any) {
+      if (requestId !== certificateAutofillRequestRef.current) return;
       setCertificateInfo(null);
+      setCertificateRegistrationStatus('idle');
+      setCertificateRegistrationSource(undefined);
       if (!options.silent) {
         toast({
           title: "Não foi possível ler o certificado",
@@ -553,7 +569,7 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
         });
       }
     } finally {
-      setCertificateAutofillLoading(false);
+      if (requestId === certificateAutofillRequestRef.current) setCertificateAutofillLoading(false);
     }
   };
 
@@ -773,15 +789,28 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       </div>
 
       {certificateInfo && (
-        <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+        <div className={`rounded-2xl border p-4 text-sm ${certificateRegistrationStatus === 'complete'
+          ? 'border-green-200 bg-green-50 text-green-900'
+          : 'border-amber-200 bg-amber-50 text-amber-950'
+        }`}>
           <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-green-700" />
+            <ShieldCheck className={`mt-0.5 h-5 w-5 shrink-0 ${certificateRegistrationStatus === 'complete' ? 'text-green-700' : 'text-amber-700'}`} />
             <div className="space-y-1">
-              <div className="font-semibold">Certificado do cliente lido e dados aplicados</div>
+              <div className="font-semibold">
+                {certificateRegistrationStatus === 'complete'
+                  ? 'Certificado lido e cadastro empresarial preenchido'
+                  : 'Certificado lido; revise os dados cadastrais'}
+              </div>
               <div>CNPJ: {formatCnpj(certificateInfo.cnpj) || 'não identificado'}</div>
               {certificateInfo.razaoSocial && <div>Razão social do titular: {certificateInfo.razaoSocial}</div>}
               <div>Validade: {formatCertificateDate(certificateInfo.validFrom)} até {formatCertificateDate(certificateInfo.validTo)}</div>
-              {certificateInfo.issuer && <div className="text-green-800/80">Autoridade emissora: {certificateInfo.issuer}</div>}
+              {certificateRegistrationStatus === 'complete' && (
+                <div>Dados consultados automaticamente pelo CNPJ{certificateRegistrationSource ? ` (${certificateRegistrationSource === 'cnpj_ws' ? 'CNPJ.ws' : 'BrasilAPI'})` : ''}.</div>
+              )}
+              {certificateRegistrationStatus === 'unavailable' && (
+                <div>A consulta cadastral não respondeu. O CNPJ e os dados presentes no certificado foram aplicados; complete os demais campos manualmente.</div>
+              )}
+              {certificateInfo.issuer && <div className="opacity-80">Autoridade emissora: {certificateInfo.issuer}</div>}
             </div>
           </div>
         </div>
