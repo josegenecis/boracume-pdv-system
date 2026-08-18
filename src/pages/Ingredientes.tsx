@@ -38,6 +38,7 @@ interface ProductStock {
   name: string;
   category?: string | null;
   price: number;
+  weight_based?: boolean | null;
   track_stock: boolean;
   stock_quantity: number;
   low_stock_threshold: number;
@@ -232,7 +233,7 @@ export default function Ingredientes() {
           .order('name'),
         (supabase as any)
           .from('products')
-          .select('id,name,category,price,track_stock,stock_quantity,low_stock_threshold,available,show_in_delivery,updated_at')
+          .select('id,name,category,price,weight_based,track_stock,stock_quantity,low_stock_threshold,available,show_in_delivery,updated_at')
           .eq('user_id', user.id)
           .order('name')
       ]);
@@ -334,7 +335,13 @@ export default function Ingredientes() {
     try {
       if (stockEntryTarget.type === 'product') {
         const current = products.find((product) => product.id === stockEntryTarget.id);
-        const nextQuantity = Math.max(0, Number(current?.stock_quantity || 0)) + Math.trunc(quantity);
+        if (!current?.weight_based && !Number.isInteger(quantity)) {
+          throw new Error('Produtos vendidos por unidade exigem uma quantidade inteira.');
+        }
+        const quantityToAdd = current?.weight_based
+          ? Number(quantity.toFixed(6))
+          : quantity;
+        const nextQuantity = Number((Math.max(0, Number(current?.stock_quantity || 0)) + quantityToAdd).toFixed(6));
 
         const { error: productError } = await (supabase as any)
           .from('products')
@@ -355,7 +362,7 @@ export default function Ingredientes() {
           user_id: user.id,
           product_id: stockEntryTarget.id,
           type: 'purchase',
-          quantity: Math.trunc(quantity),
+          quantity: quantityToAdd,
         });
       } else {
         if (stockEntryCost <= 0) {
@@ -568,10 +575,10 @@ export default function Ingredientes() {
                                 variant={isLowStock ? 'destructive' : 'secondary'}
                                 className={!isControlled ? 'bg-slate-100 text-slate-600' : isLowStock ? 'bg-red-500' : 'bg-boracume-green text-white'}
                               >
-                                {isControlled ? product.stock_quantity : 'Não controla'}
+                                {isControlled ? `${product.stock_quantity.toLocaleString('pt-BR', { maximumFractionDigits: 6 })}${product.weight_based ? ' kg' : ''}` : 'Não controla'}
                               </Badge>
                             </TableCell>
-                            <TableCell>{isControlled ? product.low_stock_threshold : '-'}</TableCell>
+                            <TableCell>{isControlled ? `${product.low_stock_threshold.toLocaleString('pt-BR', { maximumFractionDigits: 6 })}${product.weight_based ? ' kg' : ''}` : '-'}</TableCell>
                             <TableCell>{formatCurrency(product.price)}</TableCell>
                             <TableCell>
                               {isOut ? (
