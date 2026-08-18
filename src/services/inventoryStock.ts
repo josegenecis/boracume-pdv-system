@@ -11,7 +11,7 @@ const normalizeItems = (items: StockItem[]) => {
 
   for (const item of items || []) {
     const productId = String(item?.product_id || item?.id || '').trim();
-    const quantity = Math.max(0, Math.trunc(Number(item?.quantity || 0)));
+    const quantity = Math.max(0, Number(Number(item?.quantity || 0).toFixed(6)));
     if (!productId || quantity <= 0) continue;
     grouped.set(productId, (grouped.get(productId) || 0) + quantity);
   }
@@ -68,8 +68,8 @@ export async function applyProductStockForOrder(params: {
 
     if (movementError) continue;
 
-    const current = Math.max(0, Math.trunc(Number(product.stock_quantity || 0)));
-    const next = Math.max(0, current - item.quantity);
+    const current = Math.max(0, Number(product.stock_quantity || 0));
+    const next = Math.max(0, Number((current - item.quantity).toFixed(6)));
     const updateData: Record<string, unknown> = { stock_quantity: next };
 
     if (next <= 0) {
@@ -90,4 +90,3 @@ export async function applyProductStockForOrder(params: {
 
   return { updated, disabled, skipped: false };
 }
-

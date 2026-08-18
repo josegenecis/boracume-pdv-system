@@ -846,8 +846,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
     if (stockSchemaSupported && !isUnsupported('track_stock') && !isUnsupported('stock_quantity') && !isUnsupported('low_stock_threshold')) {
       baseData.track_stock = formData.track_stock;
-      baseData.stock_quantity = Math.max(0, Math.floor(Number(formData.stock_quantity) || 0));
-      baseData.low_stock_threshold = Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0));
+      baseData.stock_quantity = formData.weight_based
+        ? Math.max(0, Number(Number(formData.stock_quantity || 0).toFixed(6)))
+        : Math.max(0, Math.floor(Number(formData.stock_quantity) || 0));
+      baseData.low_stock_threshold = formData.weight_based
+        ? Math.max(0, Number(Number(formData.low_stock_threshold || 0).toFixed(6)))
+        : Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0));
     }
 
     return baseData;
@@ -2212,37 +2216,77 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         <div className="grid grid-cols-2 gap-3 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light mt-3">
           <div className="space-y-1">
             <Label htmlFor="stock_quantity" className="text-boracume-dark-green font-semibold">Estoque</Label>
-            <IntegerInput
-              id="stock_quantity"
-              value={stockQuantityRaw}
-              min={0}
-              fallback={formData.stock_quantity ?? 0}
-              onValueChange={(value) => {
-                setStockQuantityRaw(value);
-                if (value !== '') {
-                  setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(value || '0', 10) || 0) }));
-                }
-              }}
-              className="bg-white rounded-xl h-11"
-              disabled={!formData.track_stock}
-            />
+            {formData.weight_based ? (
+              <Input
+                id="stock_quantity"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.001"
+                value={stockQuantityRaw}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setStockQuantityRaw(value);
+                  if (value !== '') {
+                    setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, Number(value) || 0) }));
+                  }
+                }}
+                className="bg-white rounded-xl h-11"
+                disabled={!formData.track_stock}
+              />
+            ) : (
+              <IntegerInput
+                id="stock_quantity"
+                value={stockQuantityRaw}
+                min={0}
+                fallback={formData.stock_quantity ?? 0}
+                onValueChange={(value) => {
+                  setStockQuantityRaw(value);
+                  if (value !== '') {
+                    setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(value || '0', 10) || 0) }));
+                  }
+                }}
+                className="bg-white rounded-xl h-11"
+                disabled={!formData.track_stock}
+              />
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="low_stock_threshold" className="text-boracume-dark-green font-semibold">Estoque mín.</Label>
-            <IntegerInput
-              id="low_stock_threshold"
-              value={lowStockThresholdRaw}
-              min={0}
-              fallback={formData.low_stock_threshold ?? 0}
-              onValueChange={(value) => {
-                setLowStockThresholdRaw(value);
-                if (value !== '') {
-                  setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(value || '0', 10) || 0) }));
-                }
-              }}
-              className="bg-white rounded-xl h-11"
-              disabled={!formData.track_stock}
-            />
+            {formData.weight_based ? (
+              <Input
+                id="low_stock_threshold"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.001"
+                value={lowStockThresholdRaw}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setLowStockThresholdRaw(value);
+                  if (value !== '') {
+                    setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, Number(value) || 0) }));
+                  }
+                }}
+                className="bg-white rounded-xl h-11"
+                disabled={!formData.track_stock}
+              />
+            ) : (
+              <IntegerInput
+                id="low_stock_threshold"
+                value={lowStockThresholdRaw}
+                min={0}
+                fallback={formData.low_stock_threshold ?? 0}
+                onValueChange={(value) => {
+                  setLowStockThresholdRaw(value);
+                  if (value !== '') {
+                    setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(value || '0', 10) || 0) }));
+                  }
+                }}
+                className="bg-white rounded-xl h-11"
+                disabled={!formData.track_stock}
+              />
+            )}
           </div>
           <div className="col-span-2 flex items-center justify-between pt-2 border-t border-gray-100">
             <div className="text-sm font-semibold text-boracume-dark-green">Controle de estoque ativo</div>
