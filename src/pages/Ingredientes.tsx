@@ -909,17 +909,19 @@ export default function Ingredientes() {
                 <Input
                   id="stock_entry_quantity"
                   type="number"
-                  step={stockEntryTarget?.type === 'product' ? '1' : '0.001'}
+                  step={stockEntryTarget?.type === 'product' && !products.find(item => item.id === stockEntryTarget.id)?.weight_based ? '1' : '0.001'}
                   min="0"
                   value={stockEntryQuantity}
                   onChange={(event) => setStockEntryQuantity(event.target.value)}
-                  placeholder={stockEntryTarget?.type === 'product' ? 'Ex: 12' : 'Ex: 2.5'}
+                  placeholder={stockEntryTarget?.type === 'product' && !products.find(item => item.id === stockEntryTarget.id)?.weight_based ? 'Ex: 12' : 'Ex: 2,5'}
                   required
                 />
                 <p className="text-xs text-muted-foreground">
                   {stockEntryTarget?.type === 'ingredient'
                     ? `Informe em ${ingredients.find(item => item.id === stockEntryTarget.id)?.purchase_unit || 'unidade de compra'}. A conversão para estoque será automática.`
-                    : 'Produto acabado usa unidade inteira.'}
+                    : products.find(item => item.id === stockEntryTarget?.id)?.weight_based
+                      ? 'Produto vendido por peso: informe a quantidade em kg (ex.: 2,750).'
+                      : 'Produto acabado vendido por unidade exige quantidade inteira.'}
                 </p>
               </div>
 
