@@ -341,6 +341,32 @@ const isRegistrationCompatibleWithCertificate = (
   return true;
 };
 
+const mergeCertificateData = (
+  current: FiscalConfig,
+  info: ParsedCertificateInfo,
+  registration?: CnpjRegistrationData | null
+): FiscalConfig => {
+  const safeRegistration = isRegistrationCompatibleWithCertificate(registration, info) ? registration : null;
+  return {
+    ...current,
+    cnpj: info.cnpj ? formatCnpj(info.cnpj) : current.cnpj,
+    inscricao_estadual: safeRegistration?.inscricao_estadual || current.inscricao_estadual,
+    razao_social: safeRegistration?.razao_social || info.razaoSocial || current.razao_social,
+    nome_fantasia: safeRegistration?.nome_fantasia || info.nomeFantasia || current.nome_fantasia || '',
+    endereco_logradouro: safeRegistration?.logradouro || current.endereco_logradouro,
+    endereco_numero: safeRegistration?.numero || current.endereco_numero,
+    endereco_complemento: safeRegistration?.complemento || current.endereco_complemento,
+    endereco_bairro: safeRegistration?.bairro || current.endereco_bairro,
+    endereco_municipio: safeRegistration?.municipio || current.endereco_municipio,
+    endereco_uf: safeRegistration?.uf || current.endereco_uf,
+    endereco_cep: safeRegistration?.cep || current.endereco_cep,
+    codigo_municipio: safeRegistration?.codigo_municipio
+      ? onlyDigits(String(safeRegistration.codigo_municipio))
+      : current.codigo_municipio,
+    regime_tributario: safeRegistration?.regime_tributario || current.regime_tributario,
+  };
+};
+
 const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocumentsVisible?: boolean }> = ({
   modelSettingsVisible = true,
   recentDocumentsVisible = true,
@@ -372,6 +398,7 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificateInfo, setCertificateInfo] = useState<ParsedCertificateInfo | null>(null);
   const [certificateAutofillLoading, setCertificateAutofillLoading] = useState(false);
+  const [certificateError, setCertificateError] = useState('');
   const [certificateRegistrationStatus, setCertificateRegistrationStatus] = useState<CertificateRegistrationStatus>('idle');
   const [certificateRegistrationSource, setCertificateRegistrationSource] = useState<CnpjRegistrationData['source']>();
   const certificateAutofillRequestRef = useRef(0);
@@ -388,11 +415,6 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       loadNfceCupons();
     }
   }, [user]);
-
-  useEffect(() => {
-    if (!settings.certificado_a1_base64 || !settings.certificado_senha || certificateInfo) return;
-    void tryApplyCertificateAutofill(settings.certificado_a1_base64, settings.certificado_senha, { silent: true });
-  }, [settings.certificado_a1_base64, settings.certificado_senha, certificateInfo]);
 
   const loadFiscalSettings = async () => {
     try {
@@ -473,7 +495,8 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.pfx') && !file.name.endsWith('.p12')) {
+    const lowerFileName = file.name.toLowerCase();
+    if (!lowerFileName.endsWith('.pfx') && !lowerFileName.endsWith('.p12')) {
       toast({
         title: "Erro",
         description: "Apenas arquivos .pfx ou .p12 são aceitos para certificados A1.",
@@ -483,12 +506,17 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
     }
 
     setCertificateFile(file);
+    setCertificateError('');
     
     // Convert to base64
     const reader = new FileReader();
     reader.onload = (e) => {
       const base64String = e.target?.result as string;
-      const base64Content = base64String.split(',')[1]; // Remove data:application/... prefix
+      const base64Content = base64String?.split(',')[1]; // Remove data:application/... prefix
+      if (!base64Content) {
+        setCertificateError('Não foi possível carregar o conteúdo do certificado. Selecione o arquivo novamente.');
+        return;
+      }
       setCertificateInfo(null);
       setCertificateRegistrationStatus('idle');
       setCertificateRegistrationSource(undefined);
@@ -502,28 +530,16 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
         });
       }
     };
+    reader.onerror = () => {
+      setCertificateInfo(null);
+      setCertificateError('Não foi possível ler o arquivo selecionado. Selecione o certificado novamente.');
+    };
     reader.readAsDataURL(file);
   };
 
   const applyCertificateInfo = (info: ParsedCertificateInfo, registration?: CnpjRegistrationData | null) => {
-    const safeRegistration = isRegistrationCompatibleWithCertificate(registration, info) ? registration : null;
     setCertificateInfo(info);
-    setSettings(prev => ({
-      ...prev,
-      cnpj: info.cnpj ? formatCnpj(info.cnpj) : prev.cnpj,
-      inscricao_estadual: safeRegistration?.inscricao_estadual || prev.inscricao_estadual,
-      razao_social: safeRegistration?.razao_social || info.razaoSocial || prev.razao_social,
-      nome_fantasia: safeRegistration?.nome_fantasia || info.nomeFantasia || prev.nome_fantasia || '',
-      endereco_logradouro: safeRegistration?.logradouro || prev.endereco_logradouro,
-      endereco_numero: safeRegistration?.numero || prev.endereco_numero,
-      endereco_complemento: safeRegistration?.complemento || prev.endereco_complemento,
-      endereco_bairro: safeRegistration?.bairro || prev.endereco_bairro,
-      endereco_municipio: safeRegistration?.municipio || prev.endereco_municipio,
-      endereco_uf: safeRegistration?.uf || prev.endereco_uf,
-      endereco_cep: safeRegistration?.cep || prev.endereco_cep,
-      codigo_municipio: safeRegistration?.codigo_municipio ? onlyDigits(String(safeRegistration.codigo_municipio)) : prev.codigo_municipio,
-      regime_tributario: safeRegistration?.regime_tributario || prev.regime_tributario,
-    }));
+    setSettings(prev => mergeCertificateData(prev, info, registration));
   };
 
   const tryApplyCertificateAutofill = async (
@@ -531,11 +547,12 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
     password: string,
     options: { silent?: boolean } = {}
   ) => {
-    if (!base64Content || !password) return;
+    if (!base64Content || !password) return false;
 
     const requestId = ++certificateAutofillRequestRef.current;
     try {
       setCertificateAutofillLoading(true);
+      setCertificateError('');
       setCertificateRegistrationStatus('loading');
       const info = parseCertificateBase64(base64Content, password);
       let registration: CnpjRegistrationData | null = null;
@@ -544,7 +561,7 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       } catch (registrationError) {
         console.warn('Nao foi possivel consultar dados publicos do CNPJ', registrationError);
       }
-      if (requestId !== certificateAutofillRequestRef.current) return;
+      if (requestId !== certificateAutofillRequestRef.current) return null;
       applyCertificateInfo(info, registration);
       setCertificateRegistrationStatus(registration ? 'complete' : 'unavailable');
       setCertificateRegistrationSource(registration?.source);
@@ -556,18 +573,25 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
             : `${formatCnpj(info.cnpj)} identificado. Revise os campos que não puderam ser consultados.`,
         });
       }
+      return { info, registration };
     } catch (error: any) {
-      if (requestId !== certificateAutofillRequestRef.current) return;
+      if (requestId !== certificateAutofillRequestRef.current) return null;
       setCertificateInfo(null);
       setCertificateRegistrationStatus('idle');
       setCertificateRegistrationSource(undefined);
+      const rawMessage = String(error?.message || '');
+      const friendlyMessage = /password|senha|mac could not be verified|invalid/i.test(rawMessage)
+        ? 'Senha incorreta ou certificado incompatível. Confira a senha e tente novamente.'
+        : (rawMessage || 'Confira o arquivo e a senha do certificado A1.');
+      setCertificateError(friendlyMessage);
       if (!options.silent) {
         toast({
           title: "Não foi possível ler o certificado",
-          description: error?.message || "Confira o arquivo e a senha do certificado A1.",
+          description: friendlyMessage,
           variant: "destructive"
         });
       }
+      return null;
     } finally {
       if (requestId === certificateAutofillRequestRef.current) setCertificateAutofillLoading(false);
     }
@@ -576,8 +600,27 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
   const saveSettings = async (): Promise<boolean> => {
     try {
       setLoading(true);
+      let settingsToSave = settings;
 
-      const validationErrors = validateLocalFiscalSettings(settings);
+      if (settings.certificado_a1_base64 && !settings.certificado_senha) {
+        toast({
+          title: "Informe a senha do certificado",
+          description: "A senha é necessária para validar e salvar o certificado A1.",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      if (settings.certificado_a1_base64 && settings.certificado_senha && !certificateInfo) {
+        const certificateResult = await tryApplyCertificateAutofill(
+          settings.certificado_a1_base64,
+          settings.certificado_senha
+        );
+        if (!certificateResult) return false;
+        settingsToSave = mergeCertificateData(settings, certificateResult.info, certificateResult.registration);
+      }
+
+      const validationErrors = validateLocalFiscalSettings(settingsToSave);
       if (validationErrors.length) {
         toast({
           title: "Revise o cadastro fiscal",
@@ -588,11 +631,11 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       }
 
       const settingsData = {
-        ...settings,
-        codigo_municipio: resolveKnownMunicipalityCode(settings),
-        cnpj: formatCnpj(settings.cnpj),
-        inscricao_estadual: onlyDigits(settings.inscricao_estadual),
-        endereco_cep: onlyDigits(settings.endereco_cep),
+        ...settingsToSave,
+        codigo_municipio: resolveKnownMunicipalityCode(settingsToSave),
+        cnpj: formatCnpj(settingsToSave.cnpj),
+        inscricao_estadual: onlyDigits(settingsToSave.inscricao_estadual),
+        endereco_cep: onlyDigits(settingsToSave.endereco_cep),
         user_id: user?.id,
         updated_at: new Date().toISOString()
       };
@@ -628,7 +671,7 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       console.error('Erro ao salvar:', error);
       toast({
         title: "Erro",
-        description: "Erro ao salvar configurações fiscais.",
+        description: error?.message || "Erro ao salvar configurações fiscais.",
         variant: "destructive"
       });
       return false;
@@ -777,9 +820,22 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
             value={settings.certificado_senha}
             onChange={(e) => {
               const password = e.target.value;
+              certificateAutofillRequestRef.current += 1;
+              setCertificateInfo(null);
+              setCertificateRegistrationStatus('idle');
+              setCertificateRegistrationSource(undefined);
+              setCertificateError('');
               setSettings(prev => ({ ...prev, certificado_senha: password }));
-              if (settings.certificado_a1_base64 && password) {
-                void tryApplyCertificateAutofill(settings.certificado_a1_base64, password, { silent: true });
+            }}
+            onBlur={() => {
+              if (settings.certificado_a1_base64 && settings.certificado_senha && !certificateInfo) {
+                void tryApplyCertificateAutofill(settings.certificado_a1_base64, settings.certificado_senha);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && settings.certificado_a1_base64 && settings.certificado_senha) {
+                e.preventDefault();
+                void tryApplyCertificateAutofill(settings.certificado_a1_base64, settings.certificado_senha);
               }
             }}
             placeholder="senha123"
@@ -787,6 +843,28 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
           />
         </div>
       </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!settings.certificado_a1_base64 || !settings.certificado_senha || certificateAutofillLoading}
+          onClick={() => void tryApplyCertificateAutofill(settings.certificado_a1_base64, settings.certificado_senha)}
+        >
+          <ShieldCheck className="mr-2 h-4 w-4" />
+          {certificateAutofillLoading ? 'Validando certificado...' : 'Validar e preencher dados'}
+        </Button>
+        {!settings.certificado_a1_base64 && (
+          <p className="text-sm text-slate-600">Selecione primeiro o arquivo do certificado A1.</p>
+        )}
+      </div>
+
+      {certificateError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
+          <div className="font-semibold">Certificado não validado</div>
+          <div className="mt-1">{certificateError}</div>
+        </div>
+      )}
 
       {certificateInfo && (
         <div className={`rounded-2xl border p-4 text-sm ${certificateRegistrationStatus === 'complete'
