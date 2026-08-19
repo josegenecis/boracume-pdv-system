@@ -647,7 +647,7 @@ const Subscription = () => {
               : 1;
             const selectedStores = Math.max(1, Number(storeCounts[plan.id] || currentPlanStoreCount));
             const extraStores = isMulti ? Math.max(0, selectedStores - plan.includedStores) : 0;
-            const extraStorePrice = Number(plan.extraStorePrice || 149);
+            const extraStorePrice = Number(plan.extraStorePrice || 189);
             const monthlyTotal = Number(plan.monthlyPrice || 0) + extraStores * extraStorePrice;
             const displayedPeriod: BillingPeriod = pricingMode === 'yearly' ? 'yearly' : 'monthly';
             const displayedPricing = calculatePeriodPrice(monthlyTotal, displayedPeriod);
@@ -699,7 +699,7 @@ const Subscription = () => {
                     )}
                     {isMulti && (
                       <p className="mt-2 text-sm font-semibold text-white/90">
-                        + {formatCurrency(pricingMode === 'yearly' ? extraStorePrice * 0.8 : extraStorePrice)}/mês por loja adicional
+                        + {formatCurrency(calculatePeriodPrice(extraStorePrice, displayedPeriod).monthlyEquivalent)}/mês por loja adicional
                       </p>
                     )}
                   </div>

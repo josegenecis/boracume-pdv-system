@@ -38,8 +38,8 @@ export type BillingPeriodConfig = {
 export const BILLING_PERIODS: Record<BillingPeriod, BillingPeriodConfig> = {
   monthly: { id: 'monthly', label: 'Mensal', shortLabel: '1 mês', months: 1, discountPercent: 0, asaasCycle: 'MONTHLY' },
   quarterly: { id: 'quarterly', label: 'Trimestral', shortLabel: '3 meses', months: 3, discountPercent: 10, asaasCycle: 'QUARTERLY' },
-  semiannual: { id: 'semiannual', label: 'Semestral', shortLabel: '6 meses', months: 6, discountPercent: 15, asaasCycle: 'SEMIANNUALLY' },
-  yearly: { id: 'yearly', label: 'Anual', shortLabel: '12 meses', months: 12, discountPercent: 20, asaasCycle: 'YEARLY' },
+  semiannual: { id: 'semiannual', label: 'Semestral', shortLabel: '6 meses', months: 6, discountPercent: 10, asaasCycle: 'SEMIANNUALLY' },
+  yearly: { id: 'yearly', label: 'Anual', shortLabel: '12 meses', months: 12, discountPercent: 10, asaasCycle: 'YEARLY' },
 };
 
 export const getBillingPeriodConfig = (period: BillingPeriod) => BILLING_PERIODS[period] || BILLING_PERIODS.monthly;
@@ -122,7 +122,7 @@ const MULTI_FEATURE_GROUPS: PlanFeatureGroup[] = [
   },
   {
     title: 'Contratação',
-    features: ['Uma loja incluída no valor base', 'R$ 149/mês por loja adicional', 'Estrutura preparada para expansão da rede'],
+    features: ['Uma loja incluída no valor base', 'R$ 189/mês por loja adicional', 'Estrutura preparada para expansão da rede'],
   },
   {
     title: 'Recursos em homologação',
@@ -138,8 +138,8 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     name: 'Essencial',
     shortName: 'Essencial',
     description: 'O básico profissional para vender no balcão, no delivery e organizar a operação do dia a dia.',
-    monthlyPrice: 159,
-    annualPrice: 1526.40,
+    monthlyPrice: 189,
+    annualPrice: 2041.20,
     includedStores: 1,
     storeLimit: 1,
     badge: 'Comece organizado',
@@ -163,8 +163,8 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     name: 'Pro',
     shortName: 'Pro',
     description: 'Sistema completo para uma loja com automações, WhatsApp, fiscal, cozinha e inteligência operacional.',
-    monthlyPrice: 229,
-    annualPrice: 2198.40,
+    monthlyPrice: 289,
+    annualPrice: 3121.20,
     includedStores: 1,
     storeLimit: 1,
     featured: true,
@@ -193,12 +193,12 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     name: 'Multi',
     shortName: 'Multi',
     description: 'Tudo do Pro com gestão multilojas, visão consolidada e cobrança por loja adicional.',
-    monthlyPrice: 269,
-    annualPrice: 2582.40,
+    monthlyPrice: 389,
+    annualPrice: 4201.20,
     includedStores: 1,
-    extraStorePrice: 149,
+    extraStorePrice: 189,
     storeLimit: null,
-    badge: '+ R$149 por loja extra',
+    badge: '+ R$189 por loja extra',
     accent: 'purple',
     audience: 'Ideal para redes, grupos, franquias e donos que querem enxergar todas as lojas juntas ou separadas.',
     features: MULTI_FEATURE_GROUPS.flatMap((group) => group.features),
