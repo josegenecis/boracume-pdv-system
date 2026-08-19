@@ -38,7 +38,7 @@ export type BillingPeriodConfig = {
 export const BILLING_PERIODS: Record<BillingPeriod, BillingPeriodConfig> = {
   monthly: { id: 'monthly', label: 'Mensal', shortLabel: '1 mês', months: 1, discountPercent: 0, asaasCycle: 'MONTHLY' },
   quarterly: { id: 'quarterly', label: 'Trimestral', shortLabel: '3 meses', months: 3, discountPercent: 5, asaasCycle: 'QUARTERLY' },
-  semiannual: { id: 'semiannual', label: 'Semestral', shortLabel: '6 meses', months: 6, discountPercent: 5, asaasCycle: 'SEMIANNUALLY' },
+  semiannual: { id: 'semiannual', label: 'Semestral', shortLabel: '6 meses', months: 6, discountPercent: 7, asaasCycle: 'SEMIANNUALLY' },
   yearly: { id: 'yearly', label: 'Anual', shortLabel: '12 meses', months: 12, discountPercent: 10, asaasCycle: 'YEARLY' },
 };
 
