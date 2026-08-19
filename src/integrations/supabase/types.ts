@@ -1574,6 +1574,114 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_plan_changes: {
+        Row: {
+          asaas_payment_id: string | null
+          billing_discount_percent: number
+          charge_amount: number
+          completed_at: string | null
+          created_at: string
+          credit_amount: number
+          from_billing_amount: number | null
+          from_billing_cycle: string
+          from_billing_months: number
+          from_plan_id: number | null
+          from_store_count: number
+          id: string
+          new_asaas_customer_id: string | null
+          new_asaas_subscription_id: string | null
+          new_monthly_value: number
+          old_asaas_subscription_id: string | null
+          old_monthly_value: number
+          payment_method: string
+          period_days: number
+          remaining_days: number
+          status: string
+          to_billing_amount: number | null
+          to_billing_cycle: string
+          to_billing_months: number
+          to_installment_count: number
+          to_plan_id: number
+          to_store_count: number
+          user_id: string
+        }
+        Insert: {
+          asaas_payment_id?: string | null
+          billing_discount_percent?: number
+          charge_amount?: number
+          completed_at?: string | null
+          created_at?: string
+          credit_amount?: number
+          from_billing_amount?: number | null
+          from_billing_cycle?: string
+          from_billing_months?: number
+          from_plan_id?: number | null
+          from_store_count?: number
+          id?: string
+          new_asaas_customer_id?: string | null
+          new_asaas_subscription_id?: string | null
+          new_monthly_value?: number
+          old_asaas_subscription_id?: string | null
+          old_monthly_value?: number
+          payment_method: string
+          period_days?: number
+          remaining_days?: number
+          status?: string
+          to_billing_amount?: number | null
+          to_billing_cycle?: string
+          to_billing_months?: number
+          to_installment_count?: number
+          to_plan_id: number
+          to_store_count?: number
+          user_id: string
+        }
+        Update: {
+          asaas_payment_id?: string | null
+          billing_discount_percent?: number
+          charge_amount?: number
+          completed_at?: string | null
+          created_at?: string
+          credit_amount?: number
+          from_billing_amount?: number | null
+          from_billing_cycle?: string
+          from_billing_months?: number
+          from_plan_id?: number | null
+          from_store_count?: number
+          id?: string
+          new_asaas_customer_id?: string | null
+          new_asaas_subscription_id?: string | null
+          new_monthly_value?: number
+          old_asaas_subscription_id?: string | null
+          old_monthly_value?: number
+          payment_method?: string
+          period_days?: number
+          remaining_days?: number
+          status?: string
+          to_billing_amount?: number | null
+          to_billing_cycle?: string
+          to_billing_months?: number
+          to_installment_count?: number
+          to_plan_id?: number
+          to_store_count?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_plan_changes_from_plan_id_fkey"
+            columns: ["from_plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_plan_changes_to_plan_id_fkey"
+            columns: ["to_plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           additional_store_count: number | null
@@ -1588,6 +1696,7 @@ export type Database = {
           extra_store_price: number | null
           id: string
           installment_count: number
+          payment_method: string | null
           plan_id: number | null
           status: string
           store_count: number | null
@@ -1611,6 +1720,7 @@ export type Database = {
           extra_store_price?: number | null
           id?: string
           installment_count?: number
+          payment_method?: string | null
           plan_id?: number | null
           status: string
           store_count?: number | null
@@ -1634,6 +1744,7 @@ export type Database = {
           extra_store_price?: number | null
           id?: string
           installment_count?: number
+          payment_method?: string | null
           plan_id?: number | null
           status?: string
           store_count?: number | null

@@ -666,6 +666,7 @@ serve(async (req) => {
       additional_store_count: additionalStoreCount,
       extra_store_price: plan.extraStorePrice,
       installment_count: installmentCount,
+      payment_method: paymentMethod,
       billing_cycle: billingPeriod.cycle,
       billing_months: billingPeriod.months,
       billing_discount_percent: billingPeriod.discountPercent,

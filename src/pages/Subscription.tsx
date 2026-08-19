@@ -1,11 +1,12 @@
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Check, Clock, AlertTriangle, Crown, ArrowRight, Store, CreditCard, QrCode, Copy, CalendarDays, Sparkles } from 'lucide-react';
+import { Check, Clock, AlertTriangle, Crown, ArrowLeft, ArrowRight, Store, CreditCard, QrCode, Copy, CalendarDays, Sparkles } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -60,6 +61,7 @@ const emptyCardForm = {
 };
 
 const Subscription = () => {
+  const navigate = useNavigate();
   const { subscription, refreshSubscription, user, accountUser, billingOwnerId } = useAuth();
   const { toast } = useToast();
   const [loadingPlanId, setLoadingPlanId] = useState<number | null>(null);
@@ -73,6 +75,7 @@ const Subscription = () => {
   const [cardForm, setCardForm] = useState(emptyCardForm);
   const [checkoutError, setCheckoutError] = useState('');
   const [billingDocument, setBillingDocument] = useState('');
+  const [lastPaidPaymentMethod, setLastPaidPaymentMethod] = useState<PaymentMethod | null>(null);
   const [pricingMode, setPricingMode] = useState<'monthly' | 'yearly'>('monthly');
   const [periodOffer, setPeriodOffer] = useState<PeriodOffer | null>(null);
   const checkoutInFlightRef = useRef(false);
@@ -83,6 +86,35 @@ const Subscription = () => {
     // O contexto recria esta função; esta leitura deve acontecer somente ao abrir a página.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!accountUser?.id || (billingOwnerId && accountUser.id !== billingOwnerId)) return;
+    if (subscription?.payment_method === 'PIX' || subscription?.payment_method === 'CREDIT_CARD') {
+      setLastPaidPaymentMethod(subscription.payment_method);
+      return;
+    }
+
+    let stopped = false;
+    const loadLastPaymentMethod = async () => {
+      const { data } = await supabase
+        .from('subscription_plan_changes')
+        .select('payment_method')
+        .eq('user_id', accountUser.id)
+        .eq('status', 'paid')
+        .order('completed_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!stopped && (data?.payment_method === 'PIX' || data?.payment_method === 'CREDIT_CARD')) {
+        setLastPaidPaymentMethod(data.payment_method);
+      }
+    };
+
+    void loadLastPaymentMethod();
+    return () => {
+      stopped = true;
+    };
+  }, [accountUser?.id, billingOwnerId, subscription?.payment_method]);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('choosePlan') !== '1') return;
@@ -360,6 +392,7 @@ const Subscription = () => {
       description: plan.description,
       audience: plan.audience,
       features: plan.features || [],
+      featureGroups: plan.featureGroups || [],
       modules: plan.modules || [],
       badge: plan.badge || '',
       featured: Boolean(plan.featured),
@@ -440,6 +473,22 @@ const Subscription = () => {
     const recurringAmount = Number(subscription.billing_amount)
       || calculatePeriodPrice(monthlyTotal, currentPeriod).totalValue;
     const currentInstallments = Math.max(1, Number(subscription.installment_count || 1));
+    const storedPaymentMethod = subscription.payment_method || lastPaidPaymentMethod;
+    const paymentMethodLabel = storedPaymentMethod === 'PIX'
+      ? 'PIX'
+      : storedPaymentMethod === 'CREDIT_CARD'
+        ? 'Cartão de crédito'
+        : 'Não registrada';
+    const subscriptionStatus = String(subscription.status || '').toLowerCase();
+    const statusLabel = subscriptionStatus === 'active'
+      ? 'Ativo'
+      : subscriptionStatus === 'pending'
+        ? 'Aguardando pagamento'
+        : subscriptionStatus === 'past_due'
+          ? 'Pagamento atrasado'
+          : subscriptionStatus === 'canceled'
+            ? 'Cancelado'
+            : 'Em processamento';
 
     return (
       <Card className={`mb-8 overflow-hidden border-2 ${display.palette.border} ${display.palette.glow}`}>
@@ -450,7 +499,7 @@ const Subscription = () => {
               Seu Plano Atual
             </CardTitle>
             <Badge variant="outline" className="border-white/30 bg-white/15 text-white">
-              Ativo
+              {statusLabel}
             </Badge>
           </div>
         </CardHeader>
@@ -467,40 +516,37 @@ const Subscription = () => {
               <p className="text-xs text-slate-500">por período {currentPeriodConfig.label.toLowerCase()}</p>
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-4 mt-5 sm:grid-cols-2">
-            <div>
-              <p className="text-sm font-medium text-slate-700">Válido até</p>
-              <p className="text-sm text-slate-600">{formatDate(subscription.current_period_end)}</p>
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3">
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><CalendarDays className="h-4 w-4" /> Vencimento</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800">{formatDate(subscription.current_period_end)}</p>
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-700">Próxima cobrança</p>
-              <p className="text-sm text-slate-600">
-                {formatCurrency(recurringAmount)} · {currentPeriodConfig.label}
-              </p>
+            <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3">
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><CreditCard className="h-4 w-4" /> Próxima cobrança</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800">{formatCurrency(recurringAmount)}</p>
+              <p className="text-xs text-slate-500">em {formatDate(subscription.current_period_end)}</p>
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-700">Lojas incluídas</p>
-              <p className="text-sm text-slate-600">
+            <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3">
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><CreditCard className="h-4 w-4" /> Pagamento</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800">{paymentMethodLabel}</p>
+              <p className="text-xs text-slate-500">Ciclo {currentPeriodConfig.label.toLowerCase()}</p>
+            </div>
+            <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3">
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><Store className="h-4 w-4" /> Unidades</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800">
                 {currentPlan.slug === 'multi'
                   ? `${storeCount} loja${storeCount === 1 ? '' : 's'}${extraStores > 0 ? ` (${extraStores} extra)` : ''}`
                   : 'Uma loja'}
               </p>
             </div>
             {currentInstallments > 1 && (
-              <div>
-                <p className="text-sm font-medium text-slate-700">Pagamento do período</p>
-                <p className="text-sm text-slate-600">
+              <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 sm:col-span-2 lg:col-span-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Parcelamento do período</p>
+                <p className="mt-1 text-sm font-semibold text-slate-800">
                   {currentInstallments}x de aproximadamente {formatCurrency(recurringAmount / currentInstallments)}
                 </p>
               </div>
             )}
-          </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            {display.features.slice(0, 3).map((feature) => (
-              <div key={feature} className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-700">
-                {feature}
-              </div>
-            ))}
           </div>
         </CardContent>
       </Card>
@@ -518,24 +564,43 @@ const Subscription = () => {
     : 0;
   const maxCheckoutInstallments = Math.min(12, Math.max(1, Number(checkoutPlan?.billingMonths || 1)));
 
+  const backToSystemButton = (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={() => navigate('/dashboard')}
+      className="gap-2 border-slate-300 bg-white text-[#003223] shadow-sm hover:bg-slate-50 hover:text-[#003223]"
+      aria-label="Voltar ao painel do sistema"
+    >
+      <ArrowLeft className="h-4 w-4" />
+      Voltar ao sistema
+    </Button>
+  );
+
   if (accountUser && billingOwnerId && accountUser.id !== billingOwnerId) {
     return (
-      <Card className="mx-auto max-w-2xl overflow-hidden border-[#B8D7CA] shadow-lg">
-        <div className="h-2 bg-gradient-to-r from-[#003223] via-[#087A55] to-[#FF6400]" />
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-[#003223]"><Store className="h-5 w-5 text-[#087A55]" /> Assinatura administrada pela matriz</CardTitle>
-          <CardDescription>Esta unidade utiliza o plano Multi da rede. Alterações de plano, quantidade de lojas e pagamentos ficam disponíveis somente para a conta principal.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Badge className="bg-[#EAF7F0] text-[#087A55] hover:bg-[#EAF7F0]">Unidade vinculada e ativa</Badge>
-        </CardContent>
-      </Card>
+      <div className="min-h-full bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] px-4 py-8">
+        <div className="mx-auto max-w-2xl">
+          <div className="mb-6">{backToSystemButton}</div>
+          <Card className="overflow-hidden border-[#B8D7CA] shadow-lg">
+            <div className="h-2 bg-gradient-to-r from-[#003223] via-[#087A55] to-[#FF6400]" />
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-[#003223]"><Store className="h-5 w-5 text-[#087A55]" /> Assinatura administrada pela matriz</CardTitle>
+              <CardDescription>Esta unidade utiliza o plano Multi da rede. Alterações de plano, quantidade de lojas e pagamentos ficam disponíveis somente para a conta principal.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Badge className="bg-[#EAF7F0] text-[#087A55] hover:bg-[#EAF7F0]">Unidade vinculada e ativa</Badge>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] py-8 px-4">
+    <div className="min-h-full bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] px-2 py-4 sm:px-4 sm:py-6">
       <div className="mx-auto max-w-6xl">
+        <div className="mb-6">{backToSystemButton}</div>
         <div className="mb-10 text-center">
           <Badge className="mb-4 bg-[#FFF1E8] text-[#C14E00] hover:bg-[#FFF1E8]">Planos PopSystem</Badge>
           <h1 className="mx-auto max-w-4xl text-3xl font-bold tracking-tight text-[#003223] md:text-5xl">
@@ -569,7 +634,7 @@ const Subscription = () => {
 
         {isTrialSubscription && renderTrialInfo()}
 
-        {subscription?.status === 'active' && renderCurrentPlan()}
+        {subscription?.plan_id && !isTrialSubscription && renderCurrentPlan()}
 
         <div id="planos" className="mb-10 scroll-mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
           {PLAN_CATALOG.map((plan) => {
@@ -694,14 +759,38 @@ const Subscription = () => {
                     </div>
                   )}
 
-                  <ul className="space-y-3">
-                    {display.features.map((feature, index) => (
-                      <li key={index} className="flex items-start">
-                        <Check className={`mr-3 mt-0.5 h-5 w-5 flex-shrink-0 ${display.palette.check}`} />
-                        <span className="text-sm leading-6 text-slate-700">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="space-y-5">
+                    {display.featureGroups.map((group) => {
+                      const isHomologation = group.status === 'homologation';
+                      return (
+                        <section
+                          key={group.title}
+                          className={isHomologation ? 'rounded-2xl border border-amber-200 bg-amber-50 p-4' : undefined}
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <h4 className={`text-sm font-bold ${isHomologation ? 'text-amber-900' : 'text-slate-900'}`}>
+                              {group.title}
+                            </h4>
+                            {isHomologation && (
+                              <Badge variant="outline" className="border-amber-300 bg-white text-amber-700">
+                                Em homologação
+                              </Badge>
+                            )}
+                          </div>
+                          <ul className="space-y-2.5">
+                            {group.features.map((feature) => (
+                              <li key={feature} className="flex items-start">
+                                {isHomologation
+                                  ? <Clock className="mr-3 mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                                  : <Check className={`mr-3 mt-0.5 h-4 w-4 flex-shrink-0 ${display.palette.check}`} />}
+                                <span className={`text-sm leading-5 ${isHomologation ? 'text-amber-800' : 'text-slate-700'}`}>{feature}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </section>
+                      );
+                    })}
+                  </div>
                 </CardContent>
                 
                 <CardFooter className="pb-6 pt-4">
