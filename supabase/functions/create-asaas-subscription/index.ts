@@ -24,14 +24,14 @@ const billingPeriods: Record<BillingPeriod, {
 }> = {
   monthly: { months: 1, discountPercent: 0, cycle: "MONTHLY", label: "mensal" },
   quarterly: { months: 3, discountPercent: 10, cycle: "QUARTERLY", label: "trimestral" },
-  semiannual: { months: 6, discountPercent: 15, cycle: "SEMIANNUALLY", label: "semestral" },
-  yearly: { months: 12, discountPercent: 20, cycle: "YEARLY", label: "anual" },
+  semiannual: { months: 6, discountPercent: 10, cycle: "SEMIANNUALLY", label: "semestral" },
+  yearly: { months: 12, discountPercent: 10, cycle: "YEARLY", label: "anual" },
 };
 
 const fallbackPlans: Record<number, PlanConfig> = {
-  1: { id: 1, name: "Essencial", price: 159, includedStores: 1, extraStorePrice: 0 },
-  2: { id: 2, name: "Pro", price: 229, includedStores: 1, extraStorePrice: 0 },
-  3: { id: 3, name: "Multi", price: 269, includedStores: 1, extraStorePrice: 149 },
+  1: { id: 1, name: "Essencial", price: 189, includedStores: 1, extraStorePrice: 0 },
+  2: { id: 2, name: "Pro", price: 289, includedStores: 1, extraStorePrice: 0 },
+  3: { id: 3, name: "Multi", price: 389, includedStores: 1, extraStorePrice: 189 },
 };
 
 const money = (value: unknown) => Number(Number(value || 0).toFixed(2));

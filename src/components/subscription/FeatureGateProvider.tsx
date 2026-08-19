@@ -86,7 +86,7 @@ export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ c
                   {requiredPlan && (
                     <div className="mt-1 text-xs leading-5 text-slate-600">
                       {isMultiPlan
-                        ? `Liberado no plano Multi. O valor base é R$ ${requiredPlan.monthlyPrice.toFixed(2)} e cada loja adicional soma R$ ${(requiredPlan.extraStorePrice || 149).toFixed(2)}.`
+                        ? `Liberado no plano Multi. O valor base é R$ ${requiredPlan.monthlyPrice.toFixed(2)} e cada loja adicional soma R$ ${(requiredPlan.extraStorePrice || 189).toFixed(2)}.`
                         : `Incluído no plano ${requiredPlan.name}, com mensalidade de R$ ${requiredPlan.monthlyPrice.toFixed(2)}.`}
                     </div>
                   )}

@@ -57,14 +57,14 @@ const channels = [
 const plans = [
   {
     name: 'Essencial',
-    price: '159',
+    price: '189',
     description: 'Para colocar a operação em ordem e começar a vender com controle.',
     items: ['PDV e fechamento de caixa', 'Cardápio digital e QR Code', 'Pedidos online e delivery', 'Mesas e comandas básicas', 'Relatórios essenciais'],
     tone: 'green',
   },
   {
     name: 'Pro',
-    price: '229',
+    price: '289',
     description: 'Para quem quer gestão completa, produtividade e inteligência no dia a dia.',
     items: ['Tudo do Essencial', 'KDS e app do garçom', 'Estoque e ficha técnica', 'Financeiro, CMV e relatórios', 'Marketing, WhatsApp e IA'],
     tone: 'orange',
@@ -72,9 +72,9 @@ const plans = [
   },
   {
     name: 'Multi',
-    price: '269',
+    price: '389',
     description: 'Para redes que precisam controlar cada unidade sem perder a visão do grupo.',
-    items: ['Tudo do Pro', 'Uma loja incluída', 'Painel consolidado e por unidade', 'Permissões por loja', 'R$ 149 por loja adicional'],
+    items: ['Tudo do Pro', 'Uma loja incluída', 'Painel consolidado e por unidade', 'Permissões por loja', 'R$ 189 por loja adicional'],
     tone: 'purple',
   },
 ];

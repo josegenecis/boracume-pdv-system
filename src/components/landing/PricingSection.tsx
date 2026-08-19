@@ -24,7 +24,7 @@ const PricingSection = () => {
             Planos para <span className="text-boracume-orange">começar, crescer e operar em rede</span>.
           </h2>
           <p className="text-xl text-slate-600 mb-8">
-            Essencial para começar, Pro para operação completa e Multi para redes com R$149 por loja adicional.
+            Essencial para começar, Pro para operação completa e Multi para redes com R$189 por loja adicional.
           </p>
 
           <div className="flex items-center justify-center gap-4">
@@ -38,7 +38,7 @@ const PricingSection = () => {
             >
               <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${isAnnual ? 'translate-x-8' : ''}`}></div>
             </button>
-            <span className={`text-sm font-semibold ${isAnnual ? 'text-slate-900' : 'text-slate-500'}`}>Anual · 20% OFF</span>
+            <span className={`text-sm font-semibold ${isAnnual ? 'text-slate-900' : 'text-slate-500'}`}>Anual · 10% OFF</span>
           </div>
         </div>
 
@@ -80,7 +80,7 @@ const PricingSection = () => {
                 )}
                 {plan.extraStorePrice && (
                   <p className="text-xs text-purple-700 font-semibold mt-2">
-                    + {formatPrice(isAnnual ? plan.extraStorePrice * 0.8 : plan.extraStorePrice)} por loja adicional/mês
+                    + {formatPrice(isAnnual ? plan.extraStorePrice * 0.9 : plan.extraStorePrice)} por loja adicional/mês
                   </p>
                 )}
               </div>
