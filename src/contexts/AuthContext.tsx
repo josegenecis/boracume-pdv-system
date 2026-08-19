@@ -51,6 +51,7 @@ interface Subscription {
   billing_discount_percent?: number;
   billing_amount?: number;
   installment_count?: number;
+  payment_method?: 'PIX' | 'CREDIT_CARD' | null;
   asaas_environment?: 'sandbox' | 'production';
   billing_exempt?: boolean;
   access_override_until?: string | null;

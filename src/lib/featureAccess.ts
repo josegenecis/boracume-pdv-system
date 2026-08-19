@@ -222,9 +222,22 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
 
 export const getFeatureDefinition = (feature: FeatureKey) => FEATURE_DEFINITIONS[feature];
 
-// Temporarily keep paid plan enforcement disabled so restaurants can access the system
-// while billing is being stabilized. Coming-soon modules remain blocked.
-export const BILLING_ENFORCEMENT_ENABLED = false;
+// Trials receive the complete PopSystem experience. After the trial, paid accounts
+// are restricted to the features included in the contracted plan.
+export const BILLING_ENFORCEMENT_ENABLED = true;
+
+const isActiveTrial = (
+  subscription?: { status?: string | null; trial_end?: string | null } | null
+) => {
+  const status = String(subscription?.status || '').toLowerCase();
+  const isTrial = status.includes('trial') || status === 'teste';
+
+  if (!isTrial) return false;
+  if (!subscription?.trial_end) return true;
+
+  const trialEnd = new Date(subscription.trial_end).getTime();
+  return Number.isFinite(trialEnd) && trialEnd >= Date.now();
+};
 
 export const getRequiredPlan = (feature: FeatureKey) => {
   const definition = getFeatureDefinition(feature);
@@ -238,20 +251,19 @@ export const hasFeatureAccess = (
   const definition = getFeatureDefinition(feature);
   if (definition.comingSoon) return false;
 
+  // Every active trial behaves like the highest plan, including multi-store tools.
+  if (isActiveTrial(subscription)) return true;
+
   if (definition.requiresPaidMulti) {
     const status = String(subscription?.status || '').toLowerCase();
-    return status === 'active' && Number(subscription?.plan_id || 0) >= 3;
+    return ['active', 'paid', 'trialing_paid', 'current'].includes(status)
+      && Number(subscription?.plan_id || 0) >= 3;
   }
 
   if (!BILLING_ENFORCEMENT_ENABLED) return true;
 
   const status = String(subscription?.status || '').toLowerCase();
-  if (status.includes('trial')) {
-    if (!subscription?.trial_end) return true;
-    return new Date(subscription.trial_end).getTime() >= Date.now();
-  }
-
-  if (status !== 'active') return false;
+  if (!['active', 'paid', 'trialing_paid', 'current'].includes(status)) return false;
   return Number(subscription?.plan_id || 0) >= definition.requiredPlanId;
 };
 

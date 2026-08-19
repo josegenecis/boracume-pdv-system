@@ -14,7 +14,14 @@ export type PlanCatalogItem = {
   accent: 'green' | 'orange' | 'purple';
   audience: string;
   features: string[];
+  featureGroups: PlanFeatureGroup[];
   modules: string[];
+};
+
+export type PlanFeatureGroup = {
+  title: string;
+  features: string[];
+  status?: 'available' | 'homologation';
 };
 
 export type BillingPeriod = 'monthly' | 'quarterly' | 'semiannual' | 'yearly';
@@ -50,6 +57,80 @@ export const calculatePeriodPrice = (monthlyValue: number, period: BillingPeriod
   };
 };
 
+const ESSENCIAL_FEATURE_GROUPS: PlanFeatureGroup[] = [
+  {
+    title: 'Vendas e atendimento',
+    features: ['PDV completo', 'Pedidos de balcão, retirada e delivery', 'Mesas e comandas básicas'],
+  },
+  {
+    title: 'Cardápio e pagamentos',
+    features: ['Cardápio digital com link e QR Code', 'PIX e cadastro de formas de pagamento'],
+  },
+  {
+    title: 'Gestão da operação',
+    features: ['Fechamento de caixa', 'Financeiro básico e despesas', 'Relatórios principais'],
+  },
+  {
+    title: 'Estoque e acesso',
+    features: ['Controle de estoque essencial', 'Uma loja incluída', 'Suporte PopSystem'],
+  },
+];
+
+const PRO_FEATURE_GROUPS: PlanFeatureGroup[] = [
+  {
+    title: 'Tudo do Essencial',
+    features: ['Todos os recursos de venda, atendimento, cardápio, caixa e relatórios do plano Essencial'],
+  },
+  {
+    title: 'Atendimento e produção',
+    features: ['Mesas, comandas e app garçom', 'KDS, tela de cozinha e impressão', 'App desktop e integração com hardware'],
+  },
+  {
+    title: 'Estoque e rentabilidade',
+    features: ['Estoque por produto e insumo', 'Ficha técnica e baixa automática', 'CMV e relatórios gerenciais'],
+  },
+  {
+    title: 'Relacionamento e crescimento',
+    features: ['WhatsApp e campanhas', 'Marketing, cupons e fidelidade', 'IA para cardápio e produtividade'],
+  },
+  {
+    title: 'Pagamentos e integrações',
+    features: ['PIX, Mercado Pago e formas de pagamento', 'Integrações operacionais disponíveis no sistema'],
+  },
+  {
+    title: 'Recursos em homologação',
+    status: 'homologation',
+    features: [
+      'Emissão fiscal completa de NFC-e e NF-e para todos os regimes tributários',
+      'Consulta financeira exata e validação completa de ativos da Meta',
+    ],
+  },
+];
+
+const MULTI_FEATURE_GROUPS: PlanFeatureGroup[] = [
+  {
+    title: 'Tudo do Pro',
+    features: ['Todos os recursos disponíveis no plano Pro'],
+  },
+  {
+    title: 'Gestão de unidades',
+    features: ['Cadastro e operação de múltiplas lojas', 'Troca rápida entre unidades', 'Operação e estoque separados por loja'],
+  },
+  {
+    title: 'Visão da rede',
+    features: ['Painel consolidado e por unidade', 'Relatórios financeiros por loja ou rede', 'Usuários e permissões por unidade'],
+  },
+  {
+    title: 'Contratação',
+    features: ['Uma loja incluída no valor base', 'R$ 149/mês por loja adicional', 'Estrutura preparada para expansão da rede'],
+  },
+  {
+    title: 'Recursos em homologação',
+    status: 'homologation',
+    features: ['Recursos fiscais e financeiros da Meta descritos no plano Pro permanecem em homologação'],
+  },
+];
+
 export const PLAN_CATALOG: PlanCatalogItem[] = [
   {
     id: 1,
@@ -64,18 +145,8 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     badge: 'Comece organizado',
     accent: 'green',
     audience: 'Ideal para restaurantes pequenos, lanchonetes, cafeterias e operações que precisam sair do papel.',
-    features: [
-      'PDV completo e fechamento de caixa',
-      'Cardápio digital com link e QR Code',
-      'Pedidos online, balcão, retirada e delivery',
-      'Mesas e comandas básicas',
-      'Controle de estoque essencial',
-      'Financeiro básico, caixa e despesas',
-      'Relatórios principais da operação',
-      'PIX e formas de pagamento',
-      'Suporte PopSystem',
-      'Uma loja incluída'
-    ],
+    features: ESSENCIAL_FEATURE_GROUPS.flatMap((group) => group.features),
+    featureGroups: ESSENCIAL_FEATURE_GROUPS,
     modules: [
       'PDV',
       'Cardápio Digital',
@@ -100,20 +171,8 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     badge: 'Completo para uma loja',
     accent: 'orange',
     audience: 'Ideal para restaurantes, lanchonetes, açaís, pizzarias e mercados que operam uma unidade.',
-    features: [
-      'PDV completo e fechamento de caixa',
-      'Cardápio digital com link e QR Code',
-      'Pedidos online, balcão, retirada e delivery',
-      'Mesas, comandas e app garçom',
-      'KDS, tela de cozinha e impressão',
-      'Estoque, ingredientes e ficha técnica',
-      'Financeiro, caixa, despesas e relatórios',
-      'WhatsApp, campanhas e envio em massa',
-      'PIX, Mercado Pago e formas de pagamento',
-      'Fiscal/NFC-e, app desktop e hardware',
-      'IA para cardápio, marketing e produtividade',
-      'Uma loja incluída'
-    ],
+    features: PRO_FEATURE_GROUPS.flatMap((group) => group.features),
+    featureGroups: PRO_FEATURE_GROUPS,
     modules: [
       'PDV',
       'Mesas',
@@ -142,18 +201,8 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     badge: '+ R$149 por loja extra',
     accent: 'purple',
     audience: 'Ideal para redes, grupos, franquias e donos que querem enxergar todas as lojas juntas ou separadas.',
-    features: [
-      'Tudo do plano Pro',
-      'Uma loja incluída no valor base',
-      'R$149/mês por loja adicional',
-      'Cadastro e operação de múltiplas lojas',
-      'Painel inicial consolidado e por unidade',
-      'Relatórios financeiros por loja ou rede',
-      'Estoque, pedidos e operação separados por loja',
-      'Usuários e permissões por unidade',
-      'Troca rápida entre lojas',
-      'Preparado para expansão de redes'
-    ],
+    features: MULTI_FEATURE_GROUPS.flatMap((group) => group.features),
+    featureGroups: MULTI_FEATURE_GROUPS,
     modules: [
       'Multilojas',
       'Painel consolidado',

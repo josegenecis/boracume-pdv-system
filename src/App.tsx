@@ -170,7 +170,7 @@ function AppContent() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/lojas/convite" element={<StoreInvitation />} />
       <Route path="/operator-login" element={<RouteGuard><OperatorLogin /></RouteGuard>} />
-      <Route path="/subscription" element={<RouteGuard><Subscription /></RouteGuard>} />
+      <Route path="/subscription" element={<RouteGuard><DashboardLayout><Subscription /></DashboardLayout></RouteGuard>} />
       
       {/* Rota específica para o aplicativo desktop - sem layout padrão */}
       <Route element={<RouteGuard><OperatorGate><Outlet /></OperatorGate></RouteGuard>}>

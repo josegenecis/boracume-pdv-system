@@ -138,6 +138,7 @@ serve(async (req) => {
           billing_discount_percent: Number(planChange.billing_discount_percent || 0),
           billing_amount: Number(planChange.to_billing_amount || planChange.new_monthly_value || 0),
           installment_count: Math.max(1, Number(planChange.to_installment_count || 1)),
+          payment_method: planChange.payment_method,
           current_period_start: periodStart.toISOString(),
           current_period_end: periodEnd.toISOString(),
           access_override_until: null,
