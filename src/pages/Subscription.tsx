@@ -600,7 +600,6 @@ const Subscription = () => {
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] px-2 py-4 sm:px-4 sm:py-6">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-6">{backToSystemButton}</div>
         <div className="mb-10 text-center">
           <Badge className="mb-4 bg-[#FFF1E8] text-[#C14E00] hover:bg-[#FFF1E8]">Planos PopSystem</Badge>
           <h1 className="mx-auto max-w-4xl text-3xl font-bold tracking-tight text-[#003223] md:text-5xl">
@@ -609,26 +608,30 @@ const Subscription = () => {
           <p className="mx-auto mt-4 max-w-3xl text-base text-slate-600 md:text-lg">
             Assine pelo Asaas e libere o PopSystem conforme o plano escolhido.
           </p>
-          <div className="mx-auto mt-7 inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Período dos preços">
-            <button
-              type="button"
-              onClick={() => setPricingMode('monthly')}
-              aria-pressed={pricingMode === 'monthly'}
-              className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition ${pricingMode === 'monthly' ? 'bg-[#003223] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              Mensal
-            </button>
-            <button
-              type="button"
-              onClick={() => setPricingMode('yearly')}
-              aria-pressed={pricingMode === 'yearly'}
-              className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition ${pricingMode === 'yearly' ? 'bg-[#003223] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              Anual
-              <span className={`rounded-full px-2 py-0.5 text-xs ${pricingMode === 'yearly' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
-                -20%
-              </span>
-            </button>
+          <div className="mt-7 grid items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
+            <div className="sm:justify-self-start">{backToSystemButton}</div>
+            <div className="inline-flex justify-self-center rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Período dos preços">
+              <button
+                type="button"
+                onClick={() => setPricingMode('monthly')}
+                aria-pressed={pricingMode === 'monthly'}
+                className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition ${pricingMode === 'monthly' ? 'bg-[#003223] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Mensal
+              </button>
+              <button
+                type="button"
+                onClick={() => setPricingMode('yearly')}
+                aria-pressed={pricingMode === 'yearly'}
+                className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition ${pricingMode === 'yearly' ? 'bg-[#003223] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Anual
+                <span className={`rounded-full px-2 py-0.5 text-xs ${pricingMode === 'yearly' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
+                  -10%
+                </span>
+              </button>
+            </div>
+            <div className="hidden sm:block" aria-hidden="true" />
           </div>
         </div>
 

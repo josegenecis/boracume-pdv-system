@@ -24,7 +24,7 @@ const billingPeriods: Record<BillingPeriod, {
 }> = {
   monthly: { months: 1, discountPercent: 0, cycle: "MONTHLY", label: "mensal" },
   quarterly: { months: 3, discountPercent: 5, cycle: "QUARTERLY", label: "trimestral" },
-  semiannual: { months: 6, discountPercent: 5, cycle: "SEMIANNUALLY", label: "semestral" },
+  semiannual: { months: 6, discountPercent: 7, cycle: "SEMIANNUALLY", label: "semestral" },
   yearly: { months: 12, discountPercent: 10, cycle: "YEARLY", label: "anual" },
 };
 
