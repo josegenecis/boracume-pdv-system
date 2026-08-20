@@ -53,6 +53,7 @@ import { pwaScaleService } from '@/services/ScaleService';
 import BarcodeCameraScanner from '@/components/devices/BarcodeCameraScanner';
 import PageContentSkeleton from '@/components/ui/page-content-skeleton';
 import { applyEffectivePrices } from '@/services/pricingEngine';
+import { warmImageCache } from '@/utils/imageCache';
 
 interface Product {
   id: string;
@@ -111,6 +112,55 @@ const ProductCardImage: React.FC<{ product: Product }> = ({ product }) => {
 interface CategoryConfig extends PizzaCategoryConfig {
   id: string;
   name: string;
+}
+
+type PdvCatalogSnapshot = {
+  savedAt: number;
+  products: Product[];
+  categories: CategoryConfig[];
+};
+
+const PDV_CATALOG_CACHE_PREFIX = 'popsystem_pdv_catalog_v1';
+const PDV_CATALOG_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const pdvCatalogMemory = new Map<string, PdvCatalogSnapshot>();
+
+function getPdvCatalogCacheKey(userId: string) {
+  return `${PDV_CATALOG_CACHE_PREFIX}:${userId}`;
+}
+
+function readPdvCatalogCache(userId: string): PdvCatalogSnapshot | null {
+  const memorySnapshot = pdvCatalogMemory.get(userId);
+  if (memorySnapshot && Date.now() - memorySnapshot.savedAt <= PDV_CATALOG_CACHE_TTL_MS) {
+    return memorySnapshot;
+  }
+
+  try {
+    const raw = localStorage.getItem(getPdvCatalogCacheKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PdvCatalogSnapshot;
+    if (!Array.isArray(parsed.products) || !Array.isArray(parsed.categories)) return null;
+    if (Date.now() - Number(parsed.savedAt || 0) > PDV_CATALOG_CACHE_TTL_MS) return null;
+    pdvCatalogMemory.set(userId, parsed);
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePdvCatalogCache(userId: string, patch: Partial<Pick<PdvCatalogSnapshot, 'products' | 'categories'>>) {
+  if (!userId) return;
+  const current = readPdvCatalogCache(userId);
+  const snapshot: PdvCatalogSnapshot = {
+    savedAt: Date.now(),
+    products: patch.products ?? current?.products ?? [],
+    categories: patch.categories ?? current?.categories ?? [],
+  };
+  pdvCatalogMemory.set(userId, snapshot);
+  try {
+    localStorage.setItem(getPdvCatalogCacheKey(userId), JSON.stringify(snapshot));
+  } catch {
+    // O cache em memoria ainda evita recarga durante a sessao.
+  }
 }
 
 interface ProductVariation {
@@ -388,12 +438,25 @@ const PDV = () => {
   };
 
   useEffect(() => {
-    if (user) {
-      fetchData();
+    if (user?.id) {
+      const cachedCatalog = readPdvCatalogCache(user.id);
+      if (cachedCatalog) {
+        setProducts(cachedCatalog.products);
+        setCategories(cachedCatalog.categories);
+        warmImageCache(cachedCatalog.products.map((product) => product.image_url));
+        hasLoadedDataRef.current = true;
+        setLoading(false);
+        void fetchData({ background: true });
+      } else {
+        hasLoadedDataRef.current = false;
+        setProducts([]);
+        setCategories([]);
+        void fetchData();
+      }
       fetchOpenCashSession();
       checkFirstOperator();
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id || draftRestoredUserIdRef.current === user.id) return;
@@ -1085,6 +1148,8 @@ const PDV = () => {
       if (error) throw error;
       const pricedProducts = await applyEffectivePrices((data || []) as Product[], user?.id || '', 'pdv');
       setProducts(pricedProducts);
+      warmImageCache(pricedProducts.map((product) => product.image_url));
+      if (user?.id) writePdvCatalogCache(user.id, { products: pricedProducts });
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
       if (!hasLoadedDataRef.current) setProducts([]);
@@ -1756,7 +1821,9 @@ const PDV = () => {
       }
 
       if (error) throw error;
-      setCategories(((data || []) as any[]).map((category) => enrichCategoryWithMetadata(category)) as CategoryConfig[]);
+      const nextCategories = ((data || []) as any[]).map((category) => enrichCategoryWithMetadata(category)) as CategoryConfig[];
+      setCategories(nextCategories);
+      if (user?.id) writePdvCatalogCache(user.id, { categories: nextCategories });
     } catch (error) {
       console.error('Erro ao carregar categorias do PDV:', error);
       if (!hasLoadedDataRef.current) setCategories([]);
