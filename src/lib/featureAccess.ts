@@ -117,7 +117,7 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
     key: 'finance',
     name: 'Financeiro',
     description: 'Caixa, despesas e visão financeira.',
-    requiredPlanId: 2,
+    requiredPlanId: 1,
   },
   cmv: {
     key: 'cmv',
@@ -239,6 +239,22 @@ const isActiveTrial = (
   return Number.isFinite(trialEnd) && trialEnd >= Date.now();
 };
 
+const hasActiveAccessOverride = (
+  subscription?: { access_override_until?: string | null } | null
+) => {
+  if (!subscription?.access_override_until) return false;
+  const accessOverrideEnd = new Date(subscription.access_override_until).getTime();
+  return Number.isFinite(accessOverrideEnd) && accessOverrideEnd >= Date.now();
+};
+
+const hasEligibleSubscriptionStatus = (
+  subscription?: { status?: string | null; access_override_until?: string | null } | null
+) => {
+  const status = String(subscription?.status || '').toLowerCase();
+  return ['active', 'paid', 'trialing_paid', 'current'].includes(status)
+    || hasActiveAccessOverride(subscription);
+};
+
 export const getRequiredPlan = (feature: FeatureKey) => {
   const definition = getFeatureDefinition(feature);
   return getPlanCatalogItem(definition.requiredPlanId) || PLAN_CATALOG[0];
@@ -246,7 +262,12 @@ export const getRequiredPlan = (feature: FeatureKey) => {
 
 export const hasFeatureAccess = (
   feature: FeatureKey,
-  subscription?: { status?: string | null; plan_id?: number | null; trial_end?: string | null } | null
+  subscription?: {
+    status?: string | null;
+    plan_id?: number | null;
+    trial_end?: string | null;
+    access_override_until?: string | null;
+  } | null
 ) => {
   const definition = getFeatureDefinition(feature);
   if (definition.comingSoon) return false;
@@ -255,15 +276,13 @@ export const hasFeatureAccess = (
   if (isActiveTrial(subscription)) return true;
 
   if (definition.requiresPaidMulti) {
-    const status = String(subscription?.status || '').toLowerCase();
-    return ['active', 'paid', 'trialing_paid', 'current'].includes(status)
+    return hasEligibleSubscriptionStatus(subscription)
       && Number(subscription?.plan_id || 0) >= 3;
   }
 
   if (!BILLING_ENFORCEMENT_ENABLED) return true;
 
-  const status = String(subscription?.status || '').toLowerCase();
-  if (!['active', 'paid', 'trialing_paid', 'current'].includes(status)) return false;
+  if (!hasEligibleSubscriptionStatus(subscription)) return false;
   return Number(subscription?.plan_id || 0) >= definition.requiredPlanId;
 };
 
