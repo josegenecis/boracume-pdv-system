@@ -68,7 +68,7 @@ const ESSENCIAL_FEATURE_GROUPS: PlanFeatureGroup[] = [
   },
   {
     title: 'Gestão da operação',
-    features: ['Fechamento de caixa', 'Financeiro básico e despesas', 'Relatórios principais', 'Motoboys e entregas'],
+    features: ['Fechamento de caixa', 'Financeiro básico e despesas', 'Relatórios principais', 'Usuários, equipe e permissões', 'Motoboys e entregas'],
   },
   {
     title: 'Estoque, impressão e acesso',
@@ -155,6 +155,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
       'Estoque',
       'Financeiro',
       'Relatórios',
+      'Usuários e Equipe',
       'WhatsApp Bot',
       'Motoboys e Entregas',
       'App Desktop',

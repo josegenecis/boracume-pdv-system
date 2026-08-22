@@ -54,7 +54,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { PrinterService } from '@/utils/printerService';
-import { getLocalOperatorSession, canCancelOrder } from '@/services/operatorAuth';
+import { canCancelOrder, canCloseCash, canMoveCash, canOpenCash, getLocalOperatorSession } from '@/services/operatorAuth';
 import { updateOrderStatus } from '@/utils/updateOrderStatus';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
@@ -795,6 +795,23 @@ const Financeiro = () => {
 
   const handleCashOperation = async () => {
     if (!user) return;
+    const operatorSession = getLocalOperatorSession();
+    const canRunOperation = cashOperation === 'open'
+      ? canOpenCash(operatorSession)
+      : cashOperation === 'close'
+        ? canCloseCash(operatorSession)
+        : canMoveCash(operatorSession);
+    if (!canRunOperation) {
+      toast({
+        title: 'Sem permissão para operar o caixa',
+        description: cashOperation === 'open' || cashOperation === 'close'
+          ? 'O administrador precisa liberar a permissão "Abrir/Fechar Caixa" em Usuários e Equipe.'
+          : 'O administrador precisa liberar a permissão "Sangria/Suprimento" em Usuários e Equipe.',
+        variant: 'destructive',
+      });
+      setIsCashDialogOpen(false);
+      return;
+    }
     const amount = parseBRL(cashAmount);
     if (isNaN(amount)) return;
 
@@ -1276,6 +1293,22 @@ const Financeiro = () => {
     : 'Acompanhe receitas, despesas, lucro e DRE no período selecionado';
 
   const openCashActionDialog = async (operation: 'open' | 'close' | 'in' | 'out') => {
+    const operatorSession = getLocalOperatorSession();
+    const canRunOperation = operation === 'open'
+      ? canOpenCash(operatorSession)
+      : operation === 'close'
+        ? canCloseCash(operatorSession)
+        : canMoveCash(operatorSession);
+    if (!canRunOperation) {
+      toast({
+        title: 'Sem permissão para operar o caixa',
+        description: operation === 'open' || operation === 'close'
+          ? 'O administrador precisa liberar a permissão "Abrir/Fechar Caixa" em Usuários e Equipe.'
+          : 'O administrador precisa liberar a permissão "Sangria/Suprimento" em Usuários e Equipe.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setCashOperation(operation);
     setCashAmount('');
     setCashDescription('');
@@ -1408,14 +1441,12 @@ const Financeiro = () => {
                 </div>
               )}
               <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
-            <DialogTrigger asChild>
               <Button className="border border-white/20 bg-white/15 text-white hover:bg-white/25" variant="outline" onClick={() => {
                 void openCashActionDialog(currentSession ? 'close' : 'open');
               }}>
                 {currentSession ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
                 {currentSession ? 'Gerenciar Caixa' : 'Abrir Caixa'}
               </Button>
-            </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>
@@ -1428,8 +1459,8 @@ const Financeiro = () => {
                   {currentSession && (
                     <div className="flex gap-2 mb-4">
                       <Button variant={cashOperation === 'close' ? 'default' : 'outline'} size="sm" onClick={() => { void openCashActionDialog('close'); }}>Fechar</Button>
-                      <Button variant={cashOperation === 'in' ? 'default' : 'outline'} size="sm" onClick={() => setCashOperation('in')}>Suprimento</Button>
-                      <Button variant={cashOperation === 'out' ? 'default' : 'outline'} size="sm" onClick={() => setCashOperation('out')}>Sangria</Button>
+                      <Button variant={cashOperation === 'in' ? 'default' : 'outline'} size="sm" onClick={() => { void openCashActionDialog('in'); }}>Suprimento</Button>
+                      <Button variant={cashOperation === 'out' ? 'default' : 'outline'} size="sm" onClick={() => { void openCashActionDialog('out'); }}>Sangria</Button>
                     </div>
                   )}
                 </DialogDescription>

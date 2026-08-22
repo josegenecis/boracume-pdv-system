@@ -60,6 +60,24 @@ export const isCashOperator = (session: OperatorSession | null): boolean => {
          session.permissions?.pos_open_close === true
 }
 
+export const canOpenCash = (session: OperatorSession | null): boolean => {
+  if (!session) return false
+  if (isAdminOperator(session)) return true
+  return session.permissions?.can_open_cash === true || session.permissions?.pos_open_close === true
+}
+
+export const canCloseCash = (session: OperatorSession | null): boolean => {
+  if (!session) return false
+  if (isAdminOperator(session)) return true
+  return session.permissions?.can_close_cash === true || session.permissions?.pos_open_close === true
+}
+
+export const canMoveCash = (session: OperatorSession | null): boolean => {
+  if (!session) return false
+  if (isAdminOperator(session)) return true
+  return session.permissions?.cash_movement === true
+}
+
 export const canGiveDiscount = (session: OperatorSession | null): boolean => {
   if (!session) return false
   if (isAdminOperator(session)) return true
@@ -98,6 +116,7 @@ export type OperatorArea =
   | 'kds'
   | 'products'
   | 'stock'
+  | 'cash'
   | 'finance'
   | 'reports'
   | 'marketing'
@@ -124,6 +143,7 @@ export const canAccessOperatorArea = (session: OperatorSession | null, area?: Op
     kds: ['kds_access', 'orders_manage'],
     products: ['menu_manage'],
     stock: ['stock_manage'],
+    cash: ['pos_open_close', 'can_open_cash', 'can_close_cash', 'cash_movement'],
     finance: ['financial_view'],
     reports: ['reports_view', 'financial_view'],
     marketing: ['marketing_manage'],
@@ -148,6 +168,7 @@ const defaultOperatorRoutes: Array<{ area: OperatorArea; path: string }> = [
   { area: 'kds', path: '/cozinha' },
   { area: 'products', path: '/produtos' },
   { area: 'stock', path: '/estoque' },
+  { area: 'cash', path: '/caixa' },
   { area: 'finance', path: '/financeiro' },
   { area: 'reports', path: '/relatorios' },
   { area: 'marketing', path: '/marketing' },
@@ -163,7 +184,8 @@ const pathOperatorAreas: Array<{ area: OperatorArea; paths: string[] }> = [
   { area: 'kds', paths: ['/cozinha'] },
   { area: 'products', paths: ['/produtos', '/cardapio'] },
   { area: 'stock', paths: ['/estoque', '/inteligencia/cmv', '/inteligencia/curva-abc'] },
-  { area: 'finance', paths: ['/financeiro', '/caixa', '/despesas'] },
+  { area: 'cash', paths: ['/caixa'] },
+  { area: 'finance', paths: ['/financeiro', '/despesas'] },
   { area: 'reports', paths: ['/relatorios'] },
   { area: 'marketing', paths: ['/marketing', '/whatsapp-bot', '/loyalty'] },
   { area: 'settings', paths: ['/configuracoes'] },

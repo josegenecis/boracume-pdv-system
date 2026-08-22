@@ -133,9 +133,9 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
   },
   team: {
     key: 'team',
-    name: 'Garçons e equipe',
-    description: 'Controle de usuários, garçons e permissões de equipe.',
-    requiredPlanId: 2,
+    name: 'Usuários e equipe',
+    description: 'Controle de usuários, operadores e permissões da equipe.',
+    requiredPlanId: 1,
   },
   marketing: {
     key: 'marketing',

@@ -22,7 +22,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import FirstOperatorDialog from '@/components/pdv/FirstOperatorDialog';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
-import { canGiveDiscount, getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
+import { canCloseCash, canGiveDiscount, canOpenCash, getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
 import { useTefSettings } from '@/hooks/useTefSettings';
 import { PrinterService } from '@/utils/printerService';
@@ -889,6 +889,16 @@ const PDV = () => {
   };
 
   const openCashDialog = async (mode: 'open' | 'close') => {
+    const operatorSession = getOperatorSession();
+    const allowed = mode === 'open' ? canOpenCash(operatorSession) : canCloseCash(operatorSession);
+    if (!allowed) {
+      toast({
+        title: 'Sem permissão para operar o caixa',
+        description: 'O administrador precisa liberar a permissão "Abrir/Fechar Caixa" em Usuários e Equipe.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setCashDialogMode(mode);
     setCashCloseSummary(null);
     setCashAmountInput('');
@@ -912,12 +922,22 @@ const PDV = () => {
 
   const handleCashSubmit = async () => {
     if (!user?.id) return;
+    const operatorSession = getOperatorSession();
+    const allowed = cashDialogMode === 'open' ? canOpenCash(operatorSession) : canCloseCash(operatorSession);
+    if (!allowed) {
+      toast({
+        title: 'Sem permissão para operar o caixa',
+        description: 'O administrador precisa liberar a permissão "Abrir/Fechar Caixa" em Usuários e Equipe.',
+        variant: 'destructive',
+      });
+      setCashDialogOpen(false);
+      return;
+    }
     const amount = parseBRL(cashAmountInput);
     if (!Number.isFinite(amount)) {
       toast({ title: 'Valor inválido', description: 'Informe um valor válido', variant: 'destructive' });
       return;
     }
-    const operatorSession = getOperatorSession();
     const waiterId = operatorSession?.id || null;
 
     try {

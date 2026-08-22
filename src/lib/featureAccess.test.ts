@@ -18,6 +18,10 @@ test('Essencial ativo acessa estoque, motoboys, app desktop, impressão e balan�
   assert.equal(hasFeatureAccess('hardware', essencial), true);
 });
 
+test('Essencial ativo permite administrar usuários, equipe e permissões de caixa', () => {
+  assert.equal(hasFeatureAccess('team', { status: 'active', plan_id: 1 }), true);
+});
+
 test('Essencial continua sem acesso ao financeiro multilojas', () => {
   assert.equal(hasFeatureAccess('multiFinance', { status: 'active', plan_id: 1 }), false);
 });
