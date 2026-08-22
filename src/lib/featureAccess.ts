@@ -147,7 +147,7 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
     key: 'whatsapp',
     name: 'WhatsApp com automações',
     description: 'Integrações e mensagens automáticas por WhatsApp.',
-    requiredPlanId: 2,
+    requiredPlanId: 1,
   },
   ifood: {
     key: 'ifood',

@@ -6,6 +6,10 @@ test('Essencial ativo acessa caixa e financeiro', () => {
   assert.equal(hasFeatureAccess('finance', { status: 'active', plan_id: 1 }), true);
 });
 
+test('Essencial ativo acessa o WhatsApp Bot', () => {
+  assert.equal(hasFeatureAccess('whatsapp', { status: 'active', plan_id: 1 }), true);
+});
+
 test('Essencial continua sem acesso ao financeiro multilojas', () => {
   assert.equal(hasFeatureAccess('multiFinance', { status: 'active', plan_id: 1 }), false);
 });

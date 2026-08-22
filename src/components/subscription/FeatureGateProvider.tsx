@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Clock, Crown, Lock, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -39,6 +39,12 @@ export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     canAccessFeature: (nextFeature) => hasFeatureAccess(nextFeature, subscription),
     openFeatureDialog: (nextFeature) => setFeature(nextFeature),
   }), [subscription]);
+
+  useEffect(() => {
+    if (feature && hasFeatureAccess(feature, subscription)) {
+      setFeature(null);
+    }
+  }, [feature, subscription]);
 
   const goToPlan = async () => {
     if (!requiredPlan) return;
