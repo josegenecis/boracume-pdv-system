@@ -527,32 +527,17 @@ const Orders = () => {
           ? { status: newStatus, acceptance_status: 'rejected' }
           : { status: newStatus };
 
-      if (newStatus === 'cancelled') {
-        optimisticOrderSnapshot = existingOrder;
-        setOrders(prev => prev.map(order =>
-          order.id === orderId
-            ? { ...order, ...updateData }
-            : order
-        ));
-      }
+      optimisticOrderSnapshot = existingOrder;
+      setOrders(prev => prev.map(order =>
+        order.id === orderId
+          ? { ...order, ...updateData }
+          : order
+      ));
 
       console.log('📝 Dados para update:', updateData);
 
 
       console.log('🔄 Executando update no Supabase...');
-
-      // Verificar conexão com Supabase antes do update
-      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-
-      if (authError) {
-        console.error('❌ Erro de autenticação no Supabase:', authError);
-        throw new Error(`Erro de autenticação: ${authError.message}`);
-      }
-
-      if (!currentUser) {
-        console.error('❌ Usuário não autenticado no Supabase');
-        throw new Error('Sessão expirada. Faça login novamente.');
-      }
 
       let data: any = null;
       let error: any = null;
@@ -666,7 +651,7 @@ const Orders = () => {
       }
 
     } catch (error: any) {
-      if (newStatus === 'cancelled' && optimisticOrderSnapshot) {
+      if (optimisticOrderSnapshot) {
         setOrders(prev => prev.map(order =>
           order.id === orderId ? optimisticOrderSnapshot as Order : order
         ));

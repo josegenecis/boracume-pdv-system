@@ -437,6 +437,23 @@ const GlobalNotificationSystem: React.FC = () => {
     if (!order || acceptingOrderId) return;
 
     setAcceptingOrderId(order.id);
+    soundNotifications.stopAllSounds();
+    setDismissedOrders((prev) => {
+      const nextDismissed = new Set([...prev, order.id]);
+      localStorage.setItem('dismissedOrders', JSON.stringify([...nextDismissed]));
+      return nextDismissed;
+    });
+    setPendingOrders((prev) => prev.filter((current) => current.id !== order.id));
+
+    const remainingVisibleOrders = visibleOrders.filter((candidate) => candidate.id !== order.id);
+    if (remainingVisibleOrders.length === 0) {
+      setIsAnimatingOut(false);
+      setIsVisible(false);
+    } else {
+      setIsAnimatingOut(false);
+      setIsVisible(true);
+    }
+
     try {
       let accepted = false;
       try {
@@ -456,42 +473,33 @@ const GlobalNotificationSystem: React.FC = () => {
         if (!accepted) throw requestError;
       }
 
-      try {
-        const { data: fullOrder } = await supabase.from('orders').select('*').eq('id', order.id).maybeSingle();
-        if (fullOrder) {
-          const normalized = {
-            ...fullOrder,
-            items: Array.isArray((fullOrder as any).items) ? (fullOrder as any).items : [],
-          };
-          PrinterService.printOrderOnAccept(normalized);
-        }
-      } catch {}
-
-      soundNotifications.stopAllSounds();
-      setDismissedOrders((prev) => {
-        const nextDismissed = new Set([...prev, order.id]);
-        localStorage.setItem('dismissedOrders', JSON.stringify([...nextDismissed]));
-        return nextDismissed;
-      });
-      setPendingOrders((prev) => prev.filter((current) => current.id !== order.id));
-
-      const remainingVisibleOrders = visibleOrders.filter((candidate) => candidate.id !== order.id);
-      if (remainingVisibleOrders.length === 0) {
-        setIsAnimatingOut(true);
-        window.setTimeout(() => {
-          setIsVisible(false);
-          setIsAnimatingOut(false);
-        }, 220);
-      } else {
-        setIsAnimatingOut(false);
-        setIsVisible(true);
-      }
+      void (async () => {
+        try {
+          const { data: fullOrder } = await supabase.from('orders').select('*').eq('id', order.id).maybeSingle();
+          if (fullOrder) {
+            const normalized = {
+              ...fullOrder,
+              items: Array.isArray((fullOrder as any).items) ? (fullOrder as any).items : [],
+            };
+            PrinterService.printOrderOnAccept(normalized);
+          }
+        } catch {}
+      })();
 
       toast({
         title: 'Pedido aceito',
         description: `O pedido ${order.order_number} já está em preparação.`,
       });
     } catch (error: any) {
+      setDismissedOrders((prev) => {
+        const nextDismissed = new Set(prev);
+        nextDismissed.delete(order.id);
+        localStorage.setItem('dismissedOrders', JSON.stringify([...nextDismissed]));
+        return nextDismissed;
+      });
+      setPendingOrders((prev) => prev.some((current) => current.id === order.id) ? prev : [order, ...prev]);
+      setIsAnimatingOut(false);
+      setIsVisible(true);
       toast({
         title: 'Pedido não foi aceito',
         description:
