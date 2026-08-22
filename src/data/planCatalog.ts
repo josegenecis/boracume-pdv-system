@@ -64,7 +64,7 @@ const ESSENCIAL_FEATURE_GROUPS: PlanFeatureGroup[] = [
   },
   {
     title: 'Cardápio e pagamentos',
-    features: ['Cardápio digital com link e QR Code', 'PIX e cadastro de formas de pagamento', 'WhatsApp Bot'],
+    features: ['Cardápio digital com link e QR Code', 'PIX e cadastro de formas de pagamento', 'WhatsApp Bot', 'Artes e banners, cupons e fidelidade'],
   },
   {
     title: 'Gestão da operação',
@@ -91,7 +91,7 @@ const PRO_FEATURE_GROUPS: PlanFeatureGroup[] = [
   },
   {
     title: 'Relacionamento e crescimento',
-    features: ['Campanhas e envio em massa', 'Marketing, cupons e fidelidade', 'IA para cardápio e produtividade'],
+    features: ['Campanhas e envio em massa', 'Destaques, venda adicional e pixels', 'IA para cardápio e produtividade'],
   },
   {
     title: 'Pagamentos e integrações',
@@ -157,6 +157,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
       'Relatórios',
       'Usuários e Equipe',
       'WhatsApp Bot',
+      'Banners, Cupons e Fidelidade',
       'Motoboys e Entregas',
       'App Desktop',
       'Impressoras e Balanças'

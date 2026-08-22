@@ -22,6 +22,12 @@ test('Essencial ativo permite administrar usuários, equipe e permissões de cai
   assert.equal(hasFeatureAccess('team', { status: 'active', plan_id: 1 }), true);
 });
 
+test('Essencial ativo acessa banners, cupons e fidelidade sem liberar o marketing Pro', () => {
+  const essencial = { status: 'active', plan_id: 1 };
+  assert.equal(hasFeatureAccess('marketingEssential', essencial), true);
+  assert.equal(hasFeatureAccess('marketing', essencial), false);
+});
+
 test('acesso ao plano fica pendente enquanto a assinatura inicial ainda carrega', () => {
   assert.equal(isFeatureAccessPending(true, null), true);
   assert.equal(isFeatureAccessPending(false, null), false);

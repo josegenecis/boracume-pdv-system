@@ -17,6 +17,7 @@ export type FeatureKey =
   | 'cmv'
   | 'deliveryTeam'
   | 'team'
+  | 'marketingEssential'
   | 'marketing'
   | 'whatsapp'
   | 'ifood'
@@ -135,6 +136,12 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
     key: 'team',
     name: 'Usuários e equipe',
     description: 'Controle de usuários, operadores e permissões da equipe.',
+    requiredPlanId: 1,
+  },
+  marketingEssential: {
+    key: 'marketingEssential',
+    name: 'Propaganda essencial',
+    description: 'Artes e banners, cupons de desconto e fidelidade de clientes.',
     requiredPlanId: 1,
   },
   marketing: {
@@ -316,8 +323,8 @@ export const getRouteFeature = (pathname: string): FeatureKey | null => {
     ['/entregadores', 'deliveryTeam'],
     ['/motoboys', 'deliveryTeam'],
     ['/garcons', 'team'],
-    ['/marketing', 'marketing'],
-    ['/loyalty', 'marketing'],
+    ['/marketing', 'marketingEssential'],
+    ['/loyalty', 'marketingEssential'],
     ['/whatsapp-bot', 'whatsapp'],
     ['/configuracoes', 'settings'],
     ['/downloads', 'desktop'],

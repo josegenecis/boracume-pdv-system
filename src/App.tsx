@@ -197,7 +197,7 @@ function AppContent() {
           <Route path="/lojas" element={<FeatureRoute feature="multiStore"><Stores /></FeatureRoute>} />
           <Route path="/multilojas" element={<Navigate to="/lojas" replace />} />
           <Route path="/rede" element={<Navigate to="/lojas" replace />} />
-          <Route path="/loyalty" element={<OperatorRoute area="marketing"><FeatureRoute feature="marketing"><Loyalty /></FeatureRoute></OperatorRoute>} />
+          <Route path="/loyalty" element={<OperatorRoute area="marketing"><FeatureRoute feature="marketingEssential"><Loyalty /></FeatureRoute></OperatorRoute>} />
           <Route path="/bairros-entrega" element={<OperatorRoute area="deliveryAreas"><FeatureRoute feature="delivery"><BairrosEntrega /></FeatureRoute></OperatorRoute>} />
           <Route path="/entregadores" element={<OperatorRoute area="deliveryTeam"><FeatureRoute feature="deliveryTeam"><Entregadores /></FeatureRoute></OperatorRoute>} />
           <Route path="/motoboys" element={<Navigate to="/entregadores" replace />} />
@@ -217,7 +217,7 @@ function AppContent() {
           {import.meta.env.DEV && <Route path="/debug-pix" element={<DebugPix />} />}
           <Route path="/cardapio" element={<OperatorRoute area="products"><FeatureRoute feature="menu"><Menu /></FeatureRoute></OperatorRoute>} />
           <Route path="/agente" element={<OperatorRoute area="agent"><FeatureRoute feature="agent"><AgentDashboard /></FeatureRoute></OperatorRoute>} />
-          <Route path="/marketing" element={<OperatorRoute area="marketing"><FeatureRoute feature="marketing"><Marketing /></FeatureRoute></OperatorRoute>} />
+          <Route path="/marketing" element={<OperatorRoute area="marketing"><FeatureRoute feature="marketingEssential"><Marketing /></FeatureRoute></OperatorRoute>} />
 
           {import.meta.env.DEV && <Route path="/system-check" element={<SystemCheck />} />}
           {import.meta.env.DEV && <Route path="/test" element={<TestPage />} />}

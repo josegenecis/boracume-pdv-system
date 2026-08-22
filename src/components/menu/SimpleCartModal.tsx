@@ -18,6 +18,7 @@ import PopPayCardCheckoutModal from '@/components/payment/PopPayCardCheckoutModa
 import { getOrderItemDetailGroups } from '@/lib/orderDetails';
 import { useToast } from '@/hooks/use-toast';
 import { isConfiguredCartItem } from '@/hooks/useSimpleCart';
+import { resolveDeliveryFee } from '@/lib/deliveryPricing';
 
 interface CartItem {
   product: {
@@ -556,19 +557,15 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     setDetectZoneError(null);
   }, [showNeighborhoodSelect, customerNeighborhood, deliveryZones, deliveryZoneId, isDeliveryMode]);
   
-  // O valor da entrega depende do modo configurado na loja
-  let deliveryFee = 0;
-  if (!isDeliveryMode) {
-    deliveryFee = 0;
-  } else if (showNeighborhoodSelect) {
-    deliveryFee = deliveryZoneId !== '' ? (selectedZone?.delivery_fee || 0) : (Number(quoteZone?.delivery_fee || 0) || 0);
-  } else if (deliveryQuote?.ok && typeof deliveryQuote.fee === 'number') {
-    deliveryFee = deliveryQuote.fee;
-  } else if (storePricingMode === 'fixed') {
-    deliveryFee = Number(deliverySettings?.pricing?.fixed?.fee || 0);
-  } else if (storePricingMode === 'free') {
-    deliveryFee = 0;
-  }
+  const deliveryFee = resolveDeliveryFee({
+    isDeliveryMode,
+    showNeighborhoodSelect,
+    deliveryZoneId,
+    selectedZone,
+    deliveryQuote,
+    storePricingMode,
+    deliverySettings,
+  });
   // Calcular taxa extra como percentual, igual ao CheckoutModal
   const computedExtraFee = selectedPaymentMethod && selectedPaymentMethod.extra_fee_percent > 0 ? (total + deliveryFee) * (selectedPaymentMethod.extra_fee_percent / 100) : 0;
   
