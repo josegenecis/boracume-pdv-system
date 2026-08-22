@@ -174,7 +174,7 @@ function AppContent() {
       
       {/* Rota específica para o aplicativo desktop - sem layout padrão */}
       <Route element={<RouteGuard><OperatorGate><Outlet /></OperatorGate></RouteGuard>}>
-        <Route path="/desktop" element={<FeatureRoute feature="desktop"><DesktopApp /></FeatureRoute>} />
+        <Route path="/desktop" element={<OperatorRoute area="desktop"><FeatureRoute feature="desktop"><DesktopApp /></FeatureRoute></OperatorRoute>} />
       </Route>
 
 
@@ -197,21 +197,21 @@ function AppContent() {
           <Route path="/lojas" element={<FeatureRoute feature="multiStore"><Stores /></FeatureRoute>} />
           <Route path="/multilojas" element={<Navigate to="/lojas" replace />} />
           <Route path="/rede" element={<Navigate to="/lojas" replace />} />
-          <Route path="/loyalty" element={<FeatureRoute feature="marketing"><Loyalty /></FeatureRoute>} />
-          <Route path="/bairros-entrega" element={<OperatorRoute area="delivery"><FeatureRoute feature="delivery"><BairrosEntrega /></FeatureRoute></OperatorRoute>} />
-          <Route path="/entregadores" element={<OperatorRoute area="delivery"><FeatureRoute feature="deliveryTeam"><Entregadores /></FeatureRoute></OperatorRoute>} />
+          <Route path="/loyalty" element={<OperatorRoute area="marketing"><FeatureRoute feature="marketing"><Loyalty /></FeatureRoute></OperatorRoute>} />
+          <Route path="/bairros-entrega" element={<OperatorRoute area="deliveryAreas"><FeatureRoute feature="delivery"><BairrosEntrega /></FeatureRoute></OperatorRoute>} />
+          <Route path="/entregadores" element={<OperatorRoute area="deliveryTeam"><FeatureRoute feature="deliveryTeam"><Entregadores /></FeatureRoute></OperatorRoute>} />
           <Route path="/motoboys" element={<Navigate to="/entregadores" replace />} />
           <Route path="/garcons" element={<OperatorRoute area="team"><FeatureRoute feature="team"><Garcons /></FeatureRoute></OperatorRoute>} />
-          <Route path="/ponto" element={<OperatorRoute area="team"><FeatureRoute feature="team"><ControlePonto /></FeatureRoute></OperatorRoute>} />
+          <Route path="/ponto" element={<OperatorRoute area="timeclock"><FeatureRoute feature="team"><ControlePonto /></FeatureRoute></OperatorRoute>} />
           <Route path="/fiscal" element={<OperatorRoute area="fiscal"><FeatureRoute feature="fiscal"><Fiscal /></FeatureRoute></OperatorRoute>} />
           <Route path="/nfce" element={<Navigate to="/fiscal" replace />} />
           <Route path="/caixa" element={<OperatorRoute area="cash"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />
           <Route path="/financeiro" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />
           <Route path="/financeiro/despesas" element={<Navigate to="/despesas" replace />} />
-          <Route path="/despesas" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><Despesas /></FeatureRoute></OperatorRoute>} />
+          <Route path="/despesas" element={<OperatorRoute area="expenses"><FeatureRoute feature="finance"><Despesas /></FeatureRoute></OperatorRoute>} />
           <Route path="/pagamentos" element={<OperatorRoute area="pix"><FeatureRoute feature="pix"><div className="space-y-4"><h1 className="text-2xl font-bold tracking-tight">Formas de Pagamento</h1><PaymentMethodsSettings /></div></FeatureRoute></OperatorRoute>} />
           <Route path="/security" element={<OperatorRoute area="security"><FeatureRoute feature="security"><SecurityDashboard /></FeatureRoute></OperatorRoute>} />
-          <Route path="/whatsapp-bot" element={<OperatorRoute area="marketing"><FeatureRoute feature="whatsapp"><WhatsAppBot /></FeatureRoute></OperatorRoute>} />
+          <Route path="/whatsapp-bot" element={<OperatorRoute area="whatsapp"><FeatureRoute feature="whatsapp"><WhatsAppBot /></FeatureRoute></OperatorRoute>} />
           <Route path="/downloads" element={<OperatorRoute area="desktop"><FeatureRoute feature="desktop"><Downloads /></FeatureRoute></OperatorRoute>} />
           <Route path="/pix" element={<OperatorRoute area="pix"><FeatureRoute feature="pix"><PixSetup /></FeatureRoute></OperatorRoute>} />
           {import.meta.env.DEV && <Route path="/debug-pix" element={<DebugPix />} />}

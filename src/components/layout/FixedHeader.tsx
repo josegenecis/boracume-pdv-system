@@ -32,15 +32,18 @@ import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
 import StoreSwitcher from '@/components/multistore/StoreSwitcher';
 import { AssistantPopButton } from '@/components/agent/AssistantPopButton';
 import { useWhatsAppInbox } from '@/contexts/WhatsAppInboxContext';
+import { canAccessOperatorArea, getLocalOperatorSession, OperatorArea } from '@/services/operatorAuth';
 
 const FixedHeader = () => {
   const { user } = useAuth();
   const { isMobile, toggleSidebar } = useSidebar();
   const navigate = useNavigate();
-  const { canAccessFeature, openFeatureDialog } = useFeatureGate();
+  const { canAccessFeature, isFeatureAccessLoading, openFeatureDialog } = useFeatureGate();
   const [cashStatus, setCashStatus] = useState<'open' | 'closed'>('closed');
   const [whatsAppConnected, setWhatsAppConnected] = useState(false);
   const { totalUnread, urgentConversations } = useWhatsAppInbox();
+  const operatorSession = getLocalOperatorSession();
+  const canAccessCash = canAccessOperatorArea(operatorSession, 'cash');
 
   useEffect(() => {
     if (!user?.id) return;
@@ -103,7 +106,7 @@ const FixedHeader = () => {
   }, [user?.id]);
 
   const goToFeature = (path: string, feature: FeatureKey) => {
-    if (!canAccessFeature(feature)) {
+    if (!isFeatureAccessLoading && !canAccessFeature(feature)) {
       openFeatureDialog(feature);
       return;
     }
@@ -112,10 +115,10 @@ const FixedHeader = () => {
 
   const cashActionPath = (action: 'open' | 'close' | 'in' | 'out') => `/caixa?cashAction=${action}`;
   const primaryShortcuts = [
-    { label: 'PDV', icon: Monitor, path: '/pdv', feature: 'pdv' as FeatureKey },
-    { label: 'Pedidos', icon: ClipboardList, path: '/pedidos', feature: 'orders' as FeatureKey },
-    { label: 'Mesas', icon: Table2, path: '/mesas', feature: 'tables' as FeatureKey },
-    { label: 'WhatsApp', icon: MessageCircle, path: '/whatsapp-bot', feature: 'whatsapp' as FeatureKey },
+    { label: 'PDV', icon: Monitor, path: '/pdv', feature: 'pdv' as FeatureKey, area: 'pdv' as OperatorArea },
+    { label: 'Pedidos', icon: ClipboardList, path: '/pedidos', feature: 'orders' as FeatureKey, area: 'orders' as OperatorArea },
+    { label: 'Mesas', icon: Table2, path: '/mesas', feature: 'tables' as FeatureKey, area: 'tables' as OperatorArea },
+    { label: 'WhatsApp', icon: MessageCircle, path: '/whatsapp-bot', feature: 'whatsapp' as FeatureKey, area: 'whatsapp' as OperatorArea },
   ];
 
   return (
@@ -135,7 +138,7 @@ const FixedHeader = () => {
 
         <div className="flex items-center space-x-2 sm:space-x-3">
           <StoreSwitcher />
-          <DropdownMenu>
+          {canAccessCash && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
@@ -172,12 +175,12 @@ const FixedHeader = () => {
                 Ver caixa
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu>}
           <div className="hidden lg:block">
             <OperatorSwitcher />
           </div>
           <div className="hidden items-center gap-1.5 lg:flex">
-            {primaryShortcuts.map((shortcut) => {
+            {primaryShortcuts.filter((shortcut) => canAccessOperatorArea(operatorSession, shortcut.area)).map((shortcut) => {
               const Icon = shortcut.icon;
               const isWhatsApp = shortcut.label === 'WhatsApp';
               return (
@@ -205,11 +208,13 @@ const FixedHeader = () => {
               );
             })}
           </div>
-          <AssistantPopButton
-            compact={isMobile}
-            canOpen={canAccessFeature('agent')}
-            onBlocked={() => openFeatureDialog('agent')}
-          />
+          {canAccessOperatorArea(operatorSession, 'agent') && (
+            <AssistantPopButton
+              compact={isMobile}
+              canOpen={isFeatureAccessLoading || canAccessFeature('agent')}
+              onBlocked={() => openFeatureDialog('agent')}
+            />
+          )}
         </div>
       </div>
     </header>

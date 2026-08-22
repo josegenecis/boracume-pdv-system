@@ -222,6 +222,11 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
 
 export const getFeatureDefinition = (feature: FeatureKey) => FEATURE_DEFINITIONS[feature];
 
+export const isFeatureAccessPending = (
+  subscriptionLoading: boolean,
+  subscription?: { plan_id?: number | null } | null
+) => subscriptionLoading && !subscription;
+
 // Trials receive the complete PopSystem experience. After the trial, paid accounts
 // are restricted to the features included in the contracted plan.
 export const BILLING_ENFORCEMENT_ENABLED = true;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasFeatureAccess } from './featureAccess';
+import { hasFeatureAccess, isFeatureAccessPending } from './featureAccess';
 
 test('Essencial ativo acessa caixa e financeiro', () => {
   assert.equal(hasFeatureAccess('finance', { status: 'active', plan_id: 1 }), true);
@@ -20,6 +20,12 @@ test('Essencial ativo acessa estoque, motoboys, app desktop, impressão e balan�
 
 test('Essencial ativo permite administrar usuários, equipe e permissões de caixa', () => {
   assert.equal(hasFeatureAccess('team', { status: 'active', plan_id: 1 }), true);
+});
+
+test('acesso ao plano fica pendente enquanto a assinatura inicial ainda carrega', () => {
+  assert.equal(isFeatureAccessPending(true, null), true);
+  assert.equal(isFeatureAccessPending(false, null), false);
+  assert.equal(isFeatureAccessPending(true, { plan_id: 1 }), false);
 });
 
 test('Essencial continua sem acesso ao financeiro multilojas', () => {

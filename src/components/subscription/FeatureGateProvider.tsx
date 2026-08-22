@@ -17,19 +17,22 @@ import {
   getFeatureDefinition,
   getRequiredPlan,
   hasFeatureAccess,
+  isFeatureAccessPending,
 } from '@/lib/featureAccess';
 
 type FeatureGateContextValue = {
   canAccessFeature: (feature: FeatureKey) => boolean;
   openFeatureDialog: (feature: FeatureKey) => void;
+  isFeatureAccessLoading: boolean;
 };
 
 const FeatureGateContext = createContext<FeatureGateContextValue | undefined>(undefined);
 
 export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { subscription } = useAuth();
+  const { subscription, subscriptionLoading } = useAuth();
   const navigate = useNavigate();
   const [feature, setFeature] = useState<FeatureKey | null>(null);
+  const isFeatureAccessLoading = isFeatureAccessPending(subscriptionLoading, subscription);
 
   const activeDefinition = feature ? getFeatureDefinition(feature) : null;
   const requiredPlan = feature ? getRequiredPlan(feature) : null;
@@ -37,14 +40,18 @@ export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const value = useMemo<FeatureGateContextValue>(() => ({
     canAccessFeature: (nextFeature) => hasFeatureAccess(nextFeature, subscription),
-    openFeatureDialog: (nextFeature) => setFeature(nextFeature),
-  }), [subscription]);
+    openFeatureDialog: (nextFeature) => {
+      if (isFeatureAccessLoading || hasFeatureAccess(nextFeature, subscription)) return;
+      setFeature(nextFeature);
+    },
+    isFeatureAccessLoading,
+  }), [isFeatureAccessLoading, subscription]);
 
   useEffect(() => {
-    if (feature && hasFeatureAccess(feature, subscription)) {
+    if (feature && (isFeatureAccessLoading || hasFeatureAccess(feature, subscription))) {
       setFeature(null);
     }
-  }, [feature, subscription]);
+  }, [feature, isFeatureAccessLoading, subscription]);
 
   const goToPlan = async () => {
     if (!requiredPlan) return;
@@ -58,7 +65,7 @@ export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     <FeatureGateContext.Provider value={value}>
       {children}
 
-      <Dialog open={Boolean(feature)} onOpenChange={(open) => !open && setFeature(null)}>
+      <Dialog open={Boolean(feature) && !isFeatureAccessLoading} onOpenChange={(open) => !open && setFeature(null)}>
         <DialogContent className="overflow-hidden border-0 p-0 shadow-[0_34px_90px_-35px_rgba(0,50,35,0.5)] sm:max-w-[520px]">
           <div className="bg-gradient-to-br from-[#003223] via-[#0B5137] to-[#FF6400] px-6 py-6 text-white">
             <div className="flex items-start justify-between gap-4">
