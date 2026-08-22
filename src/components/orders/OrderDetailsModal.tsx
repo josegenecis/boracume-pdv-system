@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
 
   Phone, 
@@ -350,7 +349,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
           }}
         />
         <Dialog open={isOpen} onOpenChange={onClose}>
-          <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden overflow-x-hidden border-slate-200 bg-white p-0 shadow-2xl sm:max-h-[92dvh] sm:w-[calc(100vw-2rem)] sm:rounded-3xl">
+          <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden overflow-x-hidden border-slate-200 bg-white p-0 shadow-2xl sm:h-[92dvh] sm:max-h-[56rem] sm:w-[calc(100vw-2rem)] sm:rounded-3xl">
           <DialogHeader className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 pr-12 sm:px-6 sm:py-5 sm:pr-14">
             <div className="flex min-w-0 flex-col gap-4">
               <div className="flex min-w-0 flex-wrap items-center gap-3 text-left">
@@ -419,7 +418,10 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
             </div>
           </DialogHeader>
 
-          <ScrollArea className="min-h-0 flex-1 overflow-x-hidden bg-white [&_[data-radix-scroll-area-viewport]]:overflow-x-hidden">
+          <div
+            className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain bg-white [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]"
+            data-testid="order-details-scroll"
+          >
             <div className="grid min-w-0 grid-cols-1 gap-4 overflow-x-hidden p-4 sm:p-6 lg:grid-cols-2">
               {/* Informações do Cliente */}
               <div className="min-w-0 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:col-span-2">
@@ -696,7 +698,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
               </div>
 
             </div>
-          </ScrollArea>
+          </div>
           {/* Ações sempre visíveis, sem exigir rolagem até o fim do pedido. */}
           {onStatusChange && order && ['pending', 'preparing', 'ready'].includes(order.status) && (
             <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 sm:px-6 sm:py-4">
