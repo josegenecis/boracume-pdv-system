@@ -111,7 +111,7 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
     key: 'stock',
     name: 'Estoque e insumos',
     description: 'Controle de ingredientes, estoque e ficha técnica.',
-    requiredPlanId: 2,
+    requiredPlanId: 1,
   },
   finance: {
     key: 'finance',
@@ -129,7 +129,7 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
     key: 'deliveryTeam',
     name: 'Motoboys e entregas',
     description: 'Gestão de entregadores e rotas operacionais.',
-    requiredPlanId: 2,
+    requiredPlanId: 1,
   },
   team: {
     key: 'team',
@@ -165,13 +165,13 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
     key: 'desktop',
     name: 'App desktop',
     description: 'Aplicativo desktop com suporte a impressão e hardware.',
-    requiredPlanId: 2,
+    requiredPlanId: 1,
   },
   hardware: {
     key: 'hardware',
-    name: 'Hardware avançado',
+    name: 'Impressão e balanças',
     description: 'Impressoras, balanças e integrações de dispositivos.',
-    requiredPlanId: 2,
+    requiredPlanId: 1,
   },
   security: {
     key: 'security',

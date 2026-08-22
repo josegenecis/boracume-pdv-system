@@ -10,6 +10,14 @@ test('Essencial ativo acessa o WhatsApp Bot', () => {
   assert.equal(hasFeatureAccess('whatsapp', { status: 'active', plan_id: 1 }), true);
 });
 
+test('Essencial ativo acessa estoque, motoboys, app desktop, impressão e balanças', () => {
+  const essencial = { status: 'active', plan_id: 1 };
+  assert.equal(hasFeatureAccess('stock', essencial), true);
+  assert.equal(hasFeatureAccess('deliveryTeam', essencial), true);
+  assert.equal(hasFeatureAccess('desktop', essencial), true);
+  assert.equal(hasFeatureAccess('hardware', essencial), true);
+});
+
 test('Essencial continua sem acesso ao financeiro multilojas', () => {
   assert.equal(hasFeatureAccess('multiFinance', { status: 'active', plan_id: 1 }), false);
 });
@@ -29,7 +37,8 @@ test('liberacao administrativa preserva os recursos do plano contratado', () => 
     access_override_until: '2999-12-31T23:59:59.000Z',
   };
   assert.equal(hasFeatureAccess('finance', subscription), true);
-  assert.equal(hasFeatureAccess('stock', subscription), false);
+  assert.equal(hasFeatureAccess('stock', subscription), true);
+  assert.equal(hasFeatureAccess('cmv', subscription), false);
 });
 
 test('liberacao administrativa vencida nao libera recursos', () => {
