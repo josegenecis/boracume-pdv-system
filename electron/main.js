@@ -375,8 +375,13 @@ async function runAutoUpdateFlow() {
       console.log('[auto-update] Atualização baixada', info?.version || '');
       setTimeout(() => {
         try {
+          // A atualização precisa conseguir reiniciar o processo mesmo quando o
+          // renderer informou um caixa aberto. Sem isto, o listener de `close`
+          // cancela o quitAndInstall e o operador continua usando o bundle antigo.
+          allowWindowClose = true;
           autoUpdater.quitAndInstall(true, true);
         } catch {
+          allowWindowClose = false;
           done(true);
         }
       }, 500);
