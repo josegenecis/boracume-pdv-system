@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Lock, Loader2, ShieldCheck, UserRound } from 'lucide-react';
+import { KeyRound, Lock, Loader2, LogOut, ShieldCheck, UserRound } from 'lucide-react';
 import Logo from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,8 +30,18 @@ const buildSessionPayload = (operator: WaiterOperator, restaurantUserId: string)
   set_at: new Date().toISOString(),
 });
 
+const clearCachedRestaurantAccount = () => {
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index);
+    if (key?.startsWith('sb-') && key.endsWith('-auth-token')) {
+      window.localStorage.removeItem(key);
+    }
+  }
+  window.localStorage.removeItem('popsystem_active_store_id');
+};
+
 const OperatorLogin = () => {
-  const { user, isLoading, activeStoreId } = useAuth();
+  const { user, isLoading, activeStoreId, storesLoading, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,6 +52,8 @@ const OperatorLogin = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadAttempt, setReloadAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [sendingPinRecovery, setSendingPinRecovery] = useState(false);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
   const [creatingFirst, setCreatingFirst] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [firstPin, setFirstPin] = useState('');
@@ -141,6 +153,56 @@ const OperatorLogin = () => {
     finishLogin(selectedOperator);
   };
 
+  const handleForgotPin = async () => {
+    if (!selectedOperator || sendingPinRecovery) return;
+
+    try {
+      setSendingPinRecovery(true);
+      const { data, error } = await supabase.functions.invoke('auth-recovery-email', {
+        body: {
+          mode: 'operator_pin',
+          operatorId: selectedOperator.id,
+          _storeId: activeStoreId,
+          redirectTo: window.location.origin,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(String(data.error));
+
+      toast({
+        title: 'E-mail enviado',
+        description: 'Enviamos ao e-mail do proprietário um link seguro para criar um novo PIN.',
+      });
+    } catch (error: unknown) {
+      toast({
+        title: 'Não foi possível enviar o link',
+        description: error instanceof Error ? error.message : 'Tente novamente em alguns instantes.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingPinRecovery(false);
+    }
+  };
+
+  const handleSwitchAccount = async () => {
+    if (switchingAccount) return;
+
+    try {
+      setSwitchingAccount(true);
+      clearLocalOperatorSession();
+      await Promise.race([
+        signOut().catch((error) => console.warn('[OPERATOR_LOGIN] Logout remoto indisponível; limpando sessão local.', error)),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 2500)),
+      ]);
+      clearCachedRestaurantAccount();
+      window.location.replace('/login');
+    } catch {
+      clearCachedRestaurantAccount();
+      window.location.replace('/login');
+    }
+  };
+
   const handleCreateFirstOperator = async () => {
     if (!user?.id) return;
     if (!firstName.trim() || firstPin.trim().length < 4) {
@@ -195,15 +257,15 @@ const OperatorLogin = () => {
             </div>
           </div>
 
-          <Card className="border-0 shadow-none">
-            <CardContent className="p-8 lg:p-10">
+          <Card className="min-w-0 border-0 shadow-none">
+            <CardContent className="min-w-0 p-6 sm:p-8 lg:p-10">
               <div>
                 <div className="text-sm font-semibold uppercase tracking-[0.18em] text-[#FF6400]">Acesso operacional</div>
                 <h2 className="mt-2 text-2xl font-bold text-[#082F23]">Entrar no sistema</h2>
                 <p className="mt-2 text-sm text-slate-500">Conta do restaurante autenticada. Agora informe quem esta operando.</p>
               </div>
 
-              {isLoading || !activeStoreId || loading ? (
+              {isLoading || storesLoading || !activeStoreId || loading ? (
                 <div className="flex min-h-[240px] items-center justify-center">
                   <Loader2 className="h-7 w-7 animate-spin text-[#FF6400]" />
                 </div>
@@ -224,7 +286,7 @@ const OperatorLogin = () => {
                   <div className="space-y-2">
                     <Label>Usuario</Label>
                     <Select value={operatorId} onValueChange={setOperatorId}>
-                      <SelectTrigger className="h-12 rounded-2xl">
+                      <SelectTrigger className="h-12 min-w-0 rounded-2xl">
                         <SelectValue placeholder="Selecione o operador" />
                       </SelectTrigger>
                       <SelectContent>
@@ -238,7 +300,7 @@ const OperatorLogin = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Senha/PIN</Label>
+                    <Label>PIN do operador</Label>
                     <div className="relative">
                       <Lock className="absolute left-4 top-3.5 h-4 w-4 text-slate-400" />
                       <Input
@@ -263,6 +325,23 @@ const OperatorLogin = () => {
                     disabled={submitting || !operatorId || pin.length < 4}
                   >
                     {submitting ? 'Entrando...' : 'Entrar com permissoes'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto w-full justify-start gap-3 whitespace-normal rounded-2xl border-[#CFE1D9] bg-[#F3FAF7] px-4 py-3 text-left text-[#075B46] hover:bg-[#EAF6F1] hover:text-[#064A3A]"
+                    onClick={handleForgotPin}
+                    disabled={!selectedOperator || sendingPinRecovery}
+                  >
+                    {sendingPinRecovery ? <Loader2 className="h-5 w-5 shrink-0 animate-spin" /> : <KeyRound className="h-5 w-5 shrink-0" />}
+                    <span className="min-w-0">
+                      <span className="block font-semibold">
+                        {sendingPinRecovery ? 'Enviando link seguro...' : `Esqueci o PIN de ${selectedOperator?.name || 'este operador'}`}
+                      </span>
+                      <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                        A recuperação será enviada ao e-mail responsável pela loja.
+                      </span>
+                    </span>
                   </Button>
                 </div>
               ) : (
@@ -298,6 +377,23 @@ const OperatorLogin = () => {
                   </Button>
                 </div>
               )}
+
+              <div className="mt-7 border-t border-slate-200 pt-5">
+                <p className="text-sm font-semibold text-[#082F23]">Esta não é a loja que você quer acessar?</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Saia da conta atual para informar o e-mail e a senha de outra loja.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 h-11 w-full whitespace-normal rounded-2xl border-slate-300 px-3 text-[#082F23] hover:bg-slate-50"
+                  onClick={handleSwitchAccount}
+                  disabled={switchingAccount}
+                >
+                  {switchingAccount ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                  {switchingAccount ? 'Saindo da conta...' : 'Entrar com outro e-mail'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
