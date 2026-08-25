@@ -2,19 +2,40 @@ import { useEffect, useState, useRef } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthForm from '@/components/auth/AuthForm';
-import Logo from '@/components/Logo';
 import { debugLogger } from '@/utils/debugLogger';
 import { getLocalOperatorSession, getOperatorPathForRequestedPath } from '@/services/operatorAuth';
-import { BadgeCheck, BarChart3, CheckCircle2, Sparkles } from 'lucide-react';
+import { BadgeCheck, Cloud, Headphones, LockKeyhole, ShieldCheck, Zap } from 'lucide-react';
 
 const creativeAsset = (fileName: string) =>
   `${import.meta.env.BASE_URL}CRIATIVOS/${encodeURIComponent(fileName)}`;
 
 const loginVisuals = {
-  mascot: creativeAsset('WhatsApp Image 2026-07-15 at 14.01.04.jpeg'),
-  notebook: creativeAsset('mockup notebook.png'),
-  totem: creativeAsset('TOTEM.png'),
+  logo: creativeAsset('Logo pop.png'),
+  mascot: creativeAsset('mascote-login-transparente.png'),
 };
+
+const securityHighlights = [
+  {
+    icon: ShieldCheck,
+    title: 'Acesso seguro',
+    description: 'Seus dados e do seu restaurante protegidos',
+  },
+  {
+    icon: Cloud,
+    title: '100% em nuvem',
+    description: 'Acesse de qualquer lugar, a qualquer hora',
+  },
+  {
+    icon: Zap,
+    title: 'Performance e agilidade',
+    description: 'Sistema rápido, moderno e sempre atualizado',
+  },
+  {
+    icon: Headphones,
+    title: 'Suporte especializado',
+    description: 'Conte com nosso time sempre que precisar',
+  },
+];
 
 const Login = () => {
   const { user, isLoading } = useAuth();
@@ -142,65 +163,61 @@ const Login = () => {
       <div className="pointer-events-none absolute -left-28 top-1/4 h-80 w-80 rounded-full bg-[#9BD14B]/15 blur-3xl" />
       <div className="pointer-events-none absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-[#FF6400]/10 blur-3xl" />
 
-      <div className="relative mx-auto grid min-h-[calc(100vh-1.5rem)] w-full max-w-[1380px] overflow-hidden rounded-[30px] border border-white/80 bg-white shadow-[0_32px_100px_-50px_rgba(0,50,35,0.48)] sm:min-h-[calc(100vh-2.5rem)] lg:grid-cols-[1.04fr_0.96fr] lg:rounded-[36px]">
-        <section className="relative isolate flex min-h-[360px] flex-col overflow-hidden bg-[#063D2E] px-6 py-7 text-white sm:min-h-[420px] sm:px-9 sm:py-9 lg:min-h-[720px] lg:px-12 lg:py-11 xl:px-14">
-          <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_78%_18%,rgba(164,214,94,0.24),transparent_29%),radial-gradient(circle_at_5%_86%,rgba(255,100,0,0.24),transparent_32%),linear-gradient(145deg,#063D2E_0%,#07543D_54%,#032A20_100%)]" />
-          <div className="pointer-events-none absolute -right-20 top-20 -z-10 h-64 w-64 rounded-full border border-white/10" />
-          <div className="pointer-events-none absolute -right-4 top-36 -z-10 h-40 w-40 rounded-full border border-white/10" />
+      <div className="relative mx-auto grid min-h-[calc(100vh-1.5rem)] w-full max-w-[1320px] overflow-hidden rounded-[30px] border border-white/80 bg-white shadow-[0_32px_100px_-50px_rgba(0,50,35,0.48)] sm:min-h-[calc(100vh-2.5rem)] lg:grid-cols-2 lg:rounded-[28px]">
+        <section className="relative isolate flex min-h-[650px] flex-col overflow-hidden bg-[#033B2C] px-7 py-8 text-white sm:min-h-[760px] sm:px-10 sm:py-10 lg:min-h-[760px] lg:px-14 lg:py-12 xl:px-20">
+          <div className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(circle_at_78%_18%,rgba(40,176,91,0.18),transparent_27%),radial-gradient(circle_at_20%_70%,rgba(0,120,78,0.22),transparent_34%),linear-gradient(145deg,#023527_0%,#043D2D_54%,#012A20_100%)]" />
+          <div className="pointer-events-none absolute -right-20 -top-24 -z-10 h-72 w-72 rotate-[40deg] rounded-[34px] bg-white/[0.025]" />
+          <div className="pointer-events-none absolute -bottom-[10%] -left-[22%] z-0 h-[29%] w-[148%] -rotate-[7deg] rounded-[50%] border-t-[10px] border-[#FF6A00] bg-[#064733]" />
 
-          <div className="flex items-center justify-between gap-4">
-            <Logo size="md" className="brightness-0 invert" theme="dark" />
-            <div className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white/85 backdrop-blur sm:flex">
-              <BadgeCheck className="h-4 w-4 text-[#A4D65E]" />
-              Gestão completa em um só lugar
-            </div>
-          </div>
+          <img
+            src={loginVisuals.logo}
+            alt="PopSystem"
+            className="relative z-20 -ml-9 h-auto w-[280px] sm:w-[300px]"
+            decoding="async"
+          />
 
-          <div className="mt-8 max-w-xl sm:mt-10 lg:mt-12">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#A4D65E]/30 bg-[#A4D65E]/10 px-3.5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[#C8F28B]">
-              <Sparkles className="h-4 w-4" />
-              Do pedido ao lucro
+          <div className="relative z-20 mt-6 max-w-[470px]">
+            <div className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white/90 backdrop-blur-sm">
+              Sistema completo para restaurantes
             </div>
-            <h1 className="mt-5 max-w-lg text-3xl font-bold leading-[1.08] tracking-[-0.035em] sm:text-4xl lg:text-[44px]">
-              Seu restaurante conectado, organizado e pronto para crescer.
+            <h1 className="mt-4 text-[32px] font-bold leading-[1.12] tracking-[-0.04em] sm:text-[38px] lg:text-[40px]">
+              Gestão inteligente,<br />
+              restaurantes <span className="text-[#43C452]">lucrativos.</span>
             </h1>
-            <p className="mt-4 max-w-lg text-sm leading-6 text-white/72 sm:text-base sm:leading-7">
-              PDV, delivery, financeiro e atendimento trabalhando juntos para você ganhar tempo e tomar decisões melhores.
+            <p className="mt-3 max-w-[440px] text-sm leading-6 text-white/82 sm:text-[15px]">
+              Controle pedidos, financeiro, estoque, mesas,<br className="hidden sm:block" /> delivery e muito mais em um só lugar.
             </p>
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-white/78 sm:text-sm lg:mt-7">
-            <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#A4D65E]" /> Fácil de usar</span>
-            <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#A4D65E]" /> Feito para restaurantes</span>
-            <span className="flex items-center gap-2"><BarChart3 className="h-4 w-4 text-[#FF8A3D]" /> Gestão em tempo real</span>
+          <div className="relative z-30 mt-7 ml-auto hidden w-[57%] flex-col gap-3 sm:flex lg:mt-8">
+            {securityHighlights.map(({ icon: Icon, title, description }) => (
+              <div key={title} className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#008C43]/45 text-[#81F06A] shadow-[inset_0_0_0_1px_rgba(129,240,106,0.05)]">
+                  <Icon className="h-5 w-5" strokeWidth={2} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold leading-5 text-white">{title}</div>
+                  <div className="mt-0.5 text-[11px] leading-4 text-white/75">{description}</div>
+                </div>
+              </div>
+            ))}
           </div>
 
-          <div className="relative mt-8 h-[205px] sm:h-[245px] lg:mt-auto lg:h-[270px] xl:h-[290px]" aria-hidden="true">
-            <div className="absolute bottom-[-20%] left-[6%] w-[78%] overflow-hidden rounded-[24px] border border-white/20 bg-white shadow-[0_30px_70px_-28px_rgba(0,0,0,0.72)] sm:left-[8%] sm:w-[74%] lg:bottom-[-17%] lg:left-[5%] lg:w-[78%]">
-              <img
-                src={loginVisuals.notebook}
-                alt=""
-                className="block h-auto w-full object-contain"
-                decoding="async"
-              />
-            </div>
-            <div className="absolute -bottom-16 -right-5 hidden w-[25%] rotate-[4deg] overflow-hidden rounded-[24px] border border-white/25 bg-white shadow-[0_28px_60px_-24px_rgba(0,0,0,0.8)] sm:block lg:-right-4 lg:w-[26%]">
-              <img
-                src={loginVisuals.totem}
-                alt=""
-                className="block h-auto w-full object-contain"
-                loading="lazy"
-                decoding="async"
-              />
-            </div>
-            <div className="absolute -bottom-7 -left-2 h-28 w-24 overflow-hidden rounded-[26px] border-4 border-[#A4D65E] bg-white shadow-[0_18px_40px_-18px_rgba(0,0,0,0.7)] sm:h-36 sm:w-28 lg:-left-4 lg:h-40 lg:w-32">
-              <img
-                src={loginVisuals.mascot}
-                alt=""
-                className="h-full w-full object-cover object-top"
-                loading="lazy"
-                decoding="async"
-              />
+          <img
+            src={loginVisuals.mascot}
+            alt="Mascote PopSystem"
+            className="pointer-events-none absolute -bottom-6 -left-7 z-20 h-[350px] w-auto max-w-none object-contain sm:-bottom-10 sm:-left-11 sm:h-[470px] lg:-left-10"
+            loading="eager"
+            decoding="async"
+          />
+
+          <div className="absolute bottom-7 right-7 z-30 hidden w-[270px] items-start gap-3 rounded-2xl border border-white/15 bg-white/[0.075] px-5 py-4 shadow-[0_18px_40px_-26px_rgba(0,0,0,0.75)] backdrop-blur-sm sm:flex lg:right-10 xl:right-14">
+            <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[#82EB69]" />
+            <div>
+              <div className="text-xs font-bold text-white">Acesso restrito</div>
+              <div className="mt-1 text-[11px] leading-4 text-white/72">
+                Somente usuários autorizados podem entrar no sistema.
+              </div>
             </div>
           </div>
         </section>
