@@ -4,8 +4,8 @@ import {
   ArrowRight,
   BarChart3,
   Bot,
+  Camera,
   Check,
-  CheckCircle2,
   ChefHat,
   Clock3,
   FileCheck2,
@@ -16,6 +16,7 @@ import {
   MonitorSmartphone,
   MousePointerClick,
   PackageCheck,
+  PlayCircle,
   QrCode,
   ReceiptText,
   Send,
@@ -28,7 +29,6 @@ import {
   Users,
   UtensilsCrossed,
   WalletCards,
-  WandSparkles,
   Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -132,55 +132,42 @@ const Eyebrow = ({ children, light = false }: { children: React.ReactNode; light
 );
 
 const HeroVisual = () => (
-  <div className="relative mx-auto min-h-[510px] w-full max-w-[760px] sm:min-h-[620px] lg:min-h-[690px]">
-    <div className="absolute left-[8%] top-[8%] h-[72%] w-[76%] rounded-full border border-white/10" />
-    <div className="absolute left-[16%] top-[15%] h-[58%] w-[62%] rounded-full border border-[#a8dd72]/20" />
-    <div className="absolute left-[26%] top-[24%] h-[42%] w-[44%] rounded-full bg-[#86c94d]/20 blur-3xl" />
-    <div className="absolute right-[3%] top-[10%] h-20 w-20 rounded-[26px] bg-[#ef6c20] shadow-[0_22px_45px_-18px_rgba(239,108,32,.85)] sm:h-28 sm:w-28" />
-    <div className="absolute bottom-[9%] left-[4%] h-28 w-28 rounded-full bg-[#b9e57f]/25 blur-2xl sm:h-44 sm:w-44" />
+  <div className="relative mx-auto min-h-[510px] w-full max-w-[790px] sm:min-h-[590px] lg:min-h-[614px]">
+    <div className="absolute right-[7%] top-[7%] h-[75%] w-[70%] rounded-full bg-[radial-gradient(circle,rgba(140,207,90,.14)_0%,rgba(140,207,90,0)_70%)]" />
+    <div className="absolute bottom-[5%] left-[8%] h-24 w-[78%] rounded-[50%] bg-[#133f31]/12 blur-2xl" />
 
-    <div className="absolute left-[2%] top-[4%] z-20 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[9px] font-black uppercase tracking-[.18em] text-white/80 backdrop-blur-md sm:left-[8%] sm:text-[10px]">
-      Tecnologia que cabe na rotina
-    </div>
-
-    <img
-      src="/CRIATIVOS/dashboard-notebook-cutout.webp"
-      alt="Painel financeiro do PopSystem exibido em um notebook"
-      width="1536"
-      height="1024"
-      fetchPriority="high"
-      decoding="async"
-      className="absolute left-[1%] top-[18%] z-10 w-[98%] drop-shadow-[0_38px_34px_rgba(0,0,0,.48)] sm:left-[3%] sm:w-[94%]"
-    />
     <img
       src="/CRIATIVOS/mascote-popsystem.webp"
-      alt="Mascote PopSystem"
+      alt="Mascote PopSystem apresentando a plataforma"
       width="680"
       height="1020"
       decoding="async"
-      className="absolute -bottom-[3%] -left-[4%] z-30 w-[31%] drop-shadow-[0_28px_22px_rgba(0,0,0,.5)] sm:left-[1%] sm:w-[27%]"
+      className="absolute left-[28%] top-[6%] z-10 w-[39%] drop-shadow-[0_24px_18px_rgba(0,57,40,.18)]"
+    />
+    <img
+      src="/CRIATIVOS/totem-popsystem-cutout.webp"
+      alt="Totem de autoatendimento PopSystem"
+      width="941"
+      height="1672"
+      decoding="async"
+      className="absolute -right-[1%] bottom-[1%] z-20 h-[96%] w-auto drop-shadow-[0_28px_24px_rgba(0,50,35,.2)] sm:h-[100%]"
+    />
+    <img
+      src="/CRIATIVOS/dashboard-notebook-cutout.webp"
+      alt="Painel de gestão do PopSystem em um notebook"
+      width="1536"
+      height="1024"
+      decoding="async"
+      className="absolute bottom-0 left-[-3%] z-30 w-[62%] drop-shadow-[0_30px_22px_rgba(0,47,33,.22)] sm:left-[-5%] sm:w-[62%]"
     />
     <img
       src="/CRIATIVOS/app-garcom.webp"
-      alt="Aplicativo de garçom PopSystem em um celular"
+      alt="Aplicativo do garçom PopSystem em um celular"
       width="720"
       height="1080"
       decoding="async"
-      className="absolute -bottom-[2%] right-[0%] z-30 w-[29%] rotate-[5deg] drop-shadow-[0_34px_28px_rgba(0,0,0,.58)] sm:right-[3%] sm:w-[26%]"
+      className="absolute bottom-[-1%] left-[47%] z-40 h-[48%] w-auto -rotate-[1deg] drop-shadow-[0_25px_18px_rgba(0,39,27,.28)] sm:h-[52%]"
     />
-
-    <div className="absolute right-[1%] top-[7%] z-40 hidden items-center gap-3 rounded-2xl border border-white/15 bg-white/95 p-3.5 shadow-2xl sm:flex">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eaf7df] text-[#4b9228]"><TrendingUp className="h-5 w-5" /></div>
-      <div><div className="text-[9px] font-black uppercase tracking-widest text-[#81918b]">Gestão ao vivo</div><div className="text-xs font-black text-[#073e2e]">Decisões em tempo real</div></div>
-    </div>
-    <div className="absolute bottom-[7%] left-[25%] z-40 hidden rounded-2xl border border-white/15 bg-[#ef6c20] px-4 py-3.5 text-white shadow-2xl sm:block">
-      <div className="flex items-center gap-2 text-xs font-black"><Zap className="h-4 w-4" />Tudo conectado</div>
-      <div className="mt-1 text-[9px] font-bold uppercase tracking-[.14em] text-white/65">Venda · equipe · fiscal · marketing</div>
-    </div>
-    <div className="absolute bottom-[23%] right-[5%] z-40 hidden rounded-2xl border border-white/15 bg-[#0a4d3a]/90 px-4 py-3 text-white shadow-2xl backdrop-blur-md md:block">
-      <div className="text-[9px] font-black uppercase tracking-widest text-[#b9e57f]">Operação integrada</div>
-      <div className="mt-1 text-xs font-black">PDV + app + gestão</div>
-    </div>
   </div>
 );
 
@@ -198,56 +185,88 @@ const LandingPage = () => (
     </Helmet>
 
     <LandingLayout>
-      <section className="relative overflow-hidden bg-[#062c22] text-white">
-        <div className="absolute inset-0 opacity-[.09]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '28px 28px' }} />
-        <div className="absolute -left-52 top-12 h-[520px] w-[520px] rounded-full bg-[#0d6b4e]/55 blur-3xl" />
-        <div className="absolute -right-40 -top-24 h-[560px] w-[560px] rounded-full bg-[#ef6c20]/22 blur-3xl" />
-        <div className="absolute bottom-0 left-0 h-2 w-full bg-gradient-to-r from-[#ef6c20] via-[#a9d967] to-[#ef6c20]" />
-        <div className="absolute -bottom-44 left-[24%] h-72 w-[70%] -rotate-6 rounded-[50%] border-[34px] border-[#ef6c20]/20" />
-        <div className="container relative grid min-h-[820px] items-center gap-4 py-16 lg:grid-cols-[.88fr_1.12fr] lg:py-20">
-          <div className="relative z-10 max-w-2xl">
-            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black text-[#d8f6b7] shadow-sm backdrop-blur">
-              <WandSparkles className="h-4 w-4 text-[#ff8b47]" />
-              Seu restaurante no modo inteligente
+      <section id="solucoes" className="relative scroll-mt-24 overflow-hidden bg-white">
+        <div className="absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(circle_at_68%_42%,rgba(129,194,84,.08),transparent_42%)]" />
+        <div className="container relative grid min-h-[650px] items-center gap-5 px-5 pb-4 pt-10 2xl:px-0 lg:grid-cols-[.8fr_1.2fr] lg:pt-5">
+          <div className="relative z-10 max-w-[610px] pb-8 lg:pb-2">
+            <div className="mb-5 inline-flex items-center rounded-lg bg-[#c3ea9d] px-3 py-1.5 text-[11px] font-black uppercase tracking-[.03em] text-[#0a4b35]">
+              Sistema completo para restaurantes
             </div>
-            <h1 className="text-[2.8rem] font-black leading-[.94] tracking-[-.06em] text-white sm:text-6xl lg:text-[4.75rem]">
-              Venda mais. <span className="text-[#ff7a2d]">Trabalhe menos no operacional.</span>
+            <h1 className="text-[2.8rem] font-black leading-[1.04] tracking-[-.055em] text-[#062f24] sm:text-6xl lg:text-[4.2rem]">
+              Seu restaurante<br />
+              <span className="relative inline-block text-[#48ad5d]">
+                integrado na
+                <span className="absolute -bottom-1 left-[-1%] h-[5px] w-[102%] -rotate-1 rounded-full bg-[#ff650f]" />
+              </span><br />
+              palma da mão.
             </h1>
-            <p className="mt-7 max-w-xl text-lg font-medium leading-8 text-white/68 md:text-xl">
-              O PopSystem conecta pedidos, equipe, caixa, marketing e fiscal para o restaurante funcionar como uma operação só — do primeiro clique ao lucro.
+            <p className="mt-5 max-w-[570px] text-base font-medium leading-7 text-[#304b42] sm:text-lg">
+              Mais vendas, mais controle e mais lucro.<br className="hidden sm:block" /> Da produção ao financeiro, tudo em um só sistema.
             </p>
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Button asChild className="h-14 w-full rounded-2xl bg-[#ef6c20] px-7 text-base font-black text-white shadow-[0_18px_38px_-14px_rgba(239,108,32,.9)] transition hover:-translate-y-0.5 hover:bg-[#ff7a2d] sm:w-auto">
-                <a href={SIGNUP_URL} onClick={() => trackMarketing('landing_signup_click', 'hero_14_days')}>Teste grátis por 14 dias <ArrowRight className="ml-2 h-5 w-5" /></a>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              {[
+                [TrendingUp, 'Mais vendas', 'Cardápio digital, tráfego pago automático e upsell inteligente.'],
+                [ShieldCheck, 'Mais controle', 'Pedidos, estoque, mesas, funcionários e financeiro em tempo real.'],
+                [WalletCards, 'Mais lucro', 'Dados estratégicos para tomar decisões e crescer de verdade.'],
+              ].map(([Icon, title, text]) => {
+                const BenefitIcon = Icon as typeof TrendingUp;
+                return (
+                  <div key={String(title)} className="flex gap-3 sm:block">
+                    <div className="flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-[#9fcbb1] bg-white text-[#248648] shadow-sm"><BenefitIcon className="h-5 w-5" /></div>
+                    <div className="sm:mt-2"><h2 className="text-[12px] font-black text-[#0a3428]">{String(title)}</h2><p className="mt-1 text-[10px] font-semibold leading-[1.55] text-[#52675f]">{String(text)}</p></div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Button asChild className="h-13 w-full rounded-xl bg-[#f56616] px-7 text-sm font-black text-white shadow-[0_14px_28px_-14px_rgba(239,108,32,.78)] hover:bg-[#df5a0d] sm:w-auto">
+                <a href="#experiencia" onClick={() => trackMarketing('landing_demo_click', 'hero')}><PlayCircle className="mr-2 h-5 w-5" />Ver o sistema em ação</a>
               </Button>
-              <Button asChild variant="outline" className="h-14 w-full rounded-2xl border-white/20 bg-white/10 px-7 text-base font-black text-white backdrop-blur hover:bg-white hover:text-[#073e2e] sm:w-auto">
-                <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" onClick={() => trackMarketing('landing_whatsapp_click', 'hero')}><MessageCircle className="mr-2 h-5 w-5" />Falar com especialista</a>
+              <Button asChild variant="outline" className="h-13 w-full rounded-xl border-[#7da891] bg-white px-6 text-sm font-black text-[#0a4936] hover:bg-[#f1f8f2] sm:w-auto">
+                <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" onClick={() => trackMarketing('landing_whatsapp_click', 'hero')}><MessageCircle className="mr-2 h-5 w-5" />Fale com um especialista</a>
               </Button>
             </div>
-            <div className="mt-8 flex flex-wrap gap-x-5 gap-y-3 text-sm font-bold text-white/58">
-              {['Sem comissão sobre pedidos', 'Implantação acompanhada', 'Cancele quando quiser'].map(item => (
-                <span key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#a9df77]" />{item}</span>
-              ))}
+            <div className="mt-6 flex items-center gap-2 text-[11px] font-bold text-[#52675f]">
+              <ShieldCheck className="h-5 w-5 text-[#2b9853]" />Sistema seguro, estável e 100% em nuvem
             </div>
           </div>
           <HeroVisual />
         </div>
       </section>
 
-      <section className="relative z-20 bg-[#f5f6f0] pb-12" aria-label="Canais integrados">
-        <div className="container -mt-7">
-          <div className="grid grid-cols-2 gap-2 rounded-[26px] border border-[#dce7df] bg-white p-3 shadow-[0_24px_60px_-38px_rgba(0,48,35,.5)] md:grid-cols-3 lg:grid-cols-6">
+      <section className="relative z-20 bg-white pb-4" aria-label="Principais diferenciais">
+        <div className="container px-5 2xl:px-0">
+          <div className="grid overflow-hidden rounded-[20px] border border-[#cfe0d5] bg-white shadow-[0_18px_45px_-34px_rgba(0,56,38,.36)] sm:grid-cols-2 lg:grid-cols-7">
             {[
-              [MonitorSmartphone, 'PDV e caixa'],
-              [QrCode, 'Cardápio digital'],
-              [UtensilsCrossed, 'Mesas e comandas'],
-              [Store, 'Totem integrado'],
-              [MessageCircle, 'WhatsApp Bot'],
-              [ShoppingBag, 'Delivery próprio'],
-            ].map(([Icon, label]) => {
-              const ChannelIcon = Icon as typeof MonitorSmartphone;
-              return <div key={String(label)} className="flex items-center justify-center gap-2 rounded-2xl px-3 py-4 text-center text-xs font-black text-[#315548] transition hover:bg-[#edf6e7]"><ChannelIcon className="h-4 w-4 flex-none text-[#ef6c20]" />{String(label)}</div>;
+              [Megaphone, 'Tráfego pago automático', 'Mais clientes no piloto automático e no delivery.'],
+              [ShieldCheck, 'Pagamento garantido', 'Pedido só é aprovado após o dinheiro entrar na conta.'],
+              [Clock3, 'Controle de ponto inteligente', 'Registro com biometria e relatórios automáticos.'],
+              [ReceiptText, 'Fiscal nativo', 'NFC-e + Módulo Fiscal (IBS/CBS) integrado ao sistema.'],
+              [FileCheck2, 'Notas para contabilidade', 'Envio automático das notas e relatórios para o contador.'],
+              [Camera, 'Despesa por foto', 'Lance despesas com foto do comprovante e categorize.'],
+              [BarChart3, 'Relatórios e indicadores', 'Dashboards completos para decisões mais inteligentes.'],
+            ].map(([Icon, title, text], index) => {
+              const FeatureIcon = Icon as typeof Megaphone;
+              return (
+                <article key={String(title)} className={`flex min-h-[128px] gap-3 px-4 py-5 ${index > 0 ? 'border-t border-[#e1e9e3] sm:border-l sm:border-t-0' : ''} lg:min-h-[134px]`}>
+                  <FeatureIcon className={`mt-0.5 h-8 w-8 flex-none ${index === 0 ? 'text-[#ef6c20]' : 'text-[#176445]'}`} strokeWidth={1.65} />
+                  <div><h2 className="text-[11px] font-black leading-[1.25] text-[#0a3428]">{String(title)}</h2><p className="mt-2 text-[9px] font-semibold leading-[1.55] text-[#63736d]">{String(text)}</p></div>
+                </article>
+              );
             })}
+          </div>
+        </div>
+      </section>
+
+      <section id="vantagens" className="scroll-mt-24 bg-white pb-0 pt-1" aria-label="Resultados e confiança">
+        <div className="container px-5 2xl:px-0">
+          <div className="grid overflow-hidden rounded-[18px] shadow-[0_20px_45px_-32px_rgba(0,52,36,.5)] lg:grid-cols-[1.25fr_.8fr_.9fr_.85fr_1.25fr_1.45fr]">
+            <div className="flex items-center gap-4 bg-[#065039] px-7 py-6 text-white"><ShieldCheck className="h-10 w-10 flex-none text-[#b6e879]" /><div><div className="text-sm font-black">Sistema 100% em nuvem</div><div className="mt-1 text-[10px] font-medium text-white/72">Seguro, rápido e sempre disponível.</div></div></div>
+            {[['+800', 'restaurantes', 'confiam'], ['+50 mil', 'pedidos por dia', 'através do sistema'], ['99,9%', 'tempo de atividade', 'garantido']].map(([value, label, helper]) => <div key={value} className="border-t border-white/15 bg-[#065039] px-7 py-6 text-white lg:border-l lg:border-t-0"><div className="text-3xl font-black tracking-[-.05em]">{value}</div><div className="mt-1 text-xs font-black">{label}</div><div className="mt-1 text-[10px] text-white/65">{helper}</div></div>)}
+            <div className="flex items-center gap-4 border-t border-white/15 bg-[#065039] px-7 py-6 text-white lg:border-l lg:border-t-0"><MessageCircle className="h-9 w-9 flex-none text-[#b6e879]" /><div><div className="text-sm font-black leading-tight">Suporte humano<br />e especializado</div><div className="mt-1 text-[10px] text-white/68">Sempre que precisar.</div></div></div>
+            <div className="bg-[#ff650f] px-7 py-5 text-white"><div className="text-base font-black leading-tight">Pronto para transformar<br />seu restaurante?</div><Button asChild className="mt-3 h-10 w-full rounded-lg bg-[#064d37] text-xs font-black text-white hover:bg-[#043b2b]"><a href={SIGNUP_URL} onClick={() => trackMarketing('landing_signup_click', 'proof_strip')}>Agendar demonstração <ArrowRight className="ml-2 h-4 w-4" /></a></Button></div>
           </div>
         </div>
       </section>

@@ -12,7 +12,7 @@ const LandingLayout: React.FC<LandingLayoutProps> = ({ children }) => {
     <div className="min-h-screen flex flex-col bg-white selection:bg-[#ef6c20] selection:text-white">
       <MarketingScrollTracker />
       <Header />
-      <main className="flex-1 pt-[72px]">
+      <main className="flex-1 pt-[78px]">
         {children}
       </main>
       <Footer />
