@@ -132,47 +132,54 @@ const Eyebrow = ({ children, light = false }: { children: React.ReactNode; light
 );
 
 const HeroVisual = () => (
-  <div className="relative mx-auto min-h-[520px] w-full max-w-[720px] lg:min-h-[680px]">
-    <div className="absolute inset-x-4 bottom-2 top-10 overflow-hidden rounded-[38px] border border-white/10 bg-[radial-gradient(circle_at_72%_20%,rgba(140,200,80,.35),transparent_30%),linear-gradient(145deg,#0a503a_0%,#062d23_58%,#031b15_100%)] shadow-[0_45px_100px_-38px_rgba(0,50,35,.65)] sm:inset-x-8 lg:inset-x-0">
-      <div className="absolute inset-0 opacity-[.08]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-      <div className="absolute left-6 top-6 z-20 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-[.18em] text-white/85 backdrop-blur-md sm:left-9 sm:top-8">
-        Gestão do pedido ao lucro
-      </div>
+  <div className="relative mx-auto min-h-[510px] w-full max-w-[760px] sm:min-h-[620px] lg:min-h-[690px]">
+    <div className="absolute left-[8%] top-[8%] h-[72%] w-[76%] rounded-full border border-white/10" />
+    <div className="absolute left-[16%] top-[15%] h-[58%] w-[62%] rounded-full border border-[#a8dd72]/20" />
+    <div className="absolute left-[26%] top-[24%] h-[42%] w-[44%] rounded-full bg-[#86c94d]/20 blur-3xl" />
+    <div className="absolute right-[3%] top-[10%] h-20 w-20 rounded-[26px] bg-[#ef6c20] shadow-[0_22px_45px_-18px_rgba(239,108,32,.85)] sm:h-28 sm:w-28" />
+    <div className="absolute bottom-[9%] left-[4%] h-28 w-28 rounded-full bg-[#b9e57f]/25 blur-2xl sm:h-44 sm:w-44" />
 
-      <img
-        src="/CRIATIVOS/dashboard-notebook.webp"
-        alt="Painel financeiro do PopSystem exibido em um notebook"
-        width="1280"
-        height="853"
-        fetchPriority="high"
-        decoding="async"
-        className="absolute bottom-[11%] left-[9%] z-10 w-[82%] drop-shadow-[0_28px_30px_rgba(0,0,0,.45)] sm:bottom-[8%]"
-      />
-      <img
-        src="/CRIATIVOS/mascote-popsystem.webp"
-        alt="Mascote PopSystem"
-        width="680"
-        height="1020"
-        decoding="async"
-        className="absolute -bottom-[2%] -left-[7%] z-20 w-[32%] drop-shadow-[0_20px_20px_rgba(0,0,0,.4)] sm:left-[-3%] sm:w-[29%]"
-      />
-      <img
-        src="/CRIATIVOS/app-garcom.webp"
-        alt="Aplicativo de garçom PopSystem em um celular"
-        width="720"
-        height="1080"
-        decoding="async"
-        className="absolute -bottom-[5%] right-[-3%] z-20 w-[32%] rotate-[4deg] drop-shadow-[0_28px_25px_rgba(0,0,0,.5)] sm:right-[1%] sm:w-[30%]"
-      />
+    <div className="absolute left-[2%] top-[4%] z-20 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[9px] font-black uppercase tracking-[.18em] text-white/80 backdrop-blur-md sm:left-[8%] sm:text-[10px]">
+      Tecnologia que cabe na rotina
+    </div>
 
-      <div className="absolute right-5 top-[14%] z-30 hidden items-center gap-3 rounded-2xl border border-white/15 bg-white/95 p-3 shadow-2xl sm:flex">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eaf7df] text-[#4b9228]"><TrendingUp className="h-4 w-4" /></div>
-        <div><div className="text-[9px] font-black uppercase tracking-widest text-[#81918b]">Visão em tempo real</div><div className="text-xs font-black text-[#073e2e]">Decida com segurança</div></div>
-      </div>
-      <div className="absolute bottom-5 left-[32%] z-30 hidden rounded-2xl border border-white/15 bg-[#ef6c20] px-4 py-3 text-white shadow-2xl sm:block">
-        <div className="text-[9px] font-black uppercase tracking-widest text-white/65">Tudo conectado</div>
-        <div className="mt-1 text-xs font-black">Venda · equipe · fiscal · marketing</div>
-      </div>
+    <img
+      src="/CRIATIVOS/dashboard-notebook-cutout.webp"
+      alt="Painel financeiro do PopSystem exibido em um notebook"
+      width="1536"
+      height="1024"
+      fetchPriority="high"
+      decoding="async"
+      className="absolute left-[1%] top-[18%] z-10 w-[98%] drop-shadow-[0_38px_34px_rgba(0,0,0,.48)] sm:left-[3%] sm:w-[94%]"
+    />
+    <img
+      src="/CRIATIVOS/mascote-popsystem.webp"
+      alt="Mascote PopSystem"
+      width="680"
+      height="1020"
+      decoding="async"
+      className="absolute -bottom-[3%] -left-[4%] z-30 w-[31%] drop-shadow-[0_28px_22px_rgba(0,0,0,.5)] sm:left-[1%] sm:w-[27%]"
+    />
+    <img
+      src="/CRIATIVOS/app-garcom.webp"
+      alt="Aplicativo de garçom PopSystem em um celular"
+      width="720"
+      height="1080"
+      decoding="async"
+      className="absolute -bottom-[2%] right-[0%] z-30 w-[29%] rotate-[5deg] drop-shadow-[0_34px_28px_rgba(0,0,0,.58)] sm:right-[3%] sm:w-[26%]"
+    />
+
+    <div className="absolute right-[1%] top-[7%] z-40 hidden items-center gap-3 rounded-2xl border border-white/15 bg-white/95 p-3.5 shadow-2xl sm:flex">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eaf7df] text-[#4b9228]"><TrendingUp className="h-5 w-5" /></div>
+      <div><div className="text-[9px] font-black uppercase tracking-widest text-[#81918b]">Gestão ao vivo</div><div className="text-xs font-black text-[#073e2e]">Decisões em tempo real</div></div>
+    </div>
+    <div className="absolute bottom-[7%] left-[25%] z-40 hidden rounded-2xl border border-white/15 bg-[#ef6c20] px-4 py-3.5 text-white shadow-2xl sm:block">
+      <div className="flex items-center gap-2 text-xs font-black"><Zap className="h-4 w-4" />Tudo conectado</div>
+      <div className="mt-1 text-[9px] font-bold uppercase tracking-[.14em] text-white/65">Venda · equipe · fiscal · marketing</div>
+    </div>
+    <div className="absolute bottom-[23%] right-[5%] z-40 hidden rounded-2xl border border-white/15 bg-[#0a4d3a]/90 px-4 py-3 text-white shadow-2xl backdrop-blur-md md:block">
+      <div className="text-[9px] font-black uppercase tracking-widest text-[#b9e57f]">Operação integrada</div>
+      <div className="mt-1 text-xs font-black">PDV + app + gestão</div>
     </div>
   </div>
 );
@@ -191,32 +198,35 @@ const LandingPage = () => (
     </Helmet>
 
     <LandingLayout>
-      <section className="relative overflow-hidden bg-[#f5f6f0]">
-        <div className="absolute -left-40 top-20 h-[420px] w-[420px] rounded-full bg-[#a9db73]/20 blur-3xl" />
-        <div className="absolute -right-32 top-0 h-[460px] w-[460px] rounded-full bg-[#ff7a2d]/15 blur-3xl" />
-        <div className="container relative grid min-h-[780px] items-center gap-10 py-14 lg:grid-cols-[.88fr_1.12fr] lg:gap-6 lg:py-20">
+      <section className="relative overflow-hidden bg-[#062c22] text-white">
+        <div className="absolute inset-0 opacity-[.09]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '28px 28px' }} />
+        <div className="absolute -left-52 top-12 h-[520px] w-[520px] rounded-full bg-[#0d6b4e]/55 blur-3xl" />
+        <div className="absolute -right-40 -top-24 h-[560px] w-[560px] rounded-full bg-[#ef6c20]/22 blur-3xl" />
+        <div className="absolute bottom-0 left-0 h-2 w-full bg-gradient-to-r from-[#ef6c20] via-[#a9d967] to-[#ef6c20]" />
+        <div className="absolute -bottom-44 left-[24%] h-72 w-[70%] -rotate-6 rounded-[50%] border-[34px] border-[#ef6c20]/20" />
+        <div className="container relative grid min-h-[820px] items-center gap-4 py-16 lg:grid-cols-[.88fr_1.12fr] lg:py-20">
           <div className="relative z-10 max-w-2xl">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#c9dccd] bg-white/80 px-4 py-2 text-xs font-black text-[#174f3d] shadow-sm backdrop-blur">
-              <WandSparkles className="h-4 w-4 text-[#ef6c20]" />
-              14 dias grátis para conhecer por dentro
+            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black text-[#d8f6b7] shadow-sm backdrop-blur">
+              <WandSparkles className="h-4 w-4 text-[#ff8b47]" />
+              Seu restaurante no modo inteligente
             </div>
-            <h1 className="text-[2.8rem] font-black leading-[.96] tracking-[-.058em] text-[#073e2e] sm:text-6xl lg:text-[4.8rem]">
-              Seu restaurante vende. <span className="text-[#ef6c20]">O PopSystem faz o resto acontecer.</span>
+            <h1 className="text-[2.8rem] font-black leading-[.94] tracking-[-.06em] text-white sm:text-6xl lg:text-[4.75rem]">
+              Venda mais. <span className="text-[#ff7a2d]">Trabalhe menos no operacional.</span>
             </h1>
-            <p className="mt-7 max-w-xl text-lg font-medium leading-8 text-[#5d7169] md:text-xl">
-              Do pedido ao caixa, da equipe à contabilidade, do cliente à próxima campanha. Uma plataforma para operar melhor, automatizar o trabalho e crescer com controle.
+            <p className="mt-7 max-w-xl text-lg font-medium leading-8 text-white/68 md:text-xl">
+              O PopSystem conecta pedidos, equipe, caixa, marketing e fiscal para o restaurante funcionar como uma operação só — do primeiro clique ao lucro.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Button asChild className="h-14 w-full rounded-2xl bg-[#ef6c20] px-7 text-base font-black text-white shadow-[0_16px_35px_-14px_rgba(239,108,32,.8)] hover:bg-[#da5d16] sm:w-auto">
+              <Button asChild className="h-14 w-full rounded-2xl bg-[#ef6c20] px-7 text-base font-black text-white shadow-[0_18px_38px_-14px_rgba(239,108,32,.9)] transition hover:-translate-y-0.5 hover:bg-[#ff7a2d] sm:w-auto">
                 <a href={SIGNUP_URL} onClick={() => trackMarketing('landing_signup_click', 'hero_14_days')}>Teste grátis por 14 dias <ArrowRight className="ml-2 h-5 w-5" /></a>
               </Button>
-              <Button asChild variant="outline" className="h-14 w-full rounded-2xl border-[#b9cbc0] bg-white px-7 text-base font-black text-[#073e2e] hover:bg-[#eaf4e7] sm:w-auto">
+              <Button asChild variant="outline" className="h-14 w-full rounded-2xl border-white/20 bg-white/10 px-7 text-base font-black text-white backdrop-blur hover:bg-white hover:text-[#073e2e] sm:w-auto">
                 <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" onClick={() => trackMarketing('landing_whatsapp_click', 'hero')}><MessageCircle className="mr-2 h-5 w-5" />Falar com especialista</a>
               </Button>
             </div>
-            <div className="mt-8 flex flex-wrap gap-x-5 gap-y-3 text-sm font-bold text-[#547068]">
+            <div className="mt-8 flex flex-wrap gap-x-5 gap-y-3 text-sm font-bold text-white/58">
               {['Sem comissão sobre pedidos', 'Implantação acompanhada', 'Cancele quando quiser'].map(item => (
-                <span key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#66a63e]" />{item}</span>
+                <span key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#a9df77]" />{item}</span>
               ))}
             </div>
           </div>
@@ -224,9 +234,9 @@ const LandingPage = () => (
         </div>
       </section>
 
-      <section className="border-y border-[#e1e9e2] bg-white py-7" aria-label="Canais integrados">
-        <div className="container">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <section className="relative z-20 bg-[#f5f6f0] pb-12" aria-label="Canais integrados">
+        <div className="container -mt-7">
+          <div className="grid grid-cols-2 gap-2 rounded-[26px] border border-[#dce7df] bg-white p-3 shadow-[0_24px_60px_-38px_rgba(0,48,35,.5)] md:grid-cols-3 lg:grid-cols-6">
             {[
               [MonitorSmartphone, 'PDV e caixa'],
               [QrCode, 'Cardápio digital'],
@@ -236,7 +246,7 @@ const LandingPage = () => (
               [ShoppingBag, 'Delivery próprio'],
             ].map(([Icon, label]) => {
               const ChannelIcon = Icon as typeof MonitorSmartphone;
-              return <div key={String(label)} className="flex items-center justify-center gap-2 rounded-2xl border border-[#e4ebe5] bg-[#fafbf8] px-3 py-3 text-center text-xs font-black text-[#315548]"><ChannelIcon className="h-4 w-4 flex-none text-[#ef6c20]" />{String(label)}</div>;
+              return <div key={String(label)} className="flex items-center justify-center gap-2 rounded-2xl px-3 py-4 text-center text-xs font-black text-[#315548] transition hover:bg-[#edf6e7]"><ChannelIcon className="h-4 w-4 flex-none text-[#ef6c20]" />{String(label)}</div>;
             })}
           </div>
         </div>
@@ -249,8 +259,8 @@ const LandingPage = () => (
             <p className="max-w-2xl text-lg font-medium leading-8 text-[#64776f]">Não é só registrar pedidos. O PopSystem conecta as tarefas que roubam tempo do dono e transforma cada área em parte do mesmo fluxo.</p>
           </div>
 
-          <div className="mt-14 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {differentiators.map(({ icon: Icon, title, text, label, tone }) => {
+          <div className="mt-14 grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {differentiators.map(({ icon: Icon, title, text, label, tone }, index) => {
               const styles = tone === 'orange'
                 ? 'border-[#ef6c20] bg-[#ef6c20] text-white shadow-[0_24px_55px_-28px_rgba(239,108,32,.8)]'
                 : tone === 'lime'
@@ -262,13 +272,14 @@ const LandingPage = () => (
                       : 'border-[#dfe8e1] bg-white text-[#073e2e]';
               const muted = tone === 'orange' || tone === 'dark' ? 'text-white/68' : 'text-[#687b73]';
               return (
-                <article key={title} className={`group flex min-h-[280px] flex-col rounded-[28px] border p-7 transition duration-300 hover:-translate-y-1 hover:shadow-xl ${styles}`}>
+                <article key={title} className={`group relative flex min-h-[280px] flex-col overflow-hidden rounded-[30px] border p-7 transition duration-300 hover:-translate-y-1 hover:shadow-xl ${(index === 0 || index === 3) ? 'xl:col-span-2 xl:px-9' : ''} ${styles}`}>
+                  {(index === 0 || index === 3) ? <div className="absolute -bottom-20 -right-16 h-56 w-56 rounded-full border-[38px] border-white/10 transition duration-500 group-hover:scale-110" /> : null}
                   <div className="flex items-start justify-between gap-4">
                     <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${tone === 'orange' || tone === 'dark' ? 'bg-white/12' : 'bg-white shadow-sm'}`}><Icon className={`h-6 w-6 ${tone === 'orange' ? 'text-white' : tone === 'dark' ? 'text-[#bff082]' : 'text-[#e95f12]'}`} /></div>
                     <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-[.16em] ${tone === 'orange' || tone === 'dark' ? 'border-white/15 bg-white/10 text-white/75' : 'border-[#dce7df] bg-white/75 text-[#628073]'}`}>{label}</span>
                   </div>
-                  <h3 className="mt-10 text-2xl font-black leading-tight">{title}</h3>
-                  <p className={`mt-3 text-sm font-medium leading-6 ${muted}`}>{text}</p>
+                  <h3 className={`relative mt-10 font-black leading-tight ${(index === 0 || index === 3) ? 'max-w-xl text-3xl' : 'text-2xl'}`}>{title}</h3>
+                  <p className={`relative mt-3 max-w-2xl text-sm font-medium leading-6 ${muted}`}>{text}</p>
                 </article>
               );
             })}
@@ -276,19 +287,32 @@ const LandingPage = () => (
         </div>
       </section>
 
-      <section id="experiencia" className="relative overflow-hidden bg-[#071f18] py-24 text-white">
-        <div className="absolute inset-0 opacity-[.07]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '26px 26px' }} />
+      <section id="experiencia" className="relative overflow-hidden bg-[#f3f5ee] py-24">
+        <div className="absolute -left-28 top-10 h-96 w-96 rounded-full bg-[#a7dd72]/22 blur-3xl" />
+        <div className="absolute -right-28 bottom-0 h-[440px] w-[440px] rounded-full bg-[#ef6c20]/14 blur-3xl" />
         <div className="container relative">
-          <div className="mx-auto max-w-3xl text-center"><Eyebrow light>Uma plataforma. Todas as telas.</Eyebrow><h2 className="text-4xl font-black leading-[1.03] tracking-[-.045em] md:text-5xl">No computador, no celular e no ponto de venda.</h2><p className="mt-5 text-lg font-medium leading-8 text-white/60">Cada pessoa usa a tela certa. Todos trabalham com a mesma informação.</p></div>
+          <div className="mx-auto max-w-3xl text-center"><Eyebrow>Uma plataforma. Todas as telas.</Eyebrow><h2 className="text-4xl font-black leading-[1.03] tracking-[-.045em] text-[#073e2e] md:text-5xl">A tecnologia aparece onde sua operação precisa.</h2><p className="mt-5 text-lg font-medium leading-8 text-[#677a72]">No autoatendimento, no salão e na gestão. Cada tela tem seu papel, mas a informação é uma só.</p></div>
 
-          <div className="relative mx-auto mt-12 min-h-[650px] max-w-6xl overflow-hidden rounded-[38px] border border-white/10 bg-[radial-gradient(circle_at_50%_25%,rgba(143,211,79,.18),transparent_38%),rgba(255,255,255,.035)] px-4 pt-10 sm:min-h-[720px] sm:px-10">
-            <img src="/CRIATIVOS/dashboard-notebook.webp" alt="PopSystem no notebook" width="1280" height="853" loading="lazy" decoding="async" className="absolute bottom-[7%] left-1/2 w-[88%] max-w-[880px] -translate-x-1/2 drop-shadow-[0_35px_30px_rgba(0,0,0,.55)]" />
-            <img src="/CRIATIVOS/totem-popsystem.webp" alt="Totem de autoatendimento PopSystem" width="620" height="1102" loading="lazy" decoding="async" className="absolute -bottom-[8%] -left-[3%] z-10 w-[25%] max-w-[230px] drop-shadow-[0_30px_25px_rgba(0,0,0,.5)] sm:left-[2%]" />
-            <img src="/CRIATIVOS/app-garcom.webp" alt="Aplicativo do garçom PopSystem" width="720" height="1080" loading="lazy" decoding="async" className="absolute -bottom-[7%] -right-[5%] z-10 w-[27%] max-w-[250px] rotate-[4deg] drop-shadow-[0_30px_25px_rgba(0,0,0,.55)] sm:right-[2%]" />
-            <div className="relative z-20 mx-auto grid max-w-4xl grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="relative mx-auto mt-14 min-h-[780px] max-w-6xl overflow-hidden rounded-[42px] border border-[#d9e6db] bg-[linear-gradient(145deg,#ffffff_0%,#edf6e9_55%,#fff4e9_100%)] shadow-[0_40px_100px_-58px_rgba(0,56,39,.55)] sm:min-h-[860px] lg:min-h-[720px]">
+            <div className="absolute inset-0 opacity-[.36]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(7,62,46,.18) 1px, transparent 0)', backgroundSize: '25px 25px' }} />
+            <div className="absolute -left-24 bottom-[-18%] h-[620px] w-[620px] rounded-full bg-[#073e2e]" />
+            <div className="absolute -right-32 top-[-22%] h-[480px] w-[480px] rounded-full border-[68px] border-[#ef6c20]/15" />
+
+            <div className="relative z-20 grid grid-cols-2 gap-2 p-5 sm:grid-cols-4 sm:p-8">
               {[
                 [Smartphone, 'Garçom ágil'], [Store, 'Autoatendimento'], [BarChart3, 'Gestão ao vivo'], [ShieldCheck, 'Dados seguros'],
-              ].map(([Icon, label]) => { const DeviceIcon = Icon as typeof Smartphone; return <div key={String(label)} className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#0b3328]/85 px-3 py-3 text-[11px] font-black text-white/78 backdrop-blur"><DeviceIcon className="h-4 w-4 text-[#a9df77]" />{String(label)}</div>; })}
+              ].map(([Icon, label]) => { const DeviceIcon = Icon as typeof Smartphone; return <div key={String(label)} className="flex items-center justify-center gap-2 rounded-2xl border border-white/70 bg-white/80 px-3 py-3.5 text-[11px] font-black text-[#315548] shadow-sm backdrop-blur"><DeviceIcon className="h-4 w-4 text-[#ef6c20]" />{String(label)}</div>; })}
+            </div>
+
+            <img src="/CRIATIVOS/dashboard-notebook-cutout.webp" alt="PopSystem no notebook" width="1536" height="1024" loading="lazy" decoding="async" className="absolute bottom-[23%] left-[10%] z-10 w-[83%] drop-shadow-[0_34px_28px_rgba(0,45,32,.35)] sm:bottom-[18%] lg:bottom-[2%] lg:left-[19%] lg:w-[68%]" />
+            <img src="/CRIATIVOS/totem-popsystem-cutout.webp" alt="Totem de autoatendimento PopSystem" width="941" height="1672" loading="lazy" decoding="async" className="absolute -bottom-[4%] -left-[6%] z-30 w-[40%] max-w-[340px] drop-shadow-[0_30px_22px_rgba(0,30,22,.38)] sm:left-[1%] sm:w-[32%] lg:-bottom-[9%] lg:left-[2%] lg:w-[25%]" />
+            <img src="/CRIATIVOS/app-garcom.webp" alt="Aplicativo do garçom PopSystem" width="720" height="1080" loading="lazy" decoding="async" className="absolute -bottom-[5%] -right-[7%] z-30 w-[39%] max-w-[320px] rotate-[5deg] drop-shadow-[0_34px_26px_rgba(0,30,22,.4)] sm:right-[1%] sm:w-[32%] lg:-bottom-[12%] lg:right-[3%] lg:w-[25%]" />
+
+            <div className="absolute bottom-[13%] left-[27%] z-40 hidden max-w-[230px] rounded-[22px] border border-white/15 bg-[#ef6c20] p-4 text-white shadow-2xl sm:block lg:bottom-[7%] lg:left-[24%]">
+              <div className="flex items-center gap-2 text-sm font-black"><QrCode className="h-4 w-4" />Pedido sem fila</div><p className="mt-1 text-[10px] font-bold leading-4 text-white/70">Totem, QR Code e cardápio digital conectados ao mesmo fluxo.</p>
+            </div>
+            <div className="absolute right-[8%] top-[20%] z-40 hidden max-w-[220px] rounded-[22px] border border-[#dbe7dc] bg-white/90 p-4 shadow-xl backdrop-blur sm:block lg:top-[22%]">
+              <div className="flex items-center gap-2 text-sm font-black text-[#073e2e]"><BarChart3 className="h-4 w-4 text-[#65a73c]" />Gestão sem adivinhação</div><p className="mt-1 text-[10px] font-bold leading-4 text-[#718078]">Caixa, custos e vendas visíveis enquanto o restaurante acontece.</p>
             </div>
           </div>
         </div>
