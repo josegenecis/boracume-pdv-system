@@ -93,6 +93,7 @@ import { getCashSessionDeadline, isCashSessionOverdue } from '@/utils/cashSessio
 import { getLocalOperatorSession } from '@/services/operatorAuth';
 
 const queryClient = new QueryClient();
+const isDesktopRuntime = Boolean(window.electronAPI?.isElectron);
 
 function AppLoadingFallback() {
   return (
@@ -164,7 +165,7 @@ function AppContent() {
       } />
       
       {/* Rotas que precisam de autenticação */}
-      <Route path="/" element={<Index />} />
+      <Route path="/" element={isDesktopRuntime ? <Navigate to="/operator-login" replace /> : <Index />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Navigate to="/login?tab=register" replace />} />
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -391,7 +392,7 @@ function DesktopOAuthCallbackBridge() {
         }
 
         toast.success('Login concluído. Bem-vindo ao PopSystem!');
-        navigate('/dashboard', { replace: true });
+        navigate('/operator-login', { replace: true });
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Não foi possível concluir a autenticação.');
       }

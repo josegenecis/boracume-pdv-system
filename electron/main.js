@@ -120,13 +120,13 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:8080/#/dashboard');
+    mainWindow.loadURL('http://localhost:8080/#/operator-login');
   } else {
     const indexPath = path.join(__dirname, 'dist', 'index.html');
     if (!fs.existsSync(indexPath)) {
       dialog.showErrorBox('Erro ao iniciar', `Arquivo não encontrado:\n${indexPath}`);
     } else {
-      mainWindow.loadFile(indexPath, { hash: '/dashboard' });
+      mainWindow.loadFile(indexPath, { hash: '/operator-login' });
     }
   }
 

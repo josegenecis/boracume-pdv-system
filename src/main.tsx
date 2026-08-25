@@ -77,7 +77,8 @@ const mainDomains = new Set([
 ]);
 const hostname = window.location.hostname;
 const isMainDomain = mainDomains.has(hostname) || hostname.endsWith('.vercel.app');
-const isMarketingEntry = isMainDomain && marketingPaths.has(window.location.pathname);
+const isDesktopRuntime = Boolean(window.electronAPI?.isElectron);
+const isMarketingEntry = !isDesktopRuntime && isMainDomain && marketingPaths.has(window.location.pathname);
 
 const root = createRoot(document.getElementById('root')!);
 
