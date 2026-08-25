@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -75,10 +75,12 @@ import { friendlyErrorMessage } from '@/lib/friendly-error';
 import StaffConsumptionManager from '@/components/tables/StaffConsumptionManager';
 import { Checkbox } from '@/components/ui/checkbox';
 import { getOpenTableCount } from '@/services/openTables';
+import { cn } from '@/lib/utils';
 
 type PaymentMethod = 'pix' | 'pix_online' | 'pix_entrega' | 'dinheiro' | 'cartao' | 'cartao_online';
 type PaymentMethodFilter = '' | 'all' | PaymentMethod;
 type TxTypeFilter = '' | 'all' | 'entrada' | 'saida';
+type PeriodPreset = 'today' | '7d' | '30d' | 'month';
 type SupabaseQuery = {
   select: (columns: string) => SupabaseQuery;
   eq: (column: string, value: unknown) => SupabaseQuery;
@@ -99,6 +101,7 @@ interface Transaction {
   category: string;
   paymentMethod?: PaymentMethod;
   status?: string;
+  acceptanceStatus?: string;
   order?: Record<string, any>;
 }
 
@@ -111,6 +114,32 @@ interface CashSession {
   status: 'open' | 'closed';
   notes?: string | null;
 }
+
+const FINANCE_PAGE_SIZE = 1000;
+
+const getPeriodRange = (preset: PeriodPreset = '30d') => {
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = new Date(end);
+
+  if (preset === 'today') {
+    start.setHours(0, 0, 0, 0);
+  } else if (preset === 'month') {
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+  } else {
+    start.setDate(start.getDate() - (preset === '7d' ? 6 : 29));
+    start.setHours(0, 0, 0, 0);
+  }
+
+  return { start, end };
+};
+
+const isConfirmedIncome = (transaction: Transaction) => {
+  const status = String(transaction.status || '').toLowerCase();
+  const acceptanceStatus = String(transaction.acceptanceStatus || '').toLowerCase();
+  return status !== 'cancelled' && acceptanceStatus !== 'awaiting_pix_payment';
+};
 
 const Financeiro = () => {
   const { user } = useAuth();
@@ -131,6 +160,7 @@ const Financeiro = () => {
   const [reprintingCashReport, setReprintingCashReport] = useState(false);
   const [cancellingOrderIds, setCancellingOrderIds] = useState<Set<string>>(new Set());
   const [orderToCancel, setOrderToCancel] = useState<any | null>(null);
+  const fetchSequenceRef = useRef(0);
   
   // States for new expense
   const [newExpense, setNewExpense] = useState({ description: '', amount: '', category: 'Geral' });
@@ -146,22 +176,33 @@ const Financeiro = () => {
   const [openTablesConsent, setOpenTablesConsent] = useState(false);
   const [mobileFinanceTab, setMobileFinanceTab] = useState<'caixa' | 'movimentos' | 'relatorios'>('caixa');
 
-  const [filters, setFilters] = useState({
-    paymentMethod: '' as PaymentMethodFilter,
-    type: '' as TxTypeFilter,
-    startDate: null as Date | null,
-    endDate: null as Date | null,
-    searchTerm: ''
+  const [filters, setFilters] = useState(() => {
+    const { start, end } = getPeriodRange('30d');
+    return {
+      paymentMethod: '' as PaymentMethodFilter,
+      type: '' as TxTypeFilter,
+      startDate: start as Date | null,
+      endDate: end as Date | null,
+      searchTerm: ''
+    };
   });
+  const [activePeriodPreset, setActivePeriodPreset] = useState<PeriodPreset | null>('30d');
+  const filterStartTimestamp = filters.startDate?.getTime() ?? null;
+  const filterEndTimestamp = filters.endDate?.getTime() ?? null;
   
   // Fetch transactions and session
   useEffect(() => {
     if (user) {
-      fetchData();
       checkOpenSession();
       fetchCashSessions();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user?.id) void fetchData();
+    // fetchData intentionally follows the selected date window.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, filterStartTimestamp, filterEndTimestamp]);
 
   useEffect(() => {
     if (user?.id && selectedSessionId) {
@@ -171,24 +212,55 @@ const Financeiro = () => {
 
   const fetchData = async () => {
     if (!user) return;
+    const requestId = ++fetchSequenceRef.current;
     setIsLoading(true);
     try {
-      // 1. Fetch Orders (Income)
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('user_id', user.id);
+      const rangeStart = filters.startDate ? new Date(filters.startDate) : getPeriodRange('30d').start;
+      const rangeEnd = filters.endDate ? new Date(filters.endDate) : getPeriodRange('30d').end;
+      rangeStart.setHours(0, 0, 0, 0);
+      rangeEnd.setHours(23, 59, 59, 999);
 
-      const ordersList = (orders as any[]) || [];
+      const fetchAllPages = async (buildQuery: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: any }>) => {
+        const rows: any[] = [];
+        for (let from = 0; ; from += FINANCE_PAGE_SIZE) {
+          const { data, error } = await buildQuery(from, from + FINANCE_PAGE_SIZE - 1);
+          if (error) throw error;
+          const page = (data as any[]) || [];
+          rows.push(...page);
+          if (page.length < FINANCE_PAGE_SIZE) break;
+        }
+        return rows;
+      };
+
+      const [ordersList, cancellationAudits, expensesList] = await Promise.all([
+        fetchAllPages((from, to) => (supabase as any)
+          .from('orders')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('created_at', rangeStart.toISOString())
+          .lte('created_at', rangeEnd.toISOString())
+          .order('created_at', { ascending: false })
+          .range(from, to)),
+        fetchAllPages((from, to) => (supabase as any)
+          .from('finance_sale_cancellations')
+          .select('order_id, reason, authorized_waiter_name, created_at, refund_requested, refund_status')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .range(from, to)),
+        fetchAllPages((from, to) => (supabase as any)
+          .from('expenses')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .range(from, to)),
+      ]);
+
+      if (requestId !== fetchSequenceRef.current) return;
       setOrdersRaw(ordersList);
 
-      const { data: cancellationAudits } = await (supabase as any)
-        .from('finance_sale_cancellations')
-        .select('order_id, reason, authorized_waiter_name, created_at, refund_requested, refund_status')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
       const cancellationByOrder = new Map<string, any>();
-      ((cancellationAudits as any[]) || []).forEach((audit) => {
+      cancellationAudits.forEach((audit) => {
         const orderId = String(audit?.order_id || '');
         if (orderId && !cancellationByOrder.has(orderId)) cancellationByOrder.set(orderId, audit);
       });
@@ -197,32 +269,25 @@ const Financeiro = () => {
         id: order.id,
         date: new Date(order.created_at),
         description: `Pedido #${order.id.substring(0, 8)}`,
-        amount: order.total,
+        amount: Number(order.total || 0),
         type: 'entrada' as 'entrada',
         category: 'Vendas',
         paymentMethod: order.payment_method as PaymentMethod,
         status: String(order.status || ''),
+        acceptanceStatus: String(order.acceptance_status || ''),
         order: {
           ...order,
           financial_cancellation: cancellationByOrder.get(String(order.id)) || null,
         },
       }));
 
-      // 2. Fetch Expenses (Outcome)
-      const { data: expenses } = await (supabase as any)
-        .from('expenses')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true);
-
-      const expensesList = (expenses as any[]) || [];
       setExpensesRaw(expensesList);
 
       const expenseTx = expensesList.map(exp => ({
         id: exp.id,
         date: new Date(exp.expense_date || exp.date || exp.created_at),
         description: exp.description,
-        amount: exp.amount,
+        amount: Number(exp.amount || 0),
         type: 'saida' as 'saida',
         category: exp.category || 'Geral',
         paymentMethod: 'dinheiro' as PaymentMethod // Assuming expenses are paid in cash for simplicity or add field later
@@ -230,13 +295,17 @@ const Financeiro = () => {
 
       const all = [...incomeTx, ...expenseTx].sort((a, b) => b.date.getTime() - a.date.getTime());
       setTransactions(all);
-      setFilteredTransactions(all);
 
     } catch (error: any) {
+      if (requestId !== fetchSequenceRef.current) return;
       console.error(error);
-      toast({ title: 'Erro ao carregar dados', variant: 'destructive' });
+      toast({
+        title: 'Erro ao carregar o faturamento',
+        description: 'Não foi possível consultar todas as vendas do período. Tente novamente.',
+        variant: 'destructive'
+      });
     } finally {
-      setIsLoading(false);
+      if (requestId === fetchSequenceRef.current) setIsLoading(false);
     }
   };
 
@@ -936,7 +1005,7 @@ const Financeiro = () => {
   // Calculate financial summaries using the same period displayed in the charts.
   const financialTransactions = filteredTransactions.filter(
     (transaction) =>
-      transaction.status !== 'cancelled'
+      (transaction.type === 'saida' || isConfirmedIncome(transaction))
       && transaction.date >= reportStart
       && transaction.date <= reportEnd
   );
@@ -1025,44 +1094,36 @@ const Financeiro = () => {
   };
   
   const resetFilters = () => {
+    const { start, end } = getPeriodRange('30d');
     setFilters({
       paymentMethod: '',
       type: '',
-      startDate: null,
-      endDate: null,
+      startDate: start,
+      endDate: end,
       searchTerm: ''
     });
-    setFilteredTransactions(transactions);
+    setActivePeriodPreset('30d');
   };
   
   const handleFilterChange = (field: keyof typeof filters, value: any) => {
+    if (field === 'startDate' || field === 'endDate') setActivePeriodPreset(null);
     setFilters({
       ...filters,
       [field]: value
     });
   };
 
-  const setPeriodPreset = (preset: 'today' | '7d' | '30d' | 'month') => {
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
-    const start = new Date(end);
-
-    if (preset === 'today') {
-      start.setHours(0, 0, 0, 0);
-    } else if (preset === 'month') {
-      start.setDate(1);
-      start.setHours(0, 0, 0, 0);
-    } else {
-      start.setDate(start.getDate() - (preset === '7d' ? 6 : 29));
-      start.setHours(0, 0, 0, 0);
-    }
-
+  const setPeriodPreset = (preset: PeriodPreset) => {
+    const { start, end } = getPeriodRange(preset);
+    setActivePeriodPreset(preset);
     setFilters((current) => ({ ...current, startDate: start, endDate: end }));
   };
   
   useEffect(() => {
     applyFilters();
-  }, [filters.startDate, filters.endDate]);
+    // Keep the displayed list synchronized after a period refetch or filter change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, filters.paymentMethod, filters.type, filters.startDate, filters.endDate, filters.searchTerm]);
   
   const formatDate = (date: Date) => {
     if (!date || isNaN(date.getTime())) return '-';
@@ -1159,7 +1220,8 @@ const Financeiro = () => {
     const ordersInRange = (ordersRaw || []).filter((o: any) => {
       const created = new Date(o?.created_at);
       if (created < reportStart || created > reportEnd) return false;
-      if (String(o?.status || '') === 'cancelled') return false;
+      if (String(o?.status || '').toLowerCase() === 'cancelled') return false;
+      if (String(o?.acceptance_status || '').toLowerCase() === 'awaiting_pix_payment') return false;
       return true;
     });
     const receitaLiquida = ordersInRange.reduce((acc: number, o: any) => acc + Number(o?.total || 0), 0);
@@ -1236,6 +1298,7 @@ const Financeiro = () => {
   const periodSales = filteredTransactions.filter(
     (transaction) =>
       transaction.category === 'Vendas'
+      && String(transaction.acceptanceStatus || '').toLowerCase() !== 'awaiting_pix_payment'
       && transaction.date >= reportStart
       && transaction.date <= reportEnd
   );
@@ -1593,7 +1656,7 @@ const Financeiro = () => {
             <div className="flex flex-col gap-5">
               <div className="grid w-full grid-cols-2 gap-3 xl:grid-cols-4">
                   <div className="min-w-0 rounded-[22px] border border-[#8CC850]/18 bg-gradient-to-br from-white to-[#F5FBED] p-4 dark:border-[#8CC850]/15 dark:from-[#0c1512] dark:to-[#112017]">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Receitas</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Faturamento</div>
                     <div className="mt-2 truncate text-[1.35rem] font-bold text-slate-900 dark:text-white 2xl:text-2xl">{formatCurrency(totalIncome)}</div>
                   </div>
                   <div className="min-w-0 rounded-[22px] border border-[#FF6400]/18 bg-gradient-to-br from-white to-[#FFF3EA] p-4 dark:border-[#FF6400]/15 dark:from-[#0c1512] dark:to-[#1e1510]">
@@ -1634,9 +1697,19 @@ const Financeiro = () => {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-9 rounded-xl border-[#003223]/10 bg-white px-3 text-xs text-[#003223] shadow-sm hover:bg-[#F5FBED] dark:border-white/10 dark:bg-white/5 dark:text-white"
-                      onClick={() => setPeriodPreset(preset.key as 'today' | '7d' | '30d' | 'month')}
+                      aria-pressed={activePeriodPreset === preset.key}
+                      disabled={isLoading && activePeriodPreset === preset.key}
+                      className={cn(
+                        'h-9 rounded-xl px-3 text-xs shadow-sm transition-colors',
+                        activePeriodPreset === preset.key
+                          ? 'border-[#003223] bg-[#003223] text-white hover:bg-[#0a4a34] hover:text-white dark:border-[#8CC850] dark:bg-[#8CC850] dark:text-[#003223]'
+                          : 'border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5FBED] dark:border-white/10 dark:bg-white/5 dark:text-white'
+                      )}
+                      onClick={() => setPeriodPreset(preset.key as PeriodPreset)}
                     >
+                      {isLoading && activePeriodPreset === preset.key ? (
+                        <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : null}
                       {preset.label}
                     </Button>
                   ))}
@@ -1695,7 +1768,7 @@ const Financeiro = () => {
                 <div className="grid gap-4">
                   <div className="rounded-[28px] border border-[#003223]/8 bg-[#F8FAF8] p-4 dark:border-white/10 dark:bg-[#0c1512]">
                     <div className="text-sm font-semibold text-slate-900 dark:text-white">Mix de pagamentos</div>
-                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Como as receitas estão distribuídas hoje</div>
+                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Como o faturamento está distribuído no período</div>
                     <div className="mt-4 h-[180px]">
                       {hasPaymentMix ? (
                         <ResponsiveContainer width="100%" height="100%">
