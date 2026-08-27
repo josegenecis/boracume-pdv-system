@@ -7,7 +7,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const EVOLUTION_URL = "https://api.boracume.com";
+const evolutionUrl = () => String(
+  Deno.env.get("EVOLUTION_BASE_URL") ||
+  Deno.env.get("EVOGO_BASE_URL") ||
+  "https://api.boracume.com"
+).replace(/\/+$/, "");
 const ACTIVE_WINDOW_DAYS = 30;
 const MARKETING_COOLDOWN_DAYS = 7;
 const MAX_CREATE_TARGETS = 200;
@@ -652,7 +656,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
 
 async function sendText(userId: string, number: string, text: string) {
   const instanceToken = `token_${userId.replace(/-/g, "")}`;
-  const response = await fetch(`${EVOLUTION_URL}/send/text`, {
+  const response = await fetch(`${evolutionUrl()}/send/text`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: instanceToken },
     body: JSON.stringify({ number, text }),
@@ -738,7 +742,7 @@ async function sendMedia(userId: string, instanceName: string, number: string, t
   const mimeType = mediaMimeType(mediaUrl);
   const transportsFor = (media: string) => [
     {
-      url: `${EVOLUTION_URL}/send/media`,
+      url: `${evolutionUrl()}/send/media`,
       headers: { "Content-Type": "application/json", apikey: instanceToken },
       body: { number, url: media, type: "image", caption: text },
     },
@@ -750,12 +754,12 @@ async function sendMedia(userId: string, instanceName: string, number: string, t
       }))
       : []),
     ...buildMediaPayloads(number, text, media, mimeType).map((body) => ({
-      url: `${EVOLUTION_URL}/send/media`,
+      url: `${evolutionUrl()}/send/media`,
       headers: { "Content-Type": "application/json", apikey: instanceToken },
       body,
     })),
     {
-      url: `${EVOLUTION_URL}/send/image`,
+      url: `${evolutionUrl()}/send/image`,
       headers: { "Content-Type": "application/json", apikey: instanceToken },
       body: { number, image: media, caption: text, mimetype: mimeType },
     },
