@@ -44,7 +44,7 @@ type FiscalRule = {
   is_cclass_trib: string | null;
   is_config: JsonObject;
   benefit_code: string | null;
-  legal_basis: string;
+  legal_basis: string | null;
   accountant_approved_at: string | null;
   accountant_approved_by: string | null;
 };
@@ -279,7 +279,7 @@ export default function FiscalOperationsManager() {
 
   const save = async () => {
     if (!storeId || !issuerUf) return toast({ title: "Cadastre a UF do emitente antes de criar a operação", variant: "destructive" });
-    if (!form.name.trim() || !form.cfop || !form.legalBasis.trim()) return toast({ title: "Preencha nome, CFOP e fundamentação legal", variant: "destructive" });
+    if (!form.name.trim() || !form.cfop) return toast({ title: "Preencha nome e CFOP", variant: "destructive" });
     if (form.destination === "2" && (!UFS.includes(form.destinationUf) || form.destinationUf === issuerUf)) return toast({ title: "Escolha uma UF de destino diferente da UF do emitente", variant: "destructive" });
     const destinationIcmsRate = Number(form.destinationIcmsRate.replace(",", "."));
     if (form.destination === "2" && (!Number.isFinite(destinationIcmsRate) || destinationIcmsRate <= 0 || destinationIcmsRate > 100)) {
@@ -341,7 +341,7 @@ export default function FiscalOperationsManager() {
       ibs_cbs_config: ibsCbsConfig,
       is_cst: form.isCst === "none" ? null : form.isCst, is_cclass_trib: form.isCclassTrib === "none" ? null : form.isCclassTrib,
       is_config: form.isCst === "none" ? { enabled: false } : { ...form.isConfig, enabled: true },
-      benefit_code: form.benefitCode.trim() || null, legal_basis: form.legalBasis.trim(),
+      benefit_code: form.benefitCode.trim() || null, legal_basis: form.legalBasis.trim() || null,
       rtc_source_version: null, rtc_table_version: null,
     };
     setSaving(true);
@@ -390,7 +390,7 @@ export default function FiscalOperationsManager() {
           {rules.map((rule) => <div key={rule.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
             <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong>{rule.name}</strong>{rule.accountant_approved_at ? <Badge className="bg-emerald-600">Aprovada</Badge> : <Badge variant="secondary">Rascunho</Badge>}</div>
               <p className="mt-1 text-sm text-muted-foreground">{rule.origin_uf} → {rule.destination_uf} · CFOP {rule.cfop} · {rule.issuer_crt[0] === 1 ? "CSOSN" : "CST"} {rule.icms_code} · modelos {rule.model_codes.join("/")}</p>
-              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground"><span className="font-semibold text-foreground">Fundamentação legal:</span> {rule.legal_basis}</p>
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground"><span className="font-semibold text-foreground">Fundamentação legal:</span> {rule.legal_basis || "Não informada"}</p>
             </div>
             <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => openEdit(rule)}><Pencil className="mr-2 h-4 w-4" />Editar</Button>{!rule.accountant_approved_at && <><Button variant="outline" size="sm" aria-label={`Excluir operação ${rule.name}`} title={`Excluir operação ${rule.name}`} onClick={() => void remove(rule)}><Trash2 className="h-4 w-4" /></Button><Button size="sm" onClick={() => setApprovalRule(rule)}><ShieldCheck className="mr-2 h-4 w-4" />Aprovar</Button></>}</div>
           </div>)}
@@ -446,7 +446,7 @@ export default function FiscalOperationsManager() {
           <EnumField label="CST Imposto Seletivo" value={form.isCst} onChange={(v) => { setField("isCst", v); setField("isCclassTrib", "none"); }} options={[["none", "Sem incidência"], ...isCsts.map((x) => [x, x])]} />
           <EnumField label="Classificação tributária IS" value={form.isCclassTrib} onChange={(v) => setField("isCclassTrib", v)} options={[["none", "Não aplicável"], ...isClasses.map((x) => [x.cclass_trib, `${x.cclass_trib} — ${x.description}`])]} />
           <Field label="Código de benefício fiscal"><Input value={form.benefitCode} onChange={(e) => setField("benefitCode", e.target.value)} /></Field>
-          <div className="md:col-span-2 lg:col-span-3"><Field label="Fundamentação legal da operação"><Textarea rows={3} value={form.legalBasis} onChange={(e) => setField("legalBasis", e.target.value)} placeholder="Ex.: dispositivo legal, convênio, ajuste ou observação validada pelo contador" /><p className="text-xs text-muted-foreground">Este texto fica vinculado à operação, aparece na conferência e é preservado para auditoria fiscal.</p></Field></div>
+          <div className="md:col-span-2 lg:col-span-3"><Field label="Fundamentação legal da operação (opcional)"><Textarea rows={3} value={form.legalBasis} onChange={(e) => setField("legalBasis", e.target.value)} placeholder="Ex.: dispositivo legal, convênio, ajuste ou observação validada pelo contador" /><p className="text-xs text-muted-foreground">Quando informada, fica vinculada à operação e é preservada para conferência e auditoria fiscal.</p></Field></div>
         </div><DialogFooter><Button variant="outline" onClick={() => setEditorOpen(false)}>Cancelar</Button><Button onClick={() => void save()} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar rascunho</Button></DialogFooter>
       </DialogContent></Dialog>
 
