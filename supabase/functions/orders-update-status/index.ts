@@ -39,6 +39,49 @@ const errInfo = (e: any) => {
   }
 }
 
+const cancelFiscalDocumentsForOrder = async ({
+  supabaseUrl,
+  serviceKey,
+  userId,
+  orderId,
+  reason,
+}: {
+  supabaseUrl: string
+  serviceKey: string
+  userId: string
+  orderId: string
+  reason: string
+}) => {
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/nfce-operations`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+        'Content-Type': 'application/json',
+        'x-popsystem-internal-source': 'orders-update-status',
+      },
+      body: JSON.stringify({
+        operation: 'cancelar_por_venda',
+        _storeId: userId,
+        order_id: orderId,
+        motivo: reason,
+      }),
+      signal: AbortSignal.timeout(60000),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok || payload?.success !== true) {
+      return {
+        ok: false,
+        error: String(payload?.error || payload?.motivo || `http_${response.status}`),
+      }
+    }
+    return { ok: true, ...payload }
+  } catch (error: any) {
+    return { ok: false, error: String(error?.message || error) }
+  }
+}
+
 const parseItems = (raw: any): any[] => {
   if (!raw) return []
   if (Array.isArray(raw)) return raw
@@ -550,6 +593,30 @@ Deno.serve(async (req: Request) => {
       return ok({ ok: false, error: 'ifood_action_failed', details: { message: String(e?.message || e) } })
     }
 
+    let fiscalCancellation: any = null
+    if (newStatus === 'cancelled') {
+      const cancellationReason = String(
+        body?.financialCancellation?.reason ||
+        body?.ifoodCancellationReason ||
+        body?.cancellationReason ||
+        'Cancelamento solicitado a partir da venda',
+      ).trim()
+      fiscalCancellation = await cancelFiscalDocumentsForOrder({
+        supabaseUrl,
+        serviceKey,
+        userId,
+        orderId,
+        reason: cancellationReason,
+      })
+      if (!fiscalCancellation?.ok) {
+        return ok({
+          ok: false,
+          error: 'fiscal_cancellation_failed',
+          details: { message: fiscalCancellation?.error || 'A SEFAZ não confirmou o cancelamento fiscal.' },
+        })
+      }
+    }
+
     const updateData =
       newStatus === 'preparing'
         ? { status: newStatus, acceptance_status: 'accepted' }
@@ -643,6 +710,7 @@ Deno.serve(async (req: Request) => {
       whatsapp: postStatusResult?.whatsapp || queuedResult,
       deliveryOffer: postStatusResult?.deliveryOffer || queuedResult,
       loyalty: postStatusResult?.loyalty || queuedResult,
+      fiscalCancellation,
       postProcessingQueued: !postStatusResult,
       idempotent: false,
       operationId,

@@ -707,7 +707,7 @@ const Orders = () => {
 
     const confirmed = await confirm({
       title: 'Confirmar cancelamento do pedido',
-      description: `Tem certeza de que deseja cancelar o pedido #${order.order_number || order.id}? Essa ação altera o financeiro, o estoque e o andamento do pedido.`,
+      description: `Tem certeza de que deseja cancelar o pedido #${order.order_number || order.id}? Se houver documento fiscal autorizado, ele será cancelado primeiro e a venda só será alterada após a confirmação da SEFAZ.`,
       confirmText: 'Sim, cancelar pedido',
       cancelText: 'Voltar',
       variant: 'destructive',
@@ -775,6 +775,7 @@ const Orders = () => {
     setPixCancelLoading(true);
     try {
       let refundMessage = '';
+      await updateOrderStatus(order.id, 'cancelled');
       if (refundPix) {
         const { data, status } = await invokeEdgeFunction('poppay-refund', {
           orderId: order.id,
@@ -787,7 +788,6 @@ const Orders = () => {
           ? ' O reembolso PIX está em processamento no Mercado Pago.'
           : ' O PIX foi devolvido para a conta pagadora.';
       }
-      await updateOrderStatus(order.id, 'cancelled');
       setPixCancelOrder(null);
       if (refundPix) {
         toast({ title: 'Pedido cancelado com devolução', description: `Venda ${order.order_number} cancelada.${refundMessage}` });

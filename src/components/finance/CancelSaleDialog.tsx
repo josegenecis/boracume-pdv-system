@@ -69,7 +69,9 @@ export function CancelSaleDialog({
           <DialogDescription>
             {amountLabel ? `O valor de ${amountLabel} ` : 'O valor '}
             sairá dos totais do caixa atual e o estoque baixado será devolvido. A venda não será apagada:
-            ficará marcada como cancelada com motivo, responsável e horário.
+            ficará marcada como cancelada com motivo, responsável e horário. Se existir documento fiscal
+            autorizado, ele será cancelado primeiro e a venda só será alterada após a confirmação da SEFAZ.
+            O prazo é de 30 minutos para o modelo 65 e 720 horas para o modelo 55.
           </DialogDescription>
         </DialogHeader>
 

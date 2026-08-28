@@ -57,6 +57,8 @@ export const updateOrderStatus = async (
         'Esta venda pertence a um caixa anterior e não pode mais ser cancelada pela operação diária.',
       cancellation_audit_failed:
         'O cancelamento não foi concluído porque o histórico de auditoria não pôde ser registrado.',
+      fiscal_cancellation_failed:
+        data?.details?.message || 'O cancelamento fiscal não foi confirmado pela SEFAZ. A venda não foi cancelada.',
     }
     throw new Error(friendlyMessages[String(data?.error || '')] || `${data?.error || 'edge_function_error'}${detailsMsg}`)
   }

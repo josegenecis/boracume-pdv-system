@@ -7,16 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Receipt, Search, Download, Eye, X, RotateCcw, PlayCircle, AlertTriangle, Printer, Send, Loader2 } from 'lucide-react';
+import { Receipt, Search, Download, Eye, RotateCcw, PlayCircle, AlertTriangle, Printer, Send, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import AdminPinDialog from '@/components/security/AdminPinDialog';
-import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
-import { verifyAdminPin } from '@/services/adminPin';
 import { PrinterService } from '@/utils/printerService';
 
 interface NFCeCupom {
@@ -45,8 +42,6 @@ const NFCeManager: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isSimulationMode, setIsSimulationMode] = useState(false);
-  const [adminPinOpen, setAdminPinOpen] = useState(false);
-  const [pendingCancelCupomId, setPendingCancelCupomId] = useState<string | null>(null);
   const [resendingCupomId, setResendingCupomId] = useState<string | null>(null);
   const { toast } = useToast();
   const confirm = useConfirmDialog();
@@ -242,69 +237,6 @@ const NFCeManager: React.FC = () => {
     }
   };
 
-  const doCancelCupom = async (cupomId: string) => {
-
-    try {
-      setLoading(true);
-
-      if (isSimulationMode) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setCupons(prev => prev.map(c => c.id === cupomId ? { ...c, status: 'cancelado' } : c));
-        toast({
-          title: "Cancelamento Simulado",
-          description: "O cupom foi cancelado com sucesso.",
-        });
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('nfce-operations', {
-        body: {
-          _storeId: user?.id,
-          operation: 'cancelar',
-          cupom_id: cupomId,
-          motivo: 'Cancelamento solicitado pelo usuário'
-        }
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Cupom cancelado",
-        description: "O cupom foi cancelado com sucesso.",
-      });
-
-      loadCupons();
-    } catch (error: any) {
-      console.error('Erro ao cancelar cupom:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao cancelar cupom.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCancelarCupom = async (cupomId: string) => {
-    const ok = await confirm({
-      title: 'Cancelar cupom fiscal',
-      description: 'O cancelamento fiscal vale para a NFC-e inteira, não apenas para um item. Confirme somente se a operação foi desfeita e ainda está dentro do prazo permitido pela SEFAZ do seu estado.',
-      confirmText: 'Cancelar cupom',
-      cancelText: 'Voltar',
-      variant: 'destructive',
-    });
-    if (!ok) return;
-    const session = getLocalOperatorSession();
-    if (isAdminOperator(session)) {
-      await doCancelCupom(cupomId);
-      return;
-    }
-    setPendingCancelCupomId(cupomId);
-    setAdminPinOpen(true);
-  };
-
   const handleDownloadXML = async (cupomId: string, numero: number) => {
     try {
       if (isSimulationMode) {
@@ -394,28 +326,6 @@ const NFCeManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <AdminPinDialog
-        open={adminPinOpen}
-        title="Cancelar NFC-e"
-        description="Somente administrador pode cancelar. Digite o PIN do administrador."
-        confirmLabel="Cancelar NFC-e"
-        onCancel={() => { setAdminPinOpen(false); setPendingCancelCupomId(null); }}
-        onConfirm={async (pin) => {
-          const restaurantUserId = user?.id || '';
-          if (!restaurantUserId) {
-            toast({ title: 'Erro', description: 'Usuário não autenticado', variant: 'destructive' });
-            return;
-          }
-          const res = await verifyAdminPin({ restaurantUserId, pin });
-          if (!res.ok) {
-            toast({ title: 'Sem permissão', description: 'PIN inválido ou não é administrador', variant: 'destructive' });
-            return;
-          }
-          if (pendingCancelCupomId) await doCancelCupom(pendingCancelCupomId);
-          setAdminPinOpen(false);
-          setPendingCancelCupomId(null);
-        }}
-      />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Receipt className="w-6 h-6" />
@@ -450,7 +360,7 @@ const NFCeManager: React.FC = () => {
             <div>
               <h3 className="text-sm font-medium text-yellow-800">Ambiente de Simulação Ativo</h3>
               <p className="text-sm text-yellow-700 mt-1">
-                As ações realizadas aqui não serão enviadas para a SEFAZ. Use para testar o fluxo de emissão e cancelamento.
+                As ações realizadas aqui não serão enviadas para a SEFAZ. Use para testar o fluxo de emissão e consulta.
               </p>
             </div>
           </div>
@@ -610,15 +520,6 @@ const NFCeManager: React.FC = () => {
                         XML
                       </Button>
 
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleCancelarCupom(cupom.id)}
-                        disabled={loading}
-                      >
-                        <X className="w-4 h-4 mr-1" />
-                        Cancelar
-                      </Button>
                     </>
                   )}
 

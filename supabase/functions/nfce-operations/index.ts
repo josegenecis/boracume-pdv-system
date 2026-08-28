@@ -21,11 +21,15 @@ import {
   buildRtcTotalsXml,
   validateRtcItem,
 } from "./rtc-engine.ts";
+import {
+  assertFiscalCancellationWindow,
+  normalizeFiscalDocumentModel,
+} from "../_shared/fiscal-cancellation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-diagnostic-key",
+    "authorization, x-client-info, apikey, content-type, x-diagnostic-key, x-popsystem-internal-source",
 };
 
 type Ambiente = "producao" | "homologacao";
@@ -65,6 +69,7 @@ interface NFCeData {
     | "reenviar_rejeitado"
     | "consultar"
     | "cancelar"
+    | "cancelar_por_venda"
     | "download_xml"
     | "testar_conexao"
     | "validar_config"
@@ -121,6 +126,24 @@ export async function handleRequest(req: Request) {
     const authHeader = req.headers.get("authorization");
     if (!authHeader) throw new Error("Authorization header is required");
 
+    if (requestData.operation === "cancelar_por_venda") {
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+      const isInternalSaleCancellation = Boolean(serviceRoleKey) &&
+        authHeader === `Bearer ${serviceRoleKey}` &&
+        req.headers.get("x-popsystem-internal-source") === "orders-update-status";
+      if (!isInternalSaleCancellation) {
+        throw new Error(
+          "O cancelamento fiscal só pode ser iniciado pelo cancelamento da venda.",
+        );
+      }
+      return await cancelarDocumentosFiscaisDaVenda(
+        supabase,
+        required(requestData._storeId, "_storeId"),
+        required(requestData.order_id, "order_id"),
+        requestData.motivo || "Cancelamento solicitado a partir da venda",
+      );
+    }
+
     const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
@@ -155,11 +178,8 @@ export async function handleRequest(req: Request) {
           required(requestData.cupom_id, "cupom_id"),
         );
       case "cancelar":
-        return await cancelarNFCe(
-          supabase,
-          storeUserId,
-          required(requestData.cupom_id, "cupom_id"),
-          requestData.motivo || "Cancelamento solicitado pelo usuario",
+        throw new Error(
+          "O cancelamento fiscal deve ser realizado exclusivamente pelo cancelamento da venda vinculada.",
         );
       case "download_xml":
         return await downloadXML(
@@ -1604,7 +1624,7 @@ async function reenviarDocumentoRejeitado(
   }
 }
 
-async function cancelarNFCe(
+async function cancelarDocumentoFiscal(
   supabase: any,
   userId: string,
   cupomId: string,
@@ -1624,7 +1644,8 @@ async function cancelarNFCe(
     throw new Error("Cupom autorizado sem protocolo salvo");
   }
 
-  const modelCode: "55" | "65" = cupom.model_code === "55" ? "55" : "65";
+  assertFiscalCancellationWindow(cupom);
+  const modelCode = normalizeFiscalDocumentModel(cupom.model_code);
   const fiscalSettings = await loadFiscalSettings(supabase, userId, false);
   const modelSettings = await loadFiscalModel(supabase, userId, modelCode);
   if (modelSettings?.environment) {
@@ -1663,13 +1684,65 @@ async function cancelarNFCe(
       },
     ]);
 
-    return json({
+    return {
       success: result.success,
       motivo: result.success ? "Cancelado com sucesso" : result.xMotivo,
-    });
+      cupom_id: cupom.id,
+      model_code: modelCode,
+      numero: cupom.numero,
+    };
   } finally {
     sefazClient.close();
   }
+}
+
+async function cancelarDocumentosFiscaisDaVenda(
+  supabase: any,
+  userId: string,
+  orderId: string,
+  motivo: string,
+) {
+  const { data: documents, error } = await supabase
+    .from("nfce_cupons")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("order_id", orderId)
+    .eq("status", "autorizado")
+    .order("data_hora_autorizacao", { ascending: true });
+
+  if (error) throw new Error(`Erro ao localizar documento fiscal da venda: ${error.message}`);
+  if (!Array.isArray(documents) || documents.length === 0) {
+    return json({ success: true, skipped: true, documents: [] });
+  }
+
+  // Confere todos os prazos antes de enviar qualquer evento à SEFAZ. Assim,
+  // uma venda com documento fora do prazo não sofre cancelamento parcial.
+  const validationTime = new Date();
+  for (const document of documents) {
+    assertFiscalCancellationWindow(document, validationTime);
+  }
+
+  const normalizedReason = motivo.trim().length >= 15
+    ? motivo.trim().slice(0, 255)
+    : `Cancelamento da venda: ${motivo.trim() || "solicitado pelo restaurante"}`.slice(0, 255);
+  const cancelledDocuments = [];
+
+  for (const document of documents) {
+    const result = await cancelarDocumentoFiscal(
+      supabase,
+      userId,
+      String(document.id),
+      normalizedReason,
+    );
+    if (!result.success) {
+      throw new Error(
+        result.motivo || `A SEFAZ não confirmou o cancelamento do documento ${document.numero}.`,
+      );
+    }
+    cancelledDocuments.push(result);
+  }
+
+  return json({ success: true, skipped: false, documents: cancelledDocuments });
 }
 
 async function testarConexaoSefaz(supabase: any, userId: string) {
