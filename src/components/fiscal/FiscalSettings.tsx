@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import forge from 'node-forge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,8 @@ interface FiscalConfig {
   regime_tributario: number;
   csc_id: string;
   csc_token: string;
+  ibpt_enabled: boolean;
+  ibpt_token: string;
   ativo: boolean;
 }
 
@@ -51,6 +53,7 @@ type ParsedCertificateInfo = {
 };
 
 type CnpjRegistrationData = {
+  cnpj?: string;
   razao_social?: string;
   nome_fantasia?: string;
   logradouro?: string;
@@ -62,7 +65,12 @@ type CnpjRegistrationData = {
   cep?: string;
   codigo_municipio?: string;
   inscricao_estadual?: string;
+  regime_tributario?: number;
+  situacao_cadastral?: string;
+  source?: 'cnpj_ws' | 'brasil_api';
 };
+
+type CertificateRegistrationStatus = 'idle' | 'loading' | 'complete' | 'unavailable';
 
 type FiscalReadiness = {
   ready: boolean;
@@ -304,26 +312,19 @@ const fetchCnpjRegistrationData = async (cnpj: string): Promise<CnpjRegistration
   const digits = onlyDigits(cnpj);
   if (digits.length !== 14) return null;
 
-  const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`);
-  if (!response.ok) return null;
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error('Sessão expirada. Entre novamente para consultar o CNPJ.');
 
-  const data = await response.json();
-  const inscricoesEstaduais = Array.isArray(data?.inscricoes_estaduais) ? data.inscricoes_estaduais : [];
-  const activeIe = inscricoesEstaduais.find((item: any) => item?.ativo !== false) || inscricoesEstaduais[0];
+  const response = await fetch(`/api/fiscal/cnpj-lookup?cnpj=${digits}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.registration) {
+    throw new Error(payload?.error || 'Não foi possível consultar os dados públicos do CNPJ.');
+  }
 
-  return {
-    razao_social: data?.razao_social || data?.nome,
-    nome_fantasia: data?.nome_fantasia || data?.fantasia,
-    logradouro: data?.logradouro,
-    numero: data?.numero,
-    complemento: data?.complemento,
-    bairro: data?.bairro,
-    municipio: data?.municipio,
-    uf: data?.uf,
-    cep: data?.cep,
-    codigo_municipio: data?.codigo_municipio || data?.municipio_codigo,
-    inscricao_estadual: activeIe?.inscricao_estadual || activeIe?.ie,
-  };
+  return payload.registration as CnpjRegistrationData;
 };
 
 const isRegistrationCompatibleWithCertificate = (
@@ -331,6 +332,7 @@ const isRegistrationCompatibleWithCertificate = (
   info: ParsedCertificateInfo
 ) => {
   if (!registration) return false;
+  if (registration.cnpj && onlyDigits(registration.cnpj) !== onlyDigits(info.cnpj)) return false;
 
   const registrationName = String(registration.razao_social || registration.nome_fantasia || '').trim();
   if (!registrationName) return true;
@@ -339,6 +341,32 @@ const isRegistrationCompatibleWithCertificate = (
   }
 
   return true;
+};
+
+const mergeCertificateData = (
+  current: FiscalConfig,
+  info: ParsedCertificateInfo,
+  registration?: CnpjRegistrationData | null
+): FiscalConfig => {
+  const safeRegistration = isRegistrationCompatibleWithCertificate(registration, info) ? registration : null;
+  return {
+    ...current,
+    cnpj: info.cnpj ? formatCnpj(info.cnpj) : current.cnpj,
+    inscricao_estadual: safeRegistration?.inscricao_estadual || current.inscricao_estadual,
+    razao_social: safeRegistration?.razao_social || info.razaoSocial || current.razao_social,
+    nome_fantasia: safeRegistration?.nome_fantasia || info.nomeFantasia || current.nome_fantasia || '',
+    endereco_logradouro: safeRegistration?.logradouro || current.endereco_logradouro,
+    endereco_numero: safeRegistration?.numero || current.endereco_numero,
+    endereco_complemento: safeRegistration?.complemento || current.endereco_complemento,
+    endereco_bairro: safeRegistration?.bairro || current.endereco_bairro,
+    endereco_municipio: safeRegistration?.municipio || current.endereco_municipio,
+    endereco_uf: safeRegistration?.uf || current.endereco_uf,
+    endereco_cep: safeRegistration?.cep || current.endereco_cep,
+    codigo_municipio: safeRegistration?.codigo_municipio
+      ? onlyDigits(String(safeRegistration.codigo_municipio))
+      : current.codigo_municipio,
+    regime_tributario: safeRegistration?.regime_tributario || current.regime_tributario,
+  };
 };
 
 const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocumentsVisible?: boolean }> = ({
@@ -366,12 +394,18 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
     regime_tributario: 1,
     csc_id: '',
     csc_token: '',
+    ibpt_enabled: false,
+    ibpt_token: '',
     ativo: false
   });
   const [loading, setLoading] = useState(false);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificateInfo, setCertificateInfo] = useState<ParsedCertificateInfo | null>(null);
   const [certificateAutofillLoading, setCertificateAutofillLoading] = useState(false);
+  const [certificateError, setCertificateError] = useState('');
+  const [certificateRegistrationStatus, setCertificateRegistrationStatus] = useState<CertificateRegistrationStatus>('idle');
+  const [certificateRegistrationSource, setCertificateRegistrationSource] = useState<CnpjRegistrationData['source']>();
+  const certificateAutofillRequestRef = useRef(0);
   const [nfceNumeroRaw, setNfceNumeroRaw] = useState('1');
   const [readiness, setReadiness] = useState<FiscalReadiness | null>(null);
   const [nfceCupons, setNfceCupons] = useState<NfceCupomSummary[]>([]);
@@ -385,11 +419,6 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       loadNfceCupons();
     }
   }, [user]);
-
-  useEffect(() => {
-    if (!settings.certificado_a1_base64 || !settings.certificado_senha || certificateInfo) return;
-    void tryApplyCertificateAutofill(settings.certificado_a1_base64, settings.certificado_senha, { silent: true });
-  }, [settings.certificado_a1_base64, settings.certificado_senha, certificateInfo]);
 
   const loadFiscalSettings = async () => {
     try {
@@ -430,6 +459,8 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
           regime_tributario: data.regime_tributario || 1,
           csc_id: data.csc_id || '',
           csc_token: data.csc_token || '',
+          ibpt_enabled: Boolean((data as any).ibpt_enabled),
+          ibpt_token: (data as any).ibpt_token || '',
           ativo: data.ativo || false
         });
         setNfceNumeroRaw(String(data.nfce_numero_atual || 1));
@@ -470,7 +501,8 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.pfx') && !file.name.endsWith('.p12')) {
+    const lowerFileName = file.name.toLowerCase();
+    if (!lowerFileName.endsWith('.pfx') && !lowerFileName.endsWith('.p12')) {
       toast({
         title: "Erro",
         description: "Apenas arquivos .pfx ou .p12 são aceitos para certificados A1.",
@@ -480,13 +512,20 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
     }
 
     setCertificateFile(file);
+    setCertificateError('');
     
     // Convert to base64
     const reader = new FileReader();
     reader.onload = (e) => {
       const base64String = e.target?.result as string;
-      const base64Content = base64String.split(',')[1]; // Remove data:application/... prefix
+      const base64Content = base64String?.split(',')[1]; // Remove data:application/... prefix
+      if (!base64Content) {
+        setCertificateError('Não foi possível carregar o conteúdo do certificado. Selecione o arquivo novamente.');
+        return;
+      }
       setCertificateInfo(null);
+      setCertificateRegistrationStatus('idle');
+      setCertificateRegistrationSource(undefined);
       setSettings(prev => ({ ...prev, certificado_a1_base64: base64Content }));
       if (settings.certificado_senha) {
         void tryApplyCertificateAutofill(base64Content, settings.certificado_senha);
@@ -497,27 +536,16 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
         });
       }
     };
+    reader.onerror = () => {
+      setCertificateInfo(null);
+      setCertificateError('Não foi possível ler o arquivo selecionado. Selecione o certificado novamente.');
+    };
     reader.readAsDataURL(file);
   };
 
   const applyCertificateInfo = (info: ParsedCertificateInfo, registration?: CnpjRegistrationData | null) => {
-    const safeRegistration = isRegistrationCompatibleWithCertificate(registration, info) ? registration : null;
     setCertificateInfo(info);
-    setSettings(prev => ({
-      ...prev,
-      cnpj: info.cnpj ? formatCnpj(info.cnpj) : prev.cnpj,
-      inscricao_estadual: safeRegistration?.inscricao_estadual || prev.inscricao_estadual,
-      razao_social: safeRegistration?.razao_social || prev.razao_social,
-      nome_fantasia: safeRegistration?.nome_fantasia || prev.nome_fantasia || '',
-      endereco_logradouro: safeRegistration?.logradouro || prev.endereco_logradouro,
-      endereco_numero: safeRegistration?.numero || prev.endereco_numero,
-      endereco_complemento: safeRegistration?.complemento || prev.endereco_complemento,
-      endereco_bairro: safeRegistration?.bairro || prev.endereco_bairro,
-      endereco_municipio: safeRegistration?.municipio || prev.endereco_municipio,
-      endereco_uf: safeRegistration?.uf || prev.endereco_uf,
-      endereco_cep: safeRegistration?.cep || prev.endereco_cep,
-      codigo_municipio: safeRegistration?.codigo_municipio ? onlyDigits(String(safeRegistration.codigo_municipio)) : prev.codigo_municipio,
-    }));
+    setSettings(prev => mergeCertificateData(prev, info, registration));
   };
 
   const tryApplyCertificateAutofill = async (
@@ -525,10 +553,13 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
     password: string,
     options: { silent?: boolean } = {}
   ) => {
-    if (!base64Content || !password) return;
+    if (!base64Content || !password) return false;
 
+    const requestId = ++certificateAutofillRequestRef.current;
     try {
       setCertificateAutofillLoading(true);
+      setCertificateError('');
+      setCertificateRegistrationStatus('loading');
       const info = parseCertificateBase64(base64Content, password);
       let registration: CnpjRegistrationData | null = null;
       try {
@@ -536,32 +567,75 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       } catch (registrationError) {
         console.warn('Nao foi possivel consultar dados publicos do CNPJ', registrationError);
       }
+      if (requestId !== certificateAutofillRequestRef.current) return null;
       applyCertificateInfo(info, registration);
+      setCertificateRegistrationStatus(registration ? 'complete' : 'unavailable');
+      setCertificateRegistrationSource(registration?.source);
       if (!options.silent) {
         toast({
           title: "Dados preenchidos pelo certificado",
-          description: `${registration?.razao_social || 'Empresa identificada'}${info.cnpj ? ` - ${formatCnpj(info.cnpj)}` : ''}`,
+          description: registration
+            ? `${registration.razao_social || 'Empresa identificada'} - cadastro empresarial preenchido para revisão.`
+            : `${formatCnpj(info.cnpj)} identificado. Revise os campos que não puderam ser consultados.`,
         });
       }
+      return { info, registration };
     } catch (error: any) {
+      if (requestId !== certificateAutofillRequestRef.current) return null;
       setCertificateInfo(null);
+      setCertificateRegistrationStatus('idle');
+      setCertificateRegistrationSource(undefined);
+      const rawMessage = String(error?.message || '');
+      const friendlyMessage = /password|senha|mac could not be verified|invalid/i.test(rawMessage)
+        ? 'Senha incorreta ou certificado incompatível. Confira a senha e tente novamente.'
+        : (rawMessage || 'Confira o arquivo e a senha do certificado A1.');
+      setCertificateError(friendlyMessage);
       if (!options.silent) {
         toast({
           title: "Não foi possível ler o certificado",
-          description: error?.message || "Confira o arquivo e a senha do certificado A1.",
+          description: friendlyMessage,
           variant: "destructive"
         });
       }
+      return null;
     } finally {
-      setCertificateAutofillLoading(false);
+      if (requestId === certificateAutofillRequestRef.current) setCertificateAutofillLoading(false);
     }
   };
 
   const saveSettings = async (): Promise<boolean> => {
     try {
       setLoading(true);
+      let settingsToSave = settings;
 
-      const validationErrors = validateLocalFiscalSettings(settings);
+      if (settings.certificado_a1_base64 && !settings.certificado_senha) {
+        toast({
+          title: "Informe a senha do certificado",
+          description: "A senha é necessária para validar e salvar o certificado A1.",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      if (settings.certificado_a1_base64 && settings.certificado_senha && !certificateInfo) {
+        const certificateResult = await tryApplyCertificateAutofill(
+          settings.certificado_a1_base64,
+          settings.certificado_senha
+        );
+        if (!certificateResult) return false;
+        settingsToSave = mergeCertificateData(settings, certificateResult.info, certificateResult.registration);
+      }
+
+      if (settingsToSave.ibpt_enabled && !settingsToSave.ibpt_token.trim()) {
+        toast({
+          title: "Informe o token do IBPT",
+          description: "O token individual do CNPJ e necessario para consultar e exibir os tributos aproximados.",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      const validationErrors = validateLocalFiscalSettings(settingsToSave);
       if (validationErrors.length) {
         toast({
           title: "Revise o cadastro fiscal",
@@ -572,11 +646,11 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       }
 
       const settingsData = {
-        ...settings,
-        codigo_municipio: resolveKnownMunicipalityCode(settings),
-        cnpj: formatCnpj(settings.cnpj),
-        inscricao_estadual: onlyDigits(settings.inscricao_estadual),
-        endereco_cep: onlyDigits(settings.endereco_cep),
+        ...settingsToSave,
+        codigo_municipio: resolveKnownMunicipalityCode(settingsToSave),
+        cnpj: formatCnpj(settingsToSave.cnpj),
+        inscricao_estadual: onlyDigits(settingsToSave.inscricao_estadual),
+        endereco_cep: onlyDigits(settingsToSave.endereco_cep),
         user_id: user?.id,
         updated_at: new Date().toISOString()
       };
@@ -612,7 +686,7 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
       console.error('Erro ao salvar:', error);
       toast({
         title: "Erro",
-        description: "Erro ao salvar configurações fiscais.",
+        description: error?.message || "Erro ao salvar configurações fiscais.",
         variant: "destructive"
       });
       return false;
@@ -761,9 +835,22 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
             value={settings.certificado_senha}
             onChange={(e) => {
               const password = e.target.value;
+              certificateAutofillRequestRef.current += 1;
+              setCertificateInfo(null);
+              setCertificateRegistrationStatus('idle');
+              setCertificateRegistrationSource(undefined);
+              setCertificateError('');
               setSettings(prev => ({ ...prev, certificado_senha: password }));
-              if (settings.certificado_a1_base64 && password) {
-                void tryApplyCertificateAutofill(settings.certificado_a1_base64, password, { silent: true });
+            }}
+            onBlur={() => {
+              if (settings.certificado_a1_base64 && settings.certificado_senha && !certificateInfo) {
+                void tryApplyCertificateAutofill(settings.certificado_a1_base64, settings.certificado_senha);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && settings.certificado_a1_base64 && settings.certificado_senha) {
+                e.preventDefault();
+                void tryApplyCertificateAutofill(settings.certificado_a1_base64, settings.certificado_senha);
               }
             }}
             placeholder="senha123"
@@ -772,16 +859,51 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
         </div>
       </div>
 
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!settings.certificado_a1_base64 || !settings.certificado_senha || certificateAutofillLoading}
+          onClick={() => void tryApplyCertificateAutofill(settings.certificado_a1_base64, settings.certificado_senha)}
+        >
+          <ShieldCheck className="mr-2 h-4 w-4" />
+          {certificateAutofillLoading ? 'Validando certificado...' : 'Validar e preencher dados'}
+        </Button>
+        {!settings.certificado_a1_base64 && (
+          <p className="text-sm text-slate-600">Selecione primeiro o arquivo do certificado A1.</p>
+        )}
+      </div>
+
+      {certificateError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
+          <div className="font-semibold">Certificado não validado</div>
+          <div className="mt-1">{certificateError}</div>
+        </div>
+      )}
+
       {certificateInfo && (
-        <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+        <div className={`rounded-2xl border p-4 text-sm ${certificateRegistrationStatus === 'complete'
+          ? 'border-green-200 bg-green-50 text-green-900'
+          : 'border-amber-200 bg-amber-50 text-amber-950'
+        }`}>
           <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-green-700" />
+            <ShieldCheck className={`mt-0.5 h-5 w-5 shrink-0 ${certificateRegistrationStatus === 'complete' ? 'text-green-700' : 'text-amber-700'}`} />
             <div className="space-y-1">
-              <div className="font-semibold">Certificado do cliente lido e dados aplicados</div>
+              <div className="font-semibold">
+                {certificateRegistrationStatus === 'complete'
+                  ? 'Certificado lido e cadastro empresarial preenchido'
+                  : 'Certificado lido; revise os dados cadastrais'}
+              </div>
               <div>CNPJ: {formatCnpj(certificateInfo.cnpj) || 'não identificado'}</div>
               {certificateInfo.razaoSocial && <div>Razão social do titular: {certificateInfo.razaoSocial}</div>}
               <div>Validade: {formatCertificateDate(certificateInfo.validFrom)} até {formatCertificateDate(certificateInfo.validTo)}</div>
-              {certificateInfo.issuer && <div className="text-green-800/80">Autoridade emissora: {certificateInfo.issuer}</div>}
+              {certificateRegistrationStatus === 'complete' && (
+                <div>Dados consultados automaticamente pelo CNPJ{certificateRegistrationSource ? ` (${certificateRegistrationSource === 'cnpj_ws' ? 'CNPJ.ws' : 'BrasilAPI'})` : ''}.</div>
+              )}
+              {certificateRegistrationStatus === 'unavailable' && (
+                <div>A consulta cadastral não respondeu. O CNPJ e os dados presentes no certificado foram aplicados; complete os demais campos manualmente.</div>
+              )}
+              {certificateInfo.issuer && <div className="opacity-80">Autoridade emissora: {certificateInfo.issuer}</div>}
             </div>
           </div>
         </div>
@@ -1150,6 +1272,36 @@ const FiscalSettings: React.FC<{ modelSettingsVisible?: boolean; recentDocuments
                   </div>
                 </div>
               </div>}
+
+              <div className="space-y-4 rounded-2xl border p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <Label className="text-base">Tributos aproximados — IBPT</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Consulta a API oficial De Olho no Imposto e inclui vTotTrib, fonte e versão no documento.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.ibpt_enabled}
+                    onCheckedChange={(checked) => setSettings(prev => ({ ...prev, ibpt_enabled: checked }))}
+                  />
+                </div>
+                {settings.ibpt_enabled && (
+                  <div className="space-y-2">
+                    <Label>Token IBPT da empresa</Label>
+                    <Input
+                      type="password"
+                      autoComplete="off"
+                      value={settings.ibpt_token}
+                      onChange={(event) => setSettings(prev => ({ ...prev, ibpt_token: event.target.value.trim() }))}
+                      placeholder="Token obtido no portal De Olho no Imposto"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      O token é individual por CNPJ e precisa estar vigente para a consulta da tabela IBPT.
+                    </p>
+                  </div>
+                )}
+              </div>
 
               <div className="flex gap-2">
                 {modelSettingsVisible && <Button onClick={testConnection} disabled={loading} variant="outline">

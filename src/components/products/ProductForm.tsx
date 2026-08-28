@@ -31,6 +31,7 @@ import { invalidateSimpleVariationCaches } from '@/hooks/useSimpleVariations';
 // Defining the interface here to ensure consistency
 interface ProductItem {
   id?: string;
+  user_id?: string;
   name: string;
   barcode?: string;
   description?: string; 
@@ -66,14 +67,15 @@ interface ProductItem {
   fiscal_cclass_trib?: string;
   fiscal_reducao_ibs?: number;
   fiscal_reducao_cbs?: number;
+  fiscal_default_operation_id?: string;
 }
 
-const RTC_TAX_PRESETS = [
-  { value: '000001', cst: '000', ibsReduction: 0, cbsReduction: 0, label: '000001 - Tributação integral' },
-  { value: '200047', cst: '200', ibsReduction: 40, cbsReduction: 40, label: '200047 - Bares e restaurantes (redução de 40%)' },
-  { value: '200034', cst: '200', ibsReduction: 60, cbsReduction: 60, label: '200034 - Alimentos do Anexo VII (redução de 60%)' },
-  { value: '200003', cst: '200', ibsReduction: 100, cbsReduction: 100, label: '200003 - Cesta básica do Anexo I (redução de 100%)' },
-] as const;
+type FiscalOperationOption = {
+  id: string;
+  name: string;
+  cfop: string;
+  model_codes: string[];
+};
 
 interface ProductVariant {
   id?: string;
@@ -135,7 +137,8 @@ interface ProductFormProps {
 }
 
 const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) => {
-  const { user } = useAuth();
+  const { user, activeStoreId } = useAuth();
+  const fiscalStoreId = product?.user_id || activeStoreId || user?.id;
   const [formData, setFormData] = useState<ProductItem>({
     name: '',
     barcode: '',
@@ -167,16 +170,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     fiscal_cest: '',
     fiscal_beneficio: '',
     fiscal_observacao: '',
-    fiscal_ibs_cbs_cst: '000',
-    fiscal_cclass_trib: '000001',
+    fiscal_ibs_cbs_cst: '',
+    fiscal_cclass_trib: '',
     fiscal_reducao_ibs: 0,
     fiscal_reducao_cbs: 0,
+    fiscal_default_operation_id: '',
     ...product
   });
   const [categories, setCategories] = useState([]);
   const [globalVariations, setGlobalVariations] = useState([]);
   const [selectedVariations, setSelectedVariations] = useState<string[]>([]);
   const [availableProducts, setAvailableProducts] = useState<Array<{ id: string; name: string; category?: string | null }>>([]);
+  const [fiscalOperations, setFiscalOperations] = useState<FiscalOperationOption[]>([]);
   
   // Price Variants State
   const [priceVariants, setPriceVariants] = useState<ProductVariant[]>([]);
@@ -846,10 +851,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (!isUnsupported('fiscal_cest')) baseData.fiscal_cest = formData.fiscal_cest?.replace(/\D/g, '').slice(0, 7) || null;
     if (!isUnsupported('fiscal_beneficio')) baseData.fiscal_beneficio = formData.fiscal_beneficio?.trim() || null;
     if (!isUnsupported('fiscal_observacao')) baseData.fiscal_observacao = formData.fiscal_observacao?.trim() || null;
-    if (!isUnsupported('fiscal_ibs_cbs_cst')) baseData.fiscal_ibs_cbs_cst = formData.fiscal_ibs_cbs_cst?.replace(/\D/g, '').slice(0, 3) || '000';
-    if (!isUnsupported('fiscal_cclass_trib')) baseData.fiscal_cclass_trib = formData.fiscal_cclass_trib?.replace(/\D/g, '').slice(0, 6) || '000001';
+    if (!isUnsupported('fiscal_ibs_cbs_cst')) baseData.fiscal_ibs_cbs_cst = formData.fiscal_ibs_cbs_cst?.replace(/\D/g, '').slice(0, 3) || null;
+    if (!isUnsupported('fiscal_cclass_trib')) baseData.fiscal_cclass_trib = formData.fiscal_cclass_trib?.replace(/\D/g, '').slice(0, 6) || null;
     if (!isUnsupported('fiscal_reducao_ibs')) baseData.fiscal_reducao_ibs = Math.min(100, Math.max(0, Number(formData.fiscal_reducao_ibs) || 0));
     if (!isUnsupported('fiscal_reducao_cbs')) baseData.fiscal_reducao_cbs = Math.min(100, Math.max(0, Number(formData.fiscal_reducao_cbs) || 0));
+    if (!isUnsupported('fiscal_default_operation_id')) baseData.fiscal_default_operation_id = formData.fiscal_default_operation_id || null;
 
     if (stockSchemaSupported && !isUnsupported('track_stock') && !isUnsupported('stock_quantity') && !isUnsupported('low_stock_threshold')) {
       baseData.track_stock = formData.track_stock;
@@ -924,6 +930,35 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (!user?.id) return;
     checkStockSchema().catch(() => {});
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!fiscalStoreId) {
+      setFiscalOperations([]);
+      return;
+    }
+    let cancelled = false;
+    const loadFiscalOperations = async () => {
+      // Coluna adicionada na homologação; os tipos gerados serão atualizados após a validação.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('fiscal_tax_rules')
+        .select('id,name,cfop,model_codes')
+        .eq('user_id', fiscalStoreId)
+        .eq('active', true)
+        .not('accountant_approved_at', 'is', null)
+        .contains('model_codes', ['65'])
+        .order('priority', { ascending: true });
+      if (cancelled) return;
+      if (error) {
+        console.warn('Não foi possível carregar operações fiscais do produto', error);
+        setFiscalOperations([]);
+        return;
+      }
+      setFiscalOperations((data || []) as FiscalOperationOption[]);
+    };
+    void loadFiscalOperations();
+    return () => { cancelled = true; };
+  }, [fiscalStoreId]);
 
   // Formata a string de centavos (somente dígitos) para BRL
   const formatFromRaw = (raw: string) => {
@@ -1580,7 +1615,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }, 800);
     setAutoSaveTimer(timer);
     return () => clearTimeout(timer);
-  }, [user?.id, loading, createdProductId, formData.name, formData.barcode, formData.price, formData.costing_mode, formData.manual_unit_cost, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.receipt_ingredients_enabled, formData.receipt_ingredients, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, formData.fiscal_ncm, formData.fiscal_cfop, formData.fiscal_csosn, formData.fiscal_cst_pis, formData.fiscal_cst_cofins, formData.fiscal_origem, formData.fiscal_cest, formData.fiscal_beneficio, formData.fiscal_observacao, formData.fiscal_ibs_cbs_cst, formData.fiscal_cclass_trib, formData.fiscal_reducao_ibs, formData.fiscal_reducao_cbs, stockSchemaSupported]);
+  }, [user?.id, loading, createdProductId, formData.name, formData.barcode, formData.price, formData.costing_mode, formData.manual_unit_cost, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.receipt_ingredients_enabled, formData.receipt_ingredients, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, formData.fiscal_ncm, formData.fiscal_cfop, formData.fiscal_csosn, formData.fiscal_cst_pis, formData.fiscal_cst_cofins, formData.fiscal_origem, formData.fiscal_cest, formData.fiscal_beneficio, formData.fiscal_observacao, formData.fiscal_ibs_cbs_cst, formData.fiscal_cclass_trib, formData.fiscal_reducao_ibs, formData.fiscal_reducao_cbs, formData.fiscal_default_operation_id, stockSchemaSupported]);
 
 
   const onDragEnd = (result: DropResult) => {
@@ -2378,6 +2413,25 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             </AccordionTrigger>
             <AccordionContent className="pb-4">
               <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1 rounded-xl border border-[#003223]/10 bg-[#F7FBF5] p-3 sm:col-span-2">
+                  <Label htmlFor="fiscal_default_operation_id" className="text-boracume-dark-green font-semibold">Operação fiscal padrão no PDV</Label>
+                  <Select
+                    value={formData.fiscal_default_operation_id || 'automatic'}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, fiscal_default_operation_id: value === 'automatic' ? '' : value }))}
+                  >
+                    <SelectTrigger id="fiscal_default_operation_id" className="h-11 rounded-xl bg-[#FFFDF9] font-semibold">
+                      <SelectValue placeholder="Selecione a operação" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="automatic">Automática — conforme o contexto da venda</SelectItem>
+                      {fiscalOperations.map((operation) => (
+                        <SelectItem key={operation.id} value={operation.id}>{operation.name} · CFOP {operation.cfop}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs leading-5 text-[#003223]/65">A operação escolhida será priorizada para este produto no PDV quando for compatível com a venda. Somente operações aprovadas para NFC-e aparecem aqui.</p>
+                  {fiscalOperations.length === 0 ? <p className="text-xs font-medium text-amber-700">Nenhuma operação fiscal aprovada para NFC-e está disponível.</p> : null}
+                </div>
                 <div className="space-y-1">
                   <Label htmlFor="fiscal_ncm" className="text-boracume-dark-green font-semibold">NCM</Label>
                   <Input
@@ -2475,35 +2529,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                     <Label htmlFor="fiscal_cclass_trib" className="text-boracume-dark-green font-semibold">
                       IBS/CBS — classificação tributária
                     </Label>
-                    <p className="mt-1 text-xs text-[#003223]/65">
-                      Selecione conforme o produto e a operação. A classificação fica gravada no item da nota.
-                    </p>
+                    <p className="mt-1 text-xs text-[#003223]/65">Informe apenas após conferir a tabela oficial vigente. A regra aprovada da operação prevalece sobre este cadastro.</p>
                   </div>
-                  <Select
-                    value={formData.fiscal_cclass_trib || '000001'}
-                    onValueChange={(value) => {
-                      const preset = RTC_TAX_PRESETS.find((option) => option.value === value);
-                      if (!preset) return;
-                      setFormData(prev => ({
-                        ...prev,
-                        fiscal_ibs_cbs_cst: preset.cst,
-                        fiscal_cclass_trib: preset.value,
-                        fiscal_reducao_ibs: preset.ibsReduction,
-                        fiscal_reducao_cbs: preset.cbsReduction,
-                      }));
-                    }}
-                  >
-                    <SelectTrigger id="fiscal_cclass_trib" className="h-11 rounded-xl bg-[#FFFDF9] font-semibold">
-                      <SelectValue placeholder="Selecione o cClassTrib" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RTC_TAX_PRESETS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="grid gap-2 text-xs font-medium text-[#003223]/75 sm:grid-cols-3">
-                    <span>CST: {formData.fiscal_ibs_cbs_cst || '000'}</span>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1"><Label htmlFor="fiscal_ibs_cbs_cst">CST IBS/CBS</Label><Input id="fiscal_ibs_cbs_cst" value={formData.fiscal_ibs_cbs_cst || ''} onChange={(event) => setFormData(prev => ({ ...prev, fiscal_ibs_cbs_cst: event.target.value.replace(/\D/g, '').slice(0, 3) }))} placeholder="3 dígitos" className="h-11 rounded-xl bg-[#FFFDF9] font-semibold" /></div>
+                    <div className="space-y-1"><Label htmlFor="fiscal_cclass_trib">cClassTrib</Label><Input id="fiscal_cclass_trib" value={formData.fiscal_cclass_trib || ''} onChange={(event) => setFormData(prev => ({ ...prev, fiscal_cclass_trib: event.target.value.replace(/\D/g, '').slice(0, 6) }))} placeholder="6 dígitos" className="h-11 rounded-xl bg-[#FFFDF9] font-semibold" /></div>
+                  </div>
+                  <div className="grid gap-2 text-xs font-medium text-[#003223]/75 sm:grid-cols-2">
                     <span>Redução IBS: {Number(formData.fiscal_reducao_ibs || 0).toLocaleString('pt-BR')}%</span>
                     <span>Redução CBS: {Number(formData.fiscal_reducao_cbs || 0).toLocaleString('pt-BR')}%</span>
                   </div>
