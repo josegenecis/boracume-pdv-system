@@ -1,6 +1,6 @@
 {
   "appId": "com.boracume.bridge",
-  "productName": "BoraCumê Bridge",
+  "productName": "PopConnect",
   "directories": {
     "output": "dist-bridge"
   },

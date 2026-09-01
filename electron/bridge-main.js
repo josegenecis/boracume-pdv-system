@@ -69,7 +69,7 @@ const createWindow = () => {
 const createTray = () => {
   const iconPath = path.join(__dirname, '..', 'public', 'LOGOMARCA', 'ICONE DESKTOP.png')
   tray = new Tray(iconPath)
-  tray.setToolTip('PopSystem Bridge')
+  tray.setToolTip('PopConnect')
   tray.on('double-click', () => {
     if (win) win.show()
   })
