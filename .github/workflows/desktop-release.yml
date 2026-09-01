@@ -57,9 +57,11 @@ jobs:
             $runPatch = [int]"${{ github.run_number }}"
             $latestPatch = 0
             try {
-              $latestTag = gh release list --limit 1 --json tagName --jq '.[0].tagName'
-              if ($latestTag -match "^v?$($parts[0])\.$($parts[1])\.(\d+)$") {
-                $latestPatch = [int]$Matches[1]
+              $releaseTags = gh release list --limit 100 --json tagName --jq '.[].tagName'
+              foreach ($releaseTag in $releaseTags) {
+                if ($releaseTag -match "^v?$($parts[0])\.$($parts[1])\.(\d+)$") {
+                  $latestPatch = [Math]::Max($latestPatch, [int]$Matches[1])
+                }
               }
             } catch {
               Write-Host "Nao foi possivel consultar a ultima release publicada. Usando package.json como base."
