@@ -79,10 +79,10 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "allowElevation": false,
-      "runAfterFinish": false,
+      "runAfterFinish": true,
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "publish": [

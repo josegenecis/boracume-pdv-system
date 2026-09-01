@@ -109,6 +109,7 @@ function focusMainWindow() {
     return;
   }
   if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isMaximized()) mainWindow.maximize();
   mainWindow.show();
   mainWindow.focus();
 }
@@ -181,6 +182,7 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
     mainWindow.show();
     if (isDev) {
       mainWindow.webContents.openDevTools();
