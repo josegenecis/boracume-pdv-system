@@ -801,23 +801,37 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
             }));
           } catch {}
 
-          const root = document.documentElement;
           const body = document.body;
+          const root = document.documentElement;
           const widthAttr = String(root?.dataset?.paperWidth || '80mm').toLowerCase();
           const widthMm = widthAttr === '58mm' ? 58 : 80;
-          const heightPx = Math.max(
-            root?.scrollHeight || 0,
-            root?.offsetHeight || 0,
-            body?.scrollHeight || 0,
-            body?.offsetHeight || 0
+
+          // documentElement.scrollHeight/offsetHeight nunca ficam menores que
+          // o viewport da BrowserWindow oculta (normalmente 600 px). Em
+          // cupons curtos isso criava uma página térmica artificial de quase
+          // 160 mm e alguns drivers alimentavam todo o espaço antes do texto.
+          // O retângulo do body representa somente o conteúdo real, incluindo
+          // padding e imagens já carregadas.
+          const bodyRect = body?.getBoundingClientRect();
+          const bodyTop = Number(bodyRect?.top || 0);
+          const childBottom = Math.max(
+            Number(bodyRect?.bottom || 0),
+            ...Array.from(body?.children || []).map((element) =>
+              Number(element.getBoundingClientRect?.().bottom || 0)
+            )
           );
+          const heightPx = Math.ceil(Math.max(
+            1,
+            Number(bodyRect?.height || 0),
+            childBottom - bodyTop
+          ));
           return { widthMm, heightPx };
         })()
       `, true);
 
       const widthMicrons = receiptMetrics?.widthMm === 58 ? 58000 : 80000;
       const measuredHeightMicrons = Math.ceil(Math.max(1, Number(receiptMetrics?.heightPx || 0)) * 264.583333);
-      const heightMicrons = Math.max(50000, Math.min(3000000, measuredHeightMicrons + 8000));
+      const heightMicrons = Math.max(30000, Math.min(3000000, measuredHeightMicrons + 3000));
       receiptPageSize = { width: widthMicrons, height: heightMicrons };
 
       await win.webContents.insertCSS(`
