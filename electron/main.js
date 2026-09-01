@@ -782,64 +782,6 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
     await win.loadURL(`data:text/html;charset=utf-8,${encoded}`);
 
     const isA4 = /data-print-format=["']a4["']/i.test(html);
-    let receiptPageSize;
-
-    if (!isA4) {
-      // Chromium e alguns drivers térmicos ignoram `size: 80mm auto`.
-      // Medimos o cupom pronto e o enviamos como uma única página, evitando
-      // corte antecipado, folhas em branco e o encolhimento para 58 mm.
-      const receiptMetrics = await win.webContents.executeJavaScript(`
-        (async () => {
-          try {
-            if (document.fonts && document.fonts.ready) await document.fonts.ready;
-            const images = Array.from(document.images || []);
-            await Promise.all(images.map((image) => {
-              if (image.complete) return Promise.resolve();
-              return new Promise((resolve) => {
-                image.addEventListener('load', resolve, { once: true });
-                image.addEventListener('error', resolve, { once: true });
-              });
-            }));
-          } catch {}
-
-          const body = document.body;
-          const root = document.documentElement;
-          const widthAttr = String(root?.dataset?.paperWidth || '80mm').toLowerCase();
-          const widthMm = widthAttr === '58mm' ? 58 : 80;
-
-          // documentElement.scrollHeight/offsetHeight nunca ficam menores que
-          // o viewport da BrowserWindow oculta (normalmente 600 px). Em
-          // cupons curtos isso criava uma página térmica artificial de quase
-          // 160 mm e alguns drivers alimentavam todo o espaço antes do texto.
-          // O retângulo do body representa somente o conteúdo real, incluindo
-          // padding e imagens já carregadas.
-          const bodyRect = body?.getBoundingClientRect();
-          const bodyTop = Number(bodyRect?.top || 0);
-          const childBottom = Math.max(
-            Number(bodyRect?.bottom || 0),
-            ...Array.from(body?.children || []).map((element) =>
-              Number(element.getBoundingClientRect?.().bottom || 0)
-            )
-          );
-          const heightPx = Math.ceil(Math.max(
-            1,
-            Number(bodyRect?.height || 0),
-            childBottom - bodyTop
-          ));
-          return { widthMm, heightPx };
-        })()
-      `, true);
-
-      const widthMicrons = receiptMetrics?.widthMm === 58 ? 58000 : 80000;
-      const measuredHeightMicrons = Math.ceil(Math.max(1, Number(receiptMetrics?.heightPx || 0)) * 264.583333);
-      const heightMicrons = Math.max(30000, Math.min(3000000, measuredHeightMicrons + 3000));
-      receiptPageSize = { width: widthMicrons, height: heightMicrons };
-
-      await win.webContents.insertCSS(`
-        @page { margin: 0 !important; size: ${widthMicrons / 1000}mm ${heightMicrons / 1000}mm !important; }
-        html, body { min-height: 0 !important; height: auto !important; overflow: visible !important; }
-      `);
-    }
 
     const printResult = await new Promise((resolve) => {
       win.webContents.print(
@@ -848,7 +790,7 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
           deviceName: deviceName || undefined,
           printBackground: true,
           margins: { marginType: isA4 ? 'default' : 'none' },
-          pageSize: isA4 ? 'A4' : receiptPageSize,
+          pageSize: isA4 ? 'A4' : undefined,
           scaleFactor: 100
         },
         (success, failureReason) => resolve({ success, failureReason })
@@ -904,16 +846,23 @@ ipcMain.handle('print-system-raster', async (_event, { deviceName, html } = {}) 
         const root = document.documentElement;
         const body = document.body;
         const bodyRect = body.getBoundingClientRect();
+        const bodyTop = Number(bodyRect.top || 0);
+        const childBottom = Math.max(
+          Number(bodyRect.bottom || 0),
+          ...Array.from(body.children || []).map((element) =>
+            Number(element.getBoundingClientRect?.().bottom || 0)
+          )
+        );
         return {
           paperWidth: String(root.dataset.paperWidth || '80mm').toLowerCase(),
           width: Math.ceil(Math.max(root.scrollWidth, bodyRect.right, 1)),
-          height: Math.ceil(Math.max(body.scrollHeight, bodyRect.bottom, 1))
+          height: Math.ceil(Math.max(bodyRect.height, childBottom - bodyTop, 1))
         };
       })()
     `, true);
 
     const viewportWidth = Math.max(220, Math.min(1000, Number(metrics?.width) || 302));
-    const viewportHeight = Math.max(120, Math.min(12000, Number(metrics?.height) || 600));
+    const viewportHeight = Math.max(32, Math.min(12000, Number(metrics?.height) || 32));
     win.setContentSize(viewportWidth, viewportHeight);
     await new Promise((resolve) => setTimeout(resolve, 60));
 

@@ -1454,10 +1454,10 @@ async function printElectron(order: any, config: any, options: PrintOrderOptions
   if (target.type === 'system') {
     const html = buildOrderHtml(order, config, order.store);
     for (let i = 0; i < copies; i++) {
-      let resp = options.rasterizeSystemReceipt && api?.printSystemRaster
+      let resp = api?.printSystemRaster
         ? await api.printSystemRaster(target.printerName, html)
         : await api.printSystem(target.printerName, html, true);
-      if (!resp?.success && options.rasterizeSystemReceipt) {
+      if (!resp?.success && api?.printSystemRaster) {
         console.warn('Impressão térmica RAW indisponível; usando impressão do sistema:', resp?.error || resp);
         resp = await api.printSystem(target.printerName, html, true);
       }
@@ -1466,7 +1466,12 @@ async function printElectron(order: any, config: any, options: PrintOrderOptions
 
     if (config.print_kitchen_ticket) {
       const kitchenHtml = buildKitchenTicketHtml(order, config);
-      const kitchenResp = await api.printSystem(target.printerName, kitchenHtml, true);
+      let kitchenResp = api?.printSystemRaster
+        ? await api.printSystemRaster(target.printerName, kitchenHtml)
+        : await api.printSystem(target.printerName, kitchenHtml, true);
+      if (!kitchenResp?.success && api?.printSystemRaster) {
+        kitchenResp = await api.printSystem(target.printerName, kitchenHtml, true);
+      }
       if (!kitchenResp?.success) return { success: false, error: kitchenResp?.error || 'Falha ao imprimir comanda da cozinha' };
     }
 
