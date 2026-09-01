@@ -3766,12 +3766,10 @@ const PDV = () => {
             {[
               ['1', 'Dinheiro'],
               ['2', 'PIX'],
-              ['3', 'Cartão de débito'],
-              ['4', 'Cartão de crédito'],
-              ['5', 'Voucher'],
+              ['3', 'Abrir opções de cartão'],
+              ['4', 'Dividir pagamento'],
               ['6', 'Contas a receber'],
-              ['7', 'Outros cartões'],
-              ['8', 'Dividir pagamento'],
+              ['8', 'Dividir pagamento (atalho alternativo)'],
               ['Enter', 'Confirmar pagamento'],
               ['Esc', 'Voltar ou fechar'],
             ].map(([key, description]) => (
@@ -3782,8 +3780,24 @@ const PDV = () => {
                 </kbd>
               </div>
             ))}
+            <div className="pt-2 text-xs font-bold uppercase tracking-wide text-[#003223]/55">
+              Dentro das opções de cartão
+            </div>
+            {[
+              ['1', 'Crédito'],
+              ['2', 'Débito'],
+              ['3', 'Voucher'],
+              ['4', 'Outros'],
+            ].map(([key, description]) => (
+              <div key={`card-payment-${key}`} className="flex items-center justify-between gap-4 rounded-xl border border-[#003223]/10 bg-[#F8FAF8] px-3 py-2.5">
+                <span className="text-[#003223]/75">{description}</span>
+                <kbd className="min-w-14 rounded-lg border border-[#003223]/15 bg-white px-2 py-1 text-center font-mono font-bold text-[#003223] shadow-sm">
+                  {key}
+                </kbd>
+              </div>
+            ))}
             <p className="pt-1 text-xs leading-relaxed text-muted-foreground">
-              Os atalhos não são executados enquanto você estiver preenchendo outro campo ou com uma janela aberta.
+              Os atalhos ficam pausados enquanto você preenche um campo. Na janela de cartão, use as teclas de 1 a 4.
             </p>
           </div>
         </DialogContent>

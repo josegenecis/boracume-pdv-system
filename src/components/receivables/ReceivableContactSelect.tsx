@@ -18,6 +18,13 @@ export interface ReceivableContact {
   contact_type: ReceivableContactType;
   document?: string | null;
   phone?: string | null;
+  waiter_id?: string | null;
+}
+
+interface StaffMember {
+  id: string;
+  name: string;
+  cpf?: string | null;
 }
 
 const typeLabels: Record<ReceivableContactType, string> = {
@@ -26,6 +33,12 @@ const typeLabels: Record<ReceivableContactType, string> = {
   supplier: 'Fornecedor',
   other: 'Outro',
 };
+
+const normalizeContactName = (value: string) =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
+
+const sortContacts = (contacts: ReceivableContact[]) =>
+  [...contacts].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
 const getContactSaveError = (error: any) => {
   const code = String(error?.code || '');
@@ -70,15 +83,23 @@ const ReceivableContactSelect: React.FC<Props> = ({ value, onChange }) => {
   const loadContacts = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
-    const { data, error } = await (supabase as any)
-      .from('receivable_contacts')
-      .select('id,name,contact_type,document,phone')
-      .eq('user_id', user.id)
-      .eq('active', true)
-      .order('name');
-    setLoading(false);
+    const [contactsResult, staffResult] = await Promise.all([
+      (supabase as any)
+        .from('receivable_contacts')
+        .select('id,name,contact_type,document,phone,waiter_id')
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .order('name'),
+      (supabase as any)
+        .from('waiters')
+        .select('id,name,cpf')
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .order('name'),
+    ]);
 
-    if (error) {
+    if (contactsResult.error) {
+      setLoading(false);
       toast({
         title: 'Não foi possível carregar os cadastros',
         description: 'Atualize a página e tente novamente.',
@@ -86,7 +107,47 @@ const ReceivableContactSelect: React.FC<Props> = ({ value, onChange }) => {
       });
       return;
     }
-    setContacts((data || []) as ReceivableContact[]);
+
+    let nextContacts = (contactsResult.data || []) as ReceivableContact[];
+    if (!staffResult.error) {
+      const linkedWaiterIds = new Set(nextContacts.map((contact) => contact.waiter_id).filter(Boolean));
+      const registeredEmployeeNames = new Set(
+        nextContacts
+          .filter((contact) => contact.contact_type === 'employee')
+          .map((contact) => normalizeContactName(contact.name)),
+      );
+      const missingStaff = ((staffResult.data || []) as StaffMember[]).filter((staff) => (
+        staff.id
+        && staff.name?.trim()
+        && !linkedWaiterIds.has(staff.id)
+        && !registeredEmployeeNames.has(normalizeContactName(staff.name))
+      ));
+
+      if (missingStaff.length > 0) {
+        const { data: createdContacts, error: syncError } = await (supabase as any)
+          .from('receivable_contacts')
+          .insert(missingStaff.map((staff) => ({
+            user_id: user.id,
+            name: staff.name.trim(),
+            contact_type: 'employee',
+            document: String(staff.cpf || '').replace(/\D/g, '') || null,
+            waiter_id: staff.id,
+            active: true,
+          })))
+          .select('id,name,contact_type,document,phone,waiter_id');
+
+        if (syncError) {
+          console.warn('[CONTAS_A_RECEBER] Não foi possível sincronizar a equipe:', syncError.message || syncError);
+        } else {
+          nextContacts = [...nextContacts, ...((createdContacts || []) as ReceivableContact[])];
+        }
+      }
+    } else {
+      console.warn('[CONTAS_A_RECEBER] Não foi possível carregar a equipe:', staffResult.error.message || staffResult.error);
+    }
+
+    setContacts(sortContacts(nextContacts));
+    setLoading(false);
   }, [toast, user?.id]);
 
   useEffect(() => {
@@ -134,7 +195,7 @@ const ReceivableContactSelect: React.FC<Props> = ({ value, onChange }) => {
     }
 
     const contact = data as ReceivableContact;
-    setContacts((current) => [...current, contact].sort((a, b) => a.name.localeCompare(b.name)));
+    setContacts((current) => sortContacts([...current, contact]));
     onChange(contact.id, contact);
     resetForm();
     setDialogOpen(false);

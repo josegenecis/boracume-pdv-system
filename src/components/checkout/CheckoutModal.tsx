@@ -56,6 +56,11 @@ const parsePaymentValue = (value: string | number | null | undefined) => {
   return parseBRL(rawValue);
 };
 
+const resolveNumericShortcut = (event: KeyboardEvent) => {
+  if (/^\d$/.test(event.key)) return event.key;
+  return event.code.match(/^(?:Digit|Numpad)(\d)$/)?.[1] || '';
+};
+
 const normalizeSplitMethods = (methods: CheckoutPaymentMethod[]) => {
   const unique = methods.filter((method, index, list) => list.indexOf(method) === index);
 
@@ -162,6 +167,11 @@ export function CheckoutModal({
     setMode(nextMode);
   }
 
+  function selectCardPayment(method: CheckoutPaymentMethod) {
+    selectSinglePayment(method, 'main');
+    setCardDialogOpen(false);
+  }
+
   function openSplitMode() {
     const activeMethods = SPLIT_PAYMENT_OPTIONS
       .filter((option) => parsePaymentValue(paymentAmounts[option.value] || '') > 0.009)
@@ -192,9 +202,32 @@ export function CheckoutModal({
   useEffect(() => {
     if (!open) return;
     const handler = (event: KeyboardEvent) => {
-      if (!keyboardShortcutsEnabled || cardDialogOpen) return;
+      if (!keyboardShortcutsEnabled) return;
       const target = event.target as HTMLElement | null;
       const isEditing = Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
+      const numericShortcut = resolveNumericShortcut(event);
+
+      if (cardDialogOpen) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setCardDialogOpen(false);
+          return;
+        }
+        if (isEditing) return;
+
+        const cardShortcuts: Record<string, CheckoutPaymentMethod> = {
+          '1': 'cartao_credito',
+          '2': 'cartao_debito',
+          '3': 'cartao_voucher',
+          '4': 'cartao_outros',
+        };
+        const cardMethod = cardShortcuts[numericShortcut];
+        if (cardMethod) {
+          event.preventDefault();
+          selectCardPayment(cardMethod);
+        }
+        return;
+      }
 
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -210,14 +243,12 @@ export function CheckoutModal({
         const numericPayments: Record<string, () => void> = {
           '1': () => selectSinglePayment('dinheiro', 'cash'),
           '2': () => selectSinglePayment('pix', 'pix'),
-          '3': () => selectSinglePayment('cartao_debito', 'main'),
-          '4': () => selectSinglePayment('cartao_credito', 'main'),
-          '5': () => selectSinglePayment('cartao_voucher', 'main'),
+          '3': () => setCardDialogOpen(true),
+          '4': openSplitMode,
           '6': () => selectSinglePayment('pagar_depois', 'main'),
-          '7': () => selectSinglePayment('cartao_outros', 'main'),
           '8': openSplitMode,
         };
-        const shortcut = numericPayments[event.key];
+        const shortcut = numericPayments[numericShortcut];
         if (shortcut) {
           event.preventDefault();
           shortcut();
@@ -437,18 +468,20 @@ export function CheckoutModal({
             <DialogTitle>Como foi pago?</DialogTitle>
           </DialogHeader>
           <div className="grid gap-2">
-            {CARD_OPTIONS.map((option) => (
+            {CARD_OPTIONS.map((option, index) => (
               <Button
                 key={option.value}
                 variant="outline"
-                className="h-12 justify-start rounded-xl text-base font-bold"
-                onClick={() => {
-                  selectSinglePayment(option.value, 'main');
-                  setCardDialogOpen(false);
-                }}
+                className="h-12 justify-between rounded-xl text-base font-bold"
+                onClick={() => selectCardPayment(option.value)}
               >
-                <CreditCard className="mr-2 h-5 w-5" />
-                {option.label}
+                <span className="flex items-center">
+                  <CreditCard className="mr-2 h-5 w-5" />
+                  {option.label}
+                </span>
+                <kbd className="rounded-md border border-[#003223]/15 bg-[#F8FAF8] px-2 py-0.5 font-mono text-xs text-[#003223]">
+                  {index + 1}
+                </kbd>
               </Button>
             ))}
           </div>
@@ -486,18 +519,22 @@ function PaymentSelector({
       <Button className={`${buttonClass} bg-[#003223] hover:bg-[#064b37]`} onClick={onPix}>
         <QrCode className="mr-2 h-5 w-5" />
         PIX
+        <kbd className="ml-2 rounded-md border border-white/25 bg-white/10 px-2 py-0.5 font-mono text-xs">2</kbd>
       </Button>
       <Button className={`${buttonClass} bg-[#FF6400] hover:bg-[#e45a00]`} onClick={onCard}>
         <CreditCard className="mr-2 h-5 w-5" />
         Cartão
+        <kbd className="ml-2 rounded-md border border-white/25 bg-white/10 px-2 py-0.5 font-mono text-xs">3</kbd>
       </Button>
       <Button className={`${buttonClass} bg-[#8CC63F] text-[#082F23] hover:bg-[#7db438]`} onClick={onCash}>
         <Banknote className="mr-2 h-5 w-5" />
         Dinheiro
+        <kbd className="ml-2 rounded-md border border-[#082F23]/20 bg-white/20 px-2 py-0.5 font-mono text-xs">1</kbd>
       </Button>
       <Button variant="outline" className={`${buttonClass} border-[#003223]/15 bg-white text-[#003223]`} onClick={onSplit}>
         <Split className="mr-2 h-5 w-5" />
         Dividir
+        <kbd className="ml-2 rounded-md border border-[#003223]/15 bg-[#F8FAF8] px-2 py-0.5 font-mono text-xs">4</kbd>
       </Button>
       <Button
         variant="outline"
@@ -506,6 +543,7 @@ function PaymentSelector({
       >
         <Clock3 className="mr-2 h-5 w-5" />
         Contas a receber
+        <kbd className="ml-2 rounded-md border border-amber-900/15 bg-white/50 px-2 py-0.5 font-mono text-xs">6</kbd>
       </Button>
     </div>
   );
