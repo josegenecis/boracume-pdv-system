@@ -337,7 +337,7 @@ const DeviceManager = () => {
               <div className="p-3 border rounded-lg">
                 <div className="text-sm font-medium mb-2">Cloud Relay (sem configurar IP no PWA)</div>
                 <div className="text-sm text-muted-foreground mb-3">
-                  Instale o PopSystem Bridge no computador/mini-pc, gere um código e vincule aqui.
+                  Instale o PopConnect no computador/mini-pc, gere um código e vincule aqui.
                 </div>
                 <div className="flex justify-end mb-3">
                   <Button
@@ -348,17 +348,27 @@ const DeviceManager = () => {
                       try {
                         setDownloadingBridge(true);
                         const exe = await getLatestBridgeWindowsExe();
-                        if (exe?.url) {
-                          window.open(exe.url, '_blank', 'noopener,noreferrer');
-                        } else {
-                          window.open('https://github.com/josegenecis/boracume-pdv-system/releases', '_blank', 'noopener,noreferrer');
-                        }
+                        if (!exe?.url) throw new Error('Instalador indisponível');
+
+                        const download = document.createElement('a');
+                        download.href = exe.url;
+                        download.download = exe.name;
+                        download.style.display = 'none';
+                        document.body.appendChild(download);
+                        download.click();
+                        download.remove();
+                      } catch (error: any) {
+                        toast({
+                          title: 'Download indisponível',
+                          description: error?.message || 'Não foi possível baixar o PopConnect agora.',
+                          variant: 'destructive',
+                        });
                       } finally {
                         setDownloadingBridge(false);
                       }
                     }}
                   >
-                    {downloadingBridge ? 'Abrindo…' : 'Baixar Bridge (Windows .exe)'}
+                    {downloadingBridge ? 'Baixando…' : 'Baixar PopConnect (Windows .exe)'}
                   </Button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
