@@ -11,11 +11,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,12 +31,9 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bridge-${{ matrix.os }}
+          name: popconnect-windows
           path: |
             dist-bridge/**/*.exe
-            dist-bridge/**/*.dmg
-            dist-bridge/**/*.AppImage
-            dist-bridge/**/*.zip
             dist-bridge/**/*.yml
             dist-bridge/**/*.blockmap
 
