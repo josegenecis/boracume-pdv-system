@@ -35,9 +35,13 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
         typeof item.tag_name === 'string' &&
         item.tag_name.startsWith('bridge-v'),
     )
-    const installer = release?.assets?.find(
+    const executableAssets = release?.assets?.filter(
       (asset) => typeof asset.name === 'string' && asset.name.toLowerCase().endsWith('.exe'),
-    )
+    ) ?? []
+    const installer = executableAssets.find((asset) => {
+      const name = asset.name?.toLowerCase() ?? ''
+      return name.startsWith('popconnect') && name.includes('setup')
+    })
 
     if (!installer?.browser_download_url) {
       return res.status(404).json({ error: 'Instalador do PopConnect não encontrado.' })
