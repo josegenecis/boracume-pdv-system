@@ -88,6 +88,7 @@ interface CheckoutModalProps {
   onClearSplit: () => void;
   onConfirm: () => void;
   processing?: boolean;
+  keyboardShortcutsEnabled?: boolean;
   confirmLabel?: string;
   pixStatus?: 'idle' | 'waiting' | 'paid';
   cpfValue?: string;
@@ -122,6 +123,7 @@ export function CheckoutModal({
   onClearSplit,
   onConfirm,
   processing = false,
+  keyboardShortcutsEnabled = true,
   confirmLabel,
   pixStatus = 'idle',
   cpfValue = '',
@@ -190,13 +192,37 @@ export function CheckoutModal({
   useEffect(() => {
     if (!open) return;
     const handler = (event: KeyboardEvent) => {
+      if (!keyboardShortcutsEnabled || cardDialogOpen) return;
+      const target = event.target as HTMLElement | null;
+      const isEditing = Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
+
       if (event.key === 'Escape') {
         event.preventDefault();
         goBack();
+        return;
       }
       if (event.key === 'Enter' && canConfirm) {
         event.preventDefault();
         onConfirm();
+        return;
+      }
+      if (!isEditing && mode === 'main') {
+        const numericPayments: Record<string, () => void> = {
+          '1': () => selectSinglePayment('dinheiro', 'cash'),
+          '2': () => selectSinglePayment('pix', 'pix'),
+          '3': () => selectSinglePayment('cartao_debito', 'main'),
+          '4': () => selectSinglePayment('cartao_credito', 'main'),
+          '5': () => selectSinglePayment('cartao_voucher', 'main'),
+          '6': () => selectSinglePayment('pagar_depois', 'main'),
+          '7': () => selectSinglePayment('cartao_outros', 'main'),
+          '8': openSplitMode,
+        };
+        const shortcut = numericPayments[event.key];
+        if (shortcut) {
+          event.preventDefault();
+          shortcut();
+          return;
+        }
       }
       if (event.key === 'F2') {
         event.preventDefault();
@@ -225,7 +251,7 @@ export function CheckoutModal({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [canConfirm, mode, modeVariant, onConfirm, onOpenChange, open, paymentAmounts]);
+  }, [canConfirm, cardDialogOpen, keyboardShortcutsEnabled, mode, modeVariant, onConfirm, onOpenChange, open, paymentAmounts]);
 
   const updateSplitAmount = (method: CheckoutPaymentMethod, value: string) => {
     onPaymentAmountChange(method, value);

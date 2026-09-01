@@ -271,6 +271,7 @@ interface CashCloseSummary {
   pix: number;
   card: number;
   cash: number;
+  receivable: number;
   total: number;
   inAmount: number;
   outAmount: number;
@@ -599,6 +600,7 @@ const PDV = () => {
   const normalizePaymentBucket = (order: any) => {
     const raw = String(order?.payment_method || '').trim().toLowerCase();
     if (!raw) return 'other';
+    if (raw.includes('pagar_depois') || raw.includes('conta') || raw.includes('receiv')) return 'receivable';
     if (raw.includes('pix')) return 'pix';
     if (raw.includes('dinheiro')) return 'cash';
     if (raw.includes('voucher') || raw.includes('refeicao') || raw.includes('refeição') || raw.includes('aliment')) return 'voucher';
@@ -713,6 +715,7 @@ const PDV = () => {
     let debit = 0;
     let voucher = 0;
     let genericCard = 0;
+    let receivable = 0;
 
     for (const order of sales) {
       const total = Number(order?.total || 0);
@@ -727,6 +730,7 @@ const PDV = () => {
         else if (bucket === 'debit') debit += line.amount;
         else if (bucket === 'voucher') voucher += line.amount;
         else if (bucket === 'card') genericCard += line.amount;
+        else if (bucket === 'receivable') receivable += line.amount;
       }
     }
 
@@ -751,6 +755,7 @@ const PDV = () => {
       pix,
       card: credit + debit + genericCard,
       cash,
+      receivable,
       total: grossRevenue,
       inAmount,
       outAmount,
@@ -837,6 +842,7 @@ const PDV = () => {
       row('Débito:', formatBRL(summary.debit)),
       row('Voucher/Refeição:', formatBRL(summary.voucher)),
       ...(summary.genericCard > 0 ? [row('Cartão:', formatBRL(summary.genericCard))] : []),
+      row('Contas a Receber:', formatBRL(summary.receivable)),
       '',
       row('TOTAL RECEBIDO:', formatBRL(summary.totalReceived)),
       '',
@@ -1399,15 +1405,25 @@ const PDV = () => {
     const safeWeight = Math.max(0, Number(weightKg || 0));
     if (!safeWeight) {
       toast({ title: 'Peso inválido', description: 'Informe um peso maior que zero.', variant: 'destructive' });
-      return;
+      return false;
     }
     addToCart(product, Number(safeWeight.toFixed(3)));
+    return true;
   };
 
   const openManualWeightDialog = (product: Product) => {
     setPendingWeightProduct(product);
     setManualWeight('');
     setWeightDialogOpen(true);
+  };
+
+  const confirmManualWeight = () => {
+    if (!pendingWeightProduct) return;
+    const weightKg = Number(manualWeight.replace(',', '.'));
+    if (!addWeightedProductToCart(pendingWeightProduct, weightKg)) return;
+    setWeightDialogOpen(false);
+    setPendingWeightProduct(null);
+    setManualWeight('');
   };
 
   const handleWeightedProductClick = async (product: Product) => {
@@ -1552,7 +1568,7 @@ const PDV = () => {
 
     const handleScannerKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (showVariationModal || weightDialogOpen || cashDialogOpen || adminPinOpen || tefOpen || tableLaunchOpen || commandLookupOpen || commandQueryOpen) return;
+      if (showVariationModal || weightDialogOpen || cashDialogOpen || adminPinOpen || tefOpen || tableLaunchOpen || commandLookupOpen || commandQueryOpen || checkoutOpen || shortcutsOpen) return;
 
       const now = Date.now();
 
@@ -1587,7 +1603,7 @@ const PDV = () => {
       window.removeEventListener('keydown', handleScannerKeyDown, true);
       clearScannerBuffer();
     };
-  }, [activeTab, adminPinOpen, cashDialogOpen, commandLookupOpen, commandQueryOpen, products, showVariationModal, tableLaunchOpen, tefOpen, weightDialogOpen]);
+  }, [activeTab, adminPinOpen, cashDialogOpen, checkoutOpen, commandLookupOpen, commandQueryOpen, products, shortcutsOpen, showVariationModal, tableLaunchOpen, tefOpen, weightDialogOpen]);
 
   const makeCartItemId = () => {
     try {
@@ -3636,10 +3652,16 @@ const PDV = () => {
             <div className="space-y-2">
               <Label>Peso em kg</Label>
               <Input
+                autoFocus
                 inputMode="decimal"
                 placeholder="0,100"
                 value={manualWeight}
                 onChange={(event) => setManualWeight(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return;
+                  event.preventDefault();
+                  confirmManualWeight();
+                }}
               />
               {pwaScaleService.isSupported() && !pwaScaleService.isConnected() && (
                 <Button
@@ -3667,16 +3689,7 @@ const PDV = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setWeightDialogOpen(false)}>Cancelar</Button>
-            <Button
-              onClick={() => {
-                if (!pendingWeightProduct) return;
-                const weightKg = Number(manualWeight.replace(',', '.'));
-                addWeightedProductToCart(pendingWeightProduct, weightKg);
-                setWeightDialogOpen(false);
-                setPendingWeightProduct(null);
-                setManualWeight('');
-              }}
-            >
+            <Button onClick={confirmManualWeight}>
               Adicionar
             </Button>
           </DialogFooter>
@@ -3724,7 +3737,7 @@ const PDV = () => {
       </Dialog>
 
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Keyboard className="h-5 w-5 text-[#FF6400]" />
@@ -3741,6 +3754,28 @@ const PDV = () => {
               ['Enter', 'Confirmar o código digitado'],
             ].map(([key, description]) => (
               <div key={key} className="flex items-center justify-between gap-4 rounded-xl border border-[#003223]/10 bg-[#F8FAF8] px-3 py-2.5">
+                <span className="text-[#003223]/75">{description}</span>
+                <kbd className="min-w-14 rounded-lg border border-[#003223]/15 bg-white px-2 py-1 text-center font-mono font-bold text-[#003223] shadow-sm">
+                  {key}
+                </kbd>
+              </div>
+            ))}
+            <div className="pt-2 text-xs font-bold uppercase tracking-wide text-[#003223]/55">
+              Na tela de pagamento
+            </div>
+            {[
+              ['1', 'Dinheiro'],
+              ['2', 'PIX'],
+              ['3', 'Cartão de débito'],
+              ['4', 'Cartão de crédito'],
+              ['5', 'Voucher'],
+              ['6', 'Contas a receber'],
+              ['7', 'Outros cartões'],
+              ['8', 'Dividir pagamento'],
+              ['Enter', 'Confirmar pagamento'],
+              ['Esc', 'Voltar ou fechar'],
+            ].map(([key, description]) => (
+              <div key={`payment-${key}`} className="flex items-center justify-between gap-4 rounded-xl border border-[#003223]/10 bg-[#F8FAF8] px-3 py-2.5">
                 <span className="text-[#003223]/75">{description}</span>
                 <kbd className="min-w-14 rounded-lg border border-[#003223]/15 bg-white px-2 py-1 text-center font-mono font-bold text-[#003223] shadow-sm">
                   {key}
@@ -3781,6 +3816,7 @@ const PDV = () => {
         onClearSplit={clearPaymentSplit}
         onConfirm={handleFinalizeSale}
         processing={processing || cart.length === 0}
+        keyboardShortcutsEnabled={!shortcutsOpen}
         modeVariant={checkoutSettings.mode}
         cpfValue={customerDocument}
         onCpfChange={setCustomerDocument}
@@ -4139,7 +4175,7 @@ const PDV = () => {
       />
 
       <Dialog open={cashDialogOpen} onOpenChange={setCashDialogOpen}>
-        <DialogContent>
+        <DialogContent className={cashDialogMode === 'close' ? 'sm:max-w-2xl' : undefined}>
           <DialogHeader>
             <DialogTitle>{cashDialogMode === 'open' ? 'Abrir Caixa' : 'Fechar Caixa'}</DialogTitle>
           </DialogHeader>
@@ -4154,7 +4190,7 @@ const PDV = () => {
                 <div className="text-sm text-muted-foreground">Carregando resumo do caixa...</div>
               ) : cashCloseSummary ? (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     <div className="border rounded-md p-3">
                       <div className="text-xs text-muted-foreground">Abertura</div>
                       <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.initial)}</div>
@@ -4168,8 +4204,12 @@ const PDV = () => {
                       <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.pix)}</div>
                     </div>
                     <div className="border rounded-md p-3">
-                      <div className="text-xs text-muted-foreground">Cartão</div>
-                      <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.card)}</div>
+                      <div className="text-xs text-muted-foreground">Cartão de débito</div>
+                      <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.debit)}</div>
+                    </div>
+                    <div className="border rounded-md p-3">
+                      <div className="text-xs text-muted-foreground">Cartão de crédito</div>
+                      <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.credit)}</div>
                     </div>
                     <div className="border rounded-md p-3">
                       <div className="text-xs text-muted-foreground">Dinheiro (vendas)</div>
@@ -4180,6 +4220,17 @@ const PDV = () => {
                       <div className="text-lg font-bold">
                         {formatCurrency(cashCloseSummary.inAmount)} / {formatCurrency(cashCloseSummary.outAmount)}
                       </div>
+                    </div>
+                    {cashCloseSummary.genericCard > 0 && (
+                      <div className="border rounded-md p-3">
+                        <div className="text-xs text-muted-foreground">Voucher / outros cartões</div>
+                        <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.genericCard)}</div>
+                      </div>
+                    )}
+                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
+                      <div className="text-xs text-blue-700">Contas a receber</div>
+                      <div className="text-lg font-bold text-blue-950">{formatCurrency(cashCloseSummary.receivable)}</div>
+                      <div className="text-[11px] text-blue-700">Somente para controle</div>
                     </div>
                   </div>
 

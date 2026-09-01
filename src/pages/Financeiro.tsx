@@ -115,6 +115,19 @@ interface CashSession {
   notes?: string | null;
 }
 
+interface CashCloseOverview {
+  total: number;
+  pix: number;
+  cash: number;
+  credit: number;
+  debit: number;
+  genericCard: number;
+  receivable: number;
+  inAmount: number;
+  outAmount: number;
+  expectedCash: number;
+}
+
 const FINANCE_PAGE_SIZE = 1000;
 
 const getPeriodRange = (preset: PeriodPreset = '30d') => {
@@ -174,6 +187,8 @@ const Financeiro = () => {
   const [openTablesCount, setOpenTablesCount] = useState(0);
   const [checkingOpenTables, setCheckingOpenTables] = useState(false);
   const [openTablesConsent, setOpenTablesConsent] = useState(false);
+  const [cashCloseOverview, setCashCloseOverview] = useState<CashCloseOverview | null>(null);
+  const [loadingCashCloseOverview, setLoadingCashCloseOverview] = useState(false);
   const [mobileFinanceTab, setMobileFinanceTab] = useState<'caixa' | 'movimentos' | 'relatorios'>('caixa');
 
   const [filters, setFilters] = useState(() => {
@@ -541,6 +556,7 @@ const Financeiro = () => {
 
   const getPaymentBucket = (paymentMethod: unknown) => {
     const value = String(paymentMethod || '').trim().toLowerCase();
+    if (value.includes('pagar_depois') || value.includes('conta') || value.includes('receiv')) return 'receber';
     if (value.includes('pix')) return 'pix';
     if (value.includes('dinheiro') || value.includes('cash') || value.includes('especie')) return 'dinheiro';
     if (value.includes('credito') || value.includes('credit')) return 'credito';
@@ -576,6 +592,80 @@ const Financeiro = () => {
     return Math.round(validDurations.reduce((sum, value) => sum + value, 0) / validDurations.length);
   };
 
+  const loadCashCloseOverview = async (session: CashSession): Promise<CashCloseOverview> => {
+    if (!user?.id) throw new Error('Usuário não autenticado.');
+
+    const closedAt = session.closed_at || new Date().toISOString();
+    const orderSelect = 'id, created_at, total, payment_method, status, cash_register_session_id, variations';
+    const [{ data: linkedOrders, error: linkedError }, { data: unlinkedOrders, error: unlinkedError }, { data: movements, error: movementsError }] = await Promise.all([
+      (supabase as any)
+        .from('orders')
+        .select(orderSelect)
+        .eq('user_id', user.id)
+        .eq('cash_register_session_id', session.id),
+      (supabase as any)
+        .from('orders')
+        .select(orderSelect)
+        .eq('user_id', user.id)
+        .is('cash_register_session_id', null)
+        .gte('created_at', session.opened_at)
+        .lte('created_at', closedAt),
+      (supabase as any)
+        .from('cash_movements')
+        .select('type, amount')
+        .eq('user_id', user.id)
+        .eq('session_id', session.id),
+    ]);
+
+    if (linkedError) throw linkedError;
+    if (unlinkedError) throw unlinkedError;
+    if (movementsError) throw movementsError;
+
+    const uniqueOrders = new Map<string, Record<string, unknown>>();
+    for (const order of [
+      ...(Array.isArray(linkedOrders) ? linkedOrders : []),
+      ...(Array.isArray(unlinkedOrders) ? unlinkedOrders : []),
+    ]) {
+      if (order?.id) uniqueOrders.set(String(order.id), order);
+    }
+
+    const sales = Array.from(uniqueOrders.values())
+      .filter((order) => String(order?.status || '').toLowerCase() !== 'cancelled');
+    const totals = sales.reduce<Record<string, number>>((acc, order) => {
+      const lines = getOrderPaymentLines(order);
+      const paymentLines = lines.length > 0
+        ? lines
+        : [{ method: String(order?.payment_method || ''), amount: Number(order?.total || 0) }];
+      for (const line of paymentLines) {
+        const bucket = getPaymentBucket(line.method);
+        acc[bucket] = (acc[bucket] || 0) + line.amount;
+      }
+      return acc;
+    }, {});
+
+    const movementList = Array.isArray(movements) ? movements : [];
+    const inAmount = movementList
+      .filter((movement) => movement?.type === 'in')
+      .reduce((sum, movement) => sum + Number(movement?.amount || 0), 0);
+    const outAmount = movementList
+      .filter((movement) => movement?.type === 'out')
+      .reduce((sum, movement) => sum + Number(movement?.amount || 0), 0);
+    const cash = Number(totals.dinheiro || 0);
+
+    return {
+      total: sales.reduce((sum, order) => sum + Number(order?.total || 0), 0),
+      pix: Number(totals.pix || 0),
+      cash,
+      credit: Number(totals.credito || 0),
+      debit: Number(totals.debito || 0),
+      genericCard: Number(totals.cartao || 0) + Number(totals.voucher || 0),
+      receivable: Number(totals.receber || 0),
+      inAmount,
+      outAmount,
+      expectedCash: Number(session.initial_amount || 0) + cash + inAmount - outAmount,
+    };
+  };
+
   const classifyOrderChannel = (order: Record<string, unknown>) => {
     const orderType = String(order?.order_type || '').trim().toLowerCase();
     const status = String(order?.status || '').trim().toLowerCase();
@@ -604,7 +694,7 @@ const Financeiro = () => {
     if (!user?.id) return [];
 
     const db = supabase as unknown as SupabaseUntyped;
-    const orderSelect = 'id, created_at, updated_at, total, discount, delivery_fee, payment_method, status, order_type, customer_name, customer_phone, customer_address, customer_neighborhood, delivery_zone_id, table_id';
+    const orderSelect = 'id, created_at, updated_at, total, discount, delivery_fee, payment_method, status, order_type, customer_name, customer_phone, customer_address, customer_neighborhood, delivery_zone_id, table_id, variations';
     const [{ data: orders }, { data: unlinkedOrders }, { data: movements }, { data: profile }, { data: fiscal }] = await Promise.all([
       db
         .from('orders')
@@ -743,9 +833,18 @@ const Financeiro = () => {
       row('Débito:', formatCurrency(paymentTotals.debito || 0)),
       row('Voucher/Refeição:', formatCurrency(paymentTotals.voucher || 0)),
       ...(Number(paymentTotals.cartao || 0) > 0 ? [row('Cartão:', formatCurrency(paymentTotals.cartao || 0))] : []),
+      row('Contas a Receber:', formatCurrency(paymentTotals.receber || 0)),
       ...(Number(paymentTotals.outros || 0) > 0 ? [row('Outros:', formatCurrency(paymentTotals.outros || 0))] : []),
       '',
-      row('TOTAL RECEBIDO:', formatCurrency(grossRevenue)),
+      row('TOTAL RECEBIDO:', formatCurrency(
+        Number(paymentTotals.pix || 0)
+        + Number(paymentTotals.dinheiro || 0)
+        + Number(paymentTotals.credito || 0)
+        + Number(paymentTotals.debito || 0)
+        + Number(paymentTotals.voucher || 0)
+        + Number(paymentTotals.cartao || 0)
+        + Number(paymentTotals.outros || 0)
+      )),
       '',
       divider,
       centerText('MOVIMENTO CAIXA'),
@@ -1375,21 +1474,31 @@ const Financeiro = () => {
     setCashOperation(operation);
     setCashAmount('');
     setCashDescription('');
+    setCashCloseOverview(null);
     setOpenTablesConsent(false);
     setOpenTablesCount(0);
     setIsCashDialogOpen(true);
     if (operation === 'close' && user?.id) {
       setCheckingOpenTables(true);
+      setLoadingCashCloseOverview(true);
       try {
-        setOpenTablesCount(await getOpenTableCount(user.id));
+        const closingSession = currentSession || (selectedSession?.status === 'open' ? selectedSession : null);
+        const [openCount, overview] = await Promise.all([
+          getOpenTableCount(user.id),
+          closingSession ? loadCashCloseOverview(closingSession) : Promise.reject(new Error('Nenhuma sessão de caixa aberta.')),
+        ]);
+        setOpenTablesCount(openCount);
+        setCashCloseOverview(overview);
+        setCashAmount(formatBRL(overview.expectedCash));
       } catch (error) {
         toast({
-          title: 'Não foi possível conferir as mesas',
+          title: 'Não foi possível preparar o fechamento',
           description: friendlyErrorMessage(error, 'Tente novamente antes de fechar o caixa.'),
           variant: 'destructive',
         });
       } finally {
         setCheckingOpenTables(false);
+        setLoadingCashCloseOverview(false);
       }
     }
   };
@@ -1510,7 +1619,7 @@ const Financeiro = () => {
                 {currentSession ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
                 {currentSession ? 'Gerenciar Caixa' : 'Abrir Caixa'}
               </Button>
-            <DialogContent>
+            <DialogContent className={cashOperation === 'close' ? 'sm:max-w-2xl' : undefined}>
               <DialogHeader>
                 <DialogTitle>
                   {cashOperation === 'open' && 'Abertura de Caixa'}
@@ -1529,13 +1638,68 @@ const Financeiro = () => {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
+                {cashOperation === 'close' && (
+                  loadingCashCloseOverview ? (
+                    <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-600">
+                      Carregando resumo do caixa...
+                    </div>
+                  ) : cashCloseOverview ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border p-3">
+                          <div className="text-xs text-muted-foreground">Vendas (total)</div>
+                          <div className="text-lg font-bold">{formatBRL(cashCloseOverview.total)}</div>
+                        </div>
+                        <div className="rounded-xl border p-3">
+                          <div className="text-xs text-muted-foreground">Dinheiro</div>
+                          <div className="text-lg font-bold">{formatBRL(cashCloseOverview.cash)}</div>
+                        </div>
+                        <div className="rounded-xl border p-3">
+                          <div className="text-xs text-muted-foreground">PIX</div>
+                          <div className="text-lg font-bold">{formatBRL(cashCloseOverview.pix)}</div>
+                        </div>
+                        <div className="rounded-xl border p-3">
+                          <div className="text-xs text-muted-foreground">Cartão de débito</div>
+                          <div className="text-lg font-bold">{formatBRL(cashCloseOverview.debit)}</div>
+                        </div>
+                        <div className="rounded-xl border p-3">
+                          <div className="text-xs text-muted-foreground">Cartão de crédito</div>
+                          <div className="text-lg font-bold">{formatBRL(cashCloseOverview.credit)}</div>
+                        </div>
+                        {cashCloseOverview.genericCard > 0 && (
+                          <div className="rounded-xl border p-3">
+                            <div className="text-xs text-muted-foreground">Voucher / outros cartões</div>
+                            <div className="text-lg font-bold">{formatBRL(cashCloseOverview.genericCard)}</div>
+                          </div>
+                        )}
+                        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                          <div className="text-xs text-blue-700">Contas a receber</div>
+                          <div className="text-lg font-bold text-blue-950">{formatBRL(cashCloseOverview.receivable)}</div>
+                          <div className="text-[11px] text-blue-700">Somente para controle</div>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                        <div className="text-xs text-emerald-700">Saldo esperado em dinheiro</div>
+                        <div className="text-xl font-bold text-emerald-950">{formatBRL(cashCloseOverview.expectedCash)}</div>
+                        <div className="mt-1 text-xs text-emerald-700">
+                          Abertura + dinheiro + suprimentos − sangrias
+                        </div>
+                      </div>
+                    </div>
+                  ) : null
+                )}
                 <div>
-                  <Label>Valor</Label>
+                  <Label>{cashOperation === 'close' ? 'Valor contado em dinheiro' : 'Valor'}</Label>
                   <CurrencyTextInput 
                     value={cashAmount} 
                     onValueChange={setCashAmount} 
                     placeholder="R$ 0,00"
                   />
+                  {cashOperation === 'close' && cashCloseOverview && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Diferença: {formatBRL(parseBRL(cashAmount) - cashCloseOverview.expectedCash)}
+                    </div>
+                  )}
                 </div>
                 {cashOperation !== 'open' && (
                    <div>
@@ -1578,7 +1742,12 @@ const Financeiro = () => {
               <DialogFooter>
                 <Button
                   onClick={handleCashOperation}
-                  disabled={cashOperation === 'close' && (checkingOpenTables || (openTablesCount > 0 && !openTablesConsent))}
+                  disabled={cashOperation === 'close' && (
+                    checkingOpenTables
+                    || loadingCashCloseOverview
+                    || !cashCloseOverview
+                    || (openTablesCount > 0 && !openTablesConsent)
+                  )}
                 >
                   Confirmar
                 </Button>
