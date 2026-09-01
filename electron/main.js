@@ -1,7 +1,56 @@
 const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { nativeBitmapToEscPos } = require('./utils/receiptRaster');
+
+// Mantido no processo principal para que a inicialização do Desktop não dependa
+// de um arquivo auxiliar estar presente no app.asar.
+function nativeBitmapToEscPos(bitmap, width, height) {
+  const safeWidth = Math.max(1, Number(width) || 1);
+  const safeHeight = Math.max(1, Number(height) || 1);
+  const bytesPerLine = Math.ceil(safeWidth / 8);
+  const raster = Buffer.alloc(bytesPerLine * safeHeight);
+  const bayer4x4 = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5],
+  ];
+
+  for (let y = 0; y < safeHeight; y += 1) {
+    for (let x = 0; x < safeWidth; x += 1) {
+      const offset = (y * safeWidth + x) * 4;
+      const blue = bitmap[offset] ?? 255;
+      const green = bitmap[offset + 1] ?? 255;
+      const red = bitmap[offset + 2] ?? 255;
+      const alpha = bitmap[offset + 3] ?? 255;
+      const luminance = (red * 299 + green * 587 + blue * 114) / 1000;
+      const threshold = 80 + bayer4x4[y % 4][x % 4] * 8;
+
+      if (alpha > 24 && luminance < threshold) {
+        const byteIndex = y * bytesPerLine + Math.floor(x / 8);
+        raster[byteIndex] |= 0x80 >> (x % 8);
+      }
+    }
+  }
+
+  const header = Buffer.from([
+    0x1d,
+    0x76,
+    0x30,
+    0x00,
+    bytesPerLine & 0xff,
+    (bytesPerLine >> 8) & 0xff,
+    safeHeight & 0xff,
+    (safeHeight >> 8) & 0xff,
+  ]);
+
+  return Buffer.concat([
+    Buffer.from([0x1b, 0x40, 0x1b, 0x61, 0x01]),
+    header,
+    raster,
+    Buffer.from([0x1b, 0x61, 0x00, 0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x41, 0x00]),
+  ]);
+}
 const isDev = !app.isPackaged;
 let autoUpdater = null;
 try {
