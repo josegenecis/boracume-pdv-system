@@ -9,7 +9,7 @@ const disableRedirectCache = (res: any) => {
 
 export default async function handler(req: any, res: any) {
   try {
-    const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/releases/latest`;
+    const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=100`;
     const gh = await fetch(apiUrl, {
       headers: {
         Accept: 'application/vnd.github+json',
@@ -17,7 +17,7 @@ export default async function handler(req: any, res: any) {
       },
     });
 
-    const fallback = `https://github.com/${OWNER}/${REPO}/releases/latest`;
+    const fallback = `https://github.com/${OWNER}/${REPO}/releases`;
     if (!gh.ok) {
       res.statusCode = 302;
       res.setHeader('location', fallback);
@@ -26,11 +26,17 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const json: any = await gh.json();
-    const assets: any[] = Array.isArray(json?.assets) ? json.assets : [];
+    const releases: any[] = await gh.json();
+    const desktopRelease = Array.isArray(releases)
+      ? releases.find((release: any) => {
+          const tag = String(release?.tag_name || '');
+          return !release?.draft && !release?.prerelease && /^v\d/.test(tag);
+        })
+      : null;
+    const assets: any[] = Array.isArray(desktopRelease?.assets) ? desktopRelease.assets : [];
     const setup = assets.find((a: any) => {
       const name = String(a?.name || '').toLowerCase();
-      return name.endsWith('.exe') && name.includes('setup');
+      return name.endsWith('.exe') && name.includes('setup') && name.includes('popsystem');
     });
 
     const url = String(setup?.browser_download_url || '') || fallback;
@@ -39,7 +45,7 @@ export default async function handler(req: any, res: any) {
     disableRedirectCache(res);
     res.end();
   } catch {
-    const fallback = `https://github.com/${OWNER}/${REPO}/releases/latest`;
+    const fallback = `https://github.com/${OWNER}/${REPO}/releases`;
     res.statusCode = 302;
     res.setHeader('location', fallback);
     disableRedirectCache(res);
