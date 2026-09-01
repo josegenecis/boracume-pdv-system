@@ -70,7 +70,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
-import { parseBRL } from '@/lib/currency';
+import { formatBRL, parseBRL } from '@/lib/currency';
 import { CancelSaleDialog } from '@/components/finance/CancelSaleDialog';
 import { friendlyErrorMessage } from '@/lib/friendly-error';
 import StaffConsumptionManager from '@/components/tables/StaffConsumptionManager';
@@ -326,30 +326,35 @@ const Financeiro = () => {
     }
   };
 
-  const checkOpenSession = async () => {
-    if (!user) return;
+  const findOpenSession = async (): Promise<CashSession | null> => {
+    if (!user?.id) return null;
+
+    const { data, error } = await (supabase as any)
+      .from('cash_register_sessions')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'open')
+      .order('opened_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    return (data as CashSession | null) || null;
+  };
+
+  const checkOpenSession = async (): Promise<CashSession | null> => {
+    if (!user?.id) return null;
     try {
-      const { data, error } = await (supabase as any)
-        .from('cash_register_sessions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'open')
-        .order('opened_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Error checking open session:', error);
-        return;
-      }
-      
+      const data = await findOpenSession();
       setCurrentSession(data);
       if (data?.id) {
         setSelectedSessionId(data.id);
         setCashSessions((current) => [data, ...current.filter((session) => session.id !== data.id)]);
       }
+      return data;
     } catch (err) {
       console.error('Unexpected error checking session:', err);
+      return null;
     }
   };
 
@@ -1524,10 +1529,22 @@ const Financeiro = () => {
       setCheckingOpenTables(true);
       setLoadingCashCloseOverview(true);
       try {
-        const closingSession = currentSession || (selectedSession?.status === 'open' ? selectedSession : null);
+        // Always resolve the active session from the database when local React state
+        // has not caught up yet (for example when arriving via ?cashAction=close).
+        const closingSession = (currentSession?.status === 'open' ? currentSession : null)
+          || (selectedSession?.status === 'open' ? selectedSession : null)
+          || await findOpenSession();
+        if (!closingSession) throw new Error('Nenhuma sessão de caixa aberta.');
+
+        setCurrentSession(closingSession);
+        setSelectedSessionId(closingSession.id);
+        setCashSessions((current) => [
+          closingSession,
+          ...current.filter((session) => session.id !== closingSession.id),
+        ]);
         const [openCount, overview] = await Promise.all([
           getOpenTableCount(user.id),
-          closingSession ? loadCashCloseOverview(closingSession) : Promise.reject(new Error('Nenhuma sessão de caixa aberta.')),
+          loadCashCloseOverview(closingSession),
         ]);
         setOpenTablesCount(openCount);
         setCashCloseOverview(overview);
