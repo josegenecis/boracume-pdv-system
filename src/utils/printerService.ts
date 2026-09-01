@@ -359,7 +359,7 @@ function shouldPrintTicketCode(order: any) {
 }
 
 function normalizePrintConfig(settings: any): NormalizedPrintConfig {
-  const paperWidth = String(settings?.paper_width || '58mm').trim() === '80mm' ? '80mm' : '58mm';
+  const paperWidth = String(settings?.paper_width || '80mm').trim() === '58mm' ? '58mm' : '80mm';
   const fontSizeRaw = String(settings?.font_size || 'normal').trim();
   const fontSize: NormalizedPrintConfig['font_size'] =
     fontSizeRaw === 'small' || fontSizeRaw === 'large' ? fontSizeRaw : 'normal';
@@ -810,13 +810,20 @@ function buildOrderHtml(order: any, config: any, store?: any) {
 
   return `
       <!DOCTYPE html>
-      <html>
+      <html data-print-format="receipt" data-paper-width="${width}">
       <head>
         <meta charset="utf-8" />
         <title>Imprimir Pedido #${order.order_number}</title>
         <style>
           @page { margin: 0; size: ${width} auto; }
           * { box-sizing: border-box; }
+          html, body {
+            width: ${width};
+            max-width: ${width};
+            min-height: 0;
+            height: auto;
+            overflow: visible;
+          }
           body {
             font-family: 'Courier New', Courier, monospace;
             width: ${bodyWidth};
@@ -842,7 +849,11 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           .bold { font-weight: 800; }
           .divider { border-top: 2px dashed #000; margin: 9px 0; }
           .flex { display: flex; justify-content: space-between; gap: 8px; }
-          .item-row { margin-bottom: 8px; }
+          .item-row {
+            margin-bottom: 8px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
           .brand-block { padding-bottom: 2px; }
           .ticket-code { font-size: 1.52em; letter-spacing: 0.08em; }
           .section-title { font-weight: 700; letter-spacing: 0.06em; }
@@ -893,7 +904,12 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             font-size: 0.82em;
             line-height: 1.12;
           }
-          .total-row { font-size: 1.2em; margin-top: 10px; }
+          .total-row {
+            font-size: 1.2em;
+            margin-top: 10px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
           .muted { color: #000; font-size: 0.95em; font-weight: 700; }
         </style>
       </head>
@@ -1134,13 +1150,20 @@ function buildKitchenTicketHtml(order: any, config: any) {
 
   return `
       <!DOCTYPE html>
-      <html>
+      <html data-print-format="receipt" data-paper-width="${width}">
       <head>
         <meta charset="utf-8" />
         <title>Comanda Cozinha #${order.order_number || ''}</title>
         <style>
           @page { margin: 0; size: ${width} auto; }
           * { box-sizing: border-box; }
+          html, body {
+            width: ${width};
+            max-width: ${width};
+            min-height: 0;
+            height: auto;
+            overflow: visible;
+          }
           body {
             font-family: 'Courier New', Courier, monospace;
             width: ${bodyWidth};
@@ -1165,7 +1188,11 @@ function buildKitchenTicketHtml(order: any, config: any) {
           .title { font-size: 1.15em; letter-spacing: 0.06em; }
           .ticket-code { font-size: 1.52em; letter-spacing: 0.08em; }
           .section-title { font-weight: 700; letter-spacing: 0.06em; }
-          .item-row { margin-bottom: 10px; }
+          .item-row {
+            margin-bottom: 10px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
           .item-title {
             white-space: normal;
             word-break: break-word;
@@ -1355,7 +1382,7 @@ function buildReportHtml(
 
   return `
       <!DOCTYPE html>
-      <html>
+      <html data-print-format="receipt" data-paper-width="${paperWidth}">
       <head>
         <meta charset="utf-8" />
         <title>${title}</title>
@@ -1559,8 +1586,6 @@ export const PrinterService = {
   async printOrder(order: any, options: PrintOrderOptions = {}) {
     const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
     const isElectron = Boolean(api?.printSystem && api?.printReceipt);
-    const canOpenCashDrawer = Boolean(api?.openCashDrawer);
-    let drawerOpenedBeforePrint = false;
 
     // 1. Buscar configurações
     const { data: settings } = await (supabase as any)
@@ -1574,14 +1599,6 @@ export const PrinterService = {
         if (settings?.auto_print === false) return;
       } else {
         if (settings?.auto_print !== true) return;
-      }
-    }
-
-    if (options.openCashDrawer && canOpenCashDrawer) {
-      const drawerResult = await openDrawerElectron();
-      drawerOpenedBeforePrint = Boolean(drawerResult?.success);
-      if (!drawerOpenedBeforePrint) {
-        console.warn('Falha ao abrir gaveta antes da impressão:', drawerResult?.error || drawerResult);
       }
     }
 
@@ -1695,6 +1712,12 @@ export const PrinterService = {
     if (fiscalPrintData?.modelCode === '55') {
       try {
         await openAuthorizedNfeDanfe(fiscalPrintData);
+        if (options.openCashDrawer && api?.openCashDrawer) {
+          const drawerResult = await openDrawerElectron();
+          if (!drawerResult?.success) {
+            console.warn('Documento aberto, mas a gaveta não respondeu:', drawerResult?.error || drawerResult);
+          }
+        }
       } catch (error: any) {
         toast.error(error?.message || 'Falha ao abrir o DANFE oficial da NF-e.');
         throw error;
@@ -1706,11 +1729,12 @@ export const PrinterService = {
       const resp = await printElectron(enrichedOrder, config);
       if (!resp.success) {
         toast.error(resp.error || 'Falha ao imprimir');
-        if (options.openCashDrawer && !drawerOpenedBeforePrint) {
-          const drawerResult = await openDrawerElectron();
-          if (!drawerResult?.success) {
-            console.warn('Falha ao abrir gaveta após erro de impressão:', drawerResult?.error || drawerResult);
-          }
+        return;
+      }
+      if (options.openCashDrawer && api?.openCashDrawer) {
+        const drawerResult = await openDrawerElectron();
+        if (!drawerResult?.success) {
+          console.warn('Cupom impresso, mas a gaveta não respondeu:', drawerResult?.error || drawerResult);
         }
       }
       return;

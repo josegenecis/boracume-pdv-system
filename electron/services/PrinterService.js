@@ -886,10 +886,6 @@ public class RawPrinterHelper {
   [DllImport("winspool.Drv", SetLastError=true)]
   public static extern bool EndDocPrinter(IntPtr hPrinter);
   [DllImport("winspool.Drv", SetLastError=true)]
-  public static extern bool StartPagePrinter(IntPtr hPrinter);
-  [DllImport("winspool.Drv", SetLastError=true)]
-  public static extern bool EndPagePrinter(IntPtr hPrinter);
-  [DllImport("winspool.Drv", SetLastError=true)]
   public static extern bool WritePrinter(IntPtr hPrinter, byte[] pBytes, Int32 dwCount, out Int32 dwWritten);
 
   public static bool SendBytesToPrinter(string printerName, byte[] bytes) {
@@ -903,12 +899,7 @@ public class RawPrinterHelper {
     try {
       if (!StartDocPrinter(pPrinter, 1, di)) return false;
       try {
-        if (!StartPagePrinter(pPrinter)) return false;
-        try {
-          return WritePrinter(pPrinter, bytes, bytes.Length, out written);
-        } finally {
-          EndPagePrinter(pPrinter);
-        }
+        return WritePrinter(pPrinter, bytes, bytes.Length, out written) && written == bytes.Length;
       } finally {
         EndDocPrinter(pPrinter);
       }

@@ -565,6 +565,8 @@ function CashPayment({
             onValueChange={(value) => onCashReceivedChange?.(value)}
             placeholder={formatCurrency(total)}
             className="mt-1 h-14 bg-white text-xl font-black"
+            autoFocus
+            onFocus={(event) => event.currentTarget.select()}
           />
         </div>
         <div className="rounded-xl bg-white px-4 py-3">

@@ -47,6 +47,7 @@ import {
   Sparkles,
   TrendingUp,
   AlertTriangle,
+  Printer,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -171,6 +172,7 @@ const Financeiro = () => {
   const [sessionMovements, setSessionMovements] = useState<any[]>([]);
   const [loadingSessionDetails, setLoadingSessionDetails] = useState(false);
   const [reprintingCashReport, setReprintingCashReport] = useState(false);
+  const [reprintingOrderIds, setReprintingOrderIds] = useState<Set<string>>(new Set());
   const [cancellingOrderIds, setCancellingOrderIds] = useState<Set<string>>(new Set());
   const [orderToCancel, setOrderToCancel] = useState<any | null>(null);
   const fetchSequenceRef = useRef(0);
@@ -480,6 +482,43 @@ const Financeiro = () => {
     }
 
     setOrderToCancel(order);
+  };
+
+  const handleReprintSessionOrder = async (order: Record<string, unknown>) => {
+    const orderId = String(order?.id || '');
+    if (!user?.id || !orderId || order?.status === 'cancelled') return;
+
+    setReprintingOrderIds((previous) => new Set(previous).add(orderId));
+    try {
+      const { data: fullOrder, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', orderId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!fullOrder) throw new Error('Venda não encontrada.');
+
+      await PrinterService.printOrder(fullOrder, { openCashDrawer: false });
+      toast({
+        title: 'Reimpressão enviada',
+        description: `O cupom da venda #${fullOrder.order_number || orderId.slice(0, 8)} foi enviado à impressora.`,
+      });
+    } catch (error: unknown) {
+      console.error('Erro ao reimprimir venda:', error);
+      toast({
+        title: 'Erro ao reimprimir',
+        description: friendlyErrorMessage(error, 'Não foi possível reimprimir o cupom desta venda.'),
+        variant: 'destructive',
+      });
+    } finally {
+      setReprintingOrderIds((previous) => {
+        const next = new Set(previous);
+        next.delete(orderId);
+        return next;
+      });
+    }
   };
 
   const handleCancelSessionOrder = async ({
@@ -2743,22 +2782,36 @@ const Financeiro = () => {
                               <TableCell className="text-right">
                                 {o.status === 'cancelled' ? (
                                   <span className="text-xs text-muted-foreground">Cancelada</span>
-                                ) : !canCancelFinancialSale(o) ? (
-                                  <span className="text-xs font-medium text-muted-foreground">
-                                    Caixa encerrado
-                                  </span>
                                 ) : (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-                                    disabled={cancellingOrderIds.has(String(o.id))}
-                                    onClick={() => requestFinancialCancellation(o)}
-                                  >
-                                    <XCircle className="mr-2 h-4 w-4" />
-                                    {cancellingOrderIds.has(String(o.id)) ? 'Cancelando...' : 'Cancelar venda'}
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={reprintingOrderIds.has(String(o.id))}
+                                      onClick={() => void handleReprintSessionOrder(o)}
+                                    >
+                                      <Printer className="mr-2 h-4 w-4" />
+                                      {reprintingOrderIds.has(String(o.id)) ? 'Reimprimindo...' : 'Reimprimir'}
+                                    </Button>
+                                    {!canCancelFinancialSale(o) ? (
+                                      <span className="text-xs font-medium text-muted-foreground">
+                                        Caixa encerrado
+                                      </span>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                                        disabled={cancellingOrderIds.has(String(o.id))}
+                                        onClick={() => requestFinancialCancellation(o)}
+                                      >
+                                        <XCircle className="mr-2 h-4 w-4" />
+                                        {cancellingOrderIds.has(String(o.id)) ? 'Cancelando...' : 'Cancelar venda'}
+                                      </Button>
+                                    )}
+                                  </div>
                                 )}
                               </TableCell>
                             </TableRow>

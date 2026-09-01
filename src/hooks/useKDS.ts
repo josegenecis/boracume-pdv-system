@@ -231,8 +231,7 @@ export const useKDS = () => {
   };
 
   const playNotificationSound = () => {
-    const audio = new Audio('/notification.mp3'); // Ensure this file exists or use a base64 string
-    audio.play().catch(e => console.log('Audio play failed', e));
+    void soundNotifications.playSound();
   };
 
   return {

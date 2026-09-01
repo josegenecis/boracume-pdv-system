@@ -7,6 +7,7 @@ import { Upload, Play, Trash2, Music } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { POPSYSTEM_ORDER_SOUND_PATH } from '@/utils/soundUtils';
 
 interface SoundUploadManagerProps {
   customUrls: {
@@ -196,8 +197,7 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
     if (!soundTypeData) return;
 
     const customUrl = customUrls[soundTypeData.urlKey];
-    const defaultUrl = soundType === 'chime' ? '/sounds/Bell Instant.mp3' : '/sounds/Alerta Original.mp3';
-    const audio = new Audio(customUrl || defaultUrl);
+    const audio = new Audio(customUrl || POPSYSTEM_ORDER_SOUND_PATH);
     audio.volume = 0.5;
     audio.play().catch(console.error);
   };

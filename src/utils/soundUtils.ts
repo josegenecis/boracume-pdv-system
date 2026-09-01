@@ -1,5 +1,5 @@
 // Utility functions for sound notifications using HTML5 Audio
-export const POPSYSTEM_ORDER_SOUND_PATH = '/sounds/Toque%20PopSystem.mp3';
+export const POPSYSTEM_ORDER_SOUND_PATH = '/sounds/Toque%20PopSystem.mp3?v=20260901';
 export const POPSYSTEM_ORDER_SOUND_TYPE = 'bell';
 
 export class SoundNotifications {
@@ -46,11 +46,9 @@ export class SoundNotifications {
       try {
         const audio = new Audio();
         audio.volume = this.volume;
-        // Preload minimal metadata so play() can start quickly when needed
-        audio.preload = 'metadata';
+        audio.preload = 'auto';
+        audio.src = sound.path;
         audio.loop = false;
-        
-        // Only set src when we need to play
         this.audioFiles.set(sound.name, audio);
         
         // Adicionar evento para quando o som terminar de tocar
@@ -60,8 +58,6 @@ export class SoundNotifications {
         
         audio.addEventListener('error', (e) => {
           console.warn(`⚠️ Erro ao carregar som ${sound.name}:`, e);
-          // Use fallback sound instead of trying to reload
-          this.createFallbackSound();
         });
       } catch (error) {
         console.warn(`⚠️ Erro ao criar audio para ${sound.name}:`, error);
@@ -137,7 +133,7 @@ export class SoundNotifications {
         const normalizedSoundType = this.normalizeSoundType(soundType);
         const audioPath = this.getDefaultSoundPath(normalizedSoundType);
         
-        // Ensure src is set and try to play; if blocked, fallback to WebAudio persistent alert
+        // Reproduz exclusivamente o toque oficial do PopSystem.
         if (!audio.src) audio.src = audioPath;
         audio.currentTime = 0;
         audio.volume = this.volume;
@@ -146,26 +142,22 @@ export class SoundNotifications {
 
         // Adicionar tratamento de erro específico para carregamento
         audio.onerror = () => {
-          console.warn(`⚠️ Erro ao carregar som ${soundType}, usando fallback`);
-          this.createFallbackSound();
+          console.warn(`⚠️ Erro ao carregar o toque oficial ${soundType}`);
         };
         
 
         try {
           await audio.play();
         } catch (err) {
-          console.warn('⚠️ play() blocked, using WebAudio fallback for persistent alerts', err);
-          this.createFallbackSound();
+          console.warn('⚠️ Reprodução do toque oficial bloqueada pelo navegador', err);
         }
       } else {
-        this.createFallbackSound();
+        console.warn(`⚠️ Toque oficial ${soundType} não foi pré-carregado`);
       }
     } catch (error) {
 
       console.warn(`⚠️ Erro ao reproduzir som ${soundType}:`, error);
 
-      // Fallback para Web Audio API em caso de erro
-      this.createFallbackSound();
     }
   }
 
@@ -223,7 +215,6 @@ export class SoundNotifications {
       };
       audio.onerror = () => {
         this.currentlyPlaying.delete(audio);
-        this.createFallbackSound();
         if (!this.persistentAlertActive || !this.isEnabled) return;
         this.persistentAlertRestartTimer = window.setTimeout(() => {
           this.persistentAlertRestartTimer = null;
@@ -234,7 +225,6 @@ export class SoundNotifications {
       await audio.play();
     } catch (error) {
       console.warn('⚠️ Falha ao reproduzir alerta persistente oficial:', error);
-      this.createFallbackSound();
       if (!this.persistentAlertActive || !this.isEnabled) return;
       this.persistentAlertRestartTimer = window.setTimeout(() => {
         this.persistentAlertRestartTimer = null;
@@ -247,38 +237,6 @@ export class SoundNotifications {
     if (this.audioContext) return this.audioContext
     this.audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
     return this.audioContext
-  }
-
-  private createFallbackSound() {
-    try {
-      // Fallback usando Web Audio API para sons sintéticos simples
-      const audioContext = this.getAudioContext()
-      if (audioContext.state !== 'running') {
-        try {
-          audioContext.resume().catch(() => {})
-        } catch {}
-      }
-
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-      oscillator.type = 'sine';
-      
-      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(this.volume * 0.3, audioContext.currentTime + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
-
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.3);
-      
-      console.log('✅ Som fallback reproduzido');
-    } catch (error) {
-      console.error('Erro no fallback de som:', error);
-    }
   }
 
   setEnabled(enabled: boolean) {

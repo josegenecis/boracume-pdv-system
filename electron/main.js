@@ -763,12 +763,13 @@ ipcMain.handle('get-pending-oauth-callback', async () => {
 });
 
 ipcMain.handle('print-system', async (event, { deviceName, html, silent = true } = {}) => {
+  let win;
   try {
     if (!html || typeof html !== 'string') {
       return { success: false, error: 'HTML inválido' };
     }
 
-    const win = new BrowserWindow({
+    win = new BrowserWindow({
       show: false,
       webPreferences: {
         nodeIntegration: false,
@@ -780,6 +781,51 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
     await win.loadURL(`data:text/html;charset=utf-8,${encoded}`);
 
     const isA4 = /data-print-format=["']a4["']/i.test(html);
+    let receiptPageSize;
+
+    if (!isA4) {
+      // Chromium e alguns drivers térmicos ignoram `size: 80mm auto`.
+      // Medimos o cupom pronto e o enviamos como uma única página, evitando
+      // corte antecipado, folhas em branco e o encolhimento para 58 mm.
+      const receiptMetrics = await win.webContents.executeJavaScript(`
+        (async () => {
+          try {
+            if (document.fonts && document.fonts.ready) await document.fonts.ready;
+            const images = Array.from(document.images || []);
+            await Promise.all(images.map((image) => {
+              if (image.complete) return Promise.resolve();
+              return new Promise((resolve) => {
+                image.addEventListener('load', resolve, { once: true });
+                image.addEventListener('error', resolve, { once: true });
+              });
+            }));
+          } catch {}
+
+          const root = document.documentElement;
+          const body = document.body;
+          const widthAttr = String(root?.dataset?.paperWidth || '80mm').toLowerCase();
+          const widthMm = widthAttr === '58mm' ? 58 : 80;
+          const heightPx = Math.max(
+            root?.scrollHeight || 0,
+            root?.offsetHeight || 0,
+            body?.scrollHeight || 0,
+            body?.offsetHeight || 0
+          );
+          return { widthMm, heightPx };
+        })()
+      `, true);
+
+      const widthMicrons = receiptMetrics?.widthMm === 58 ? 58000 : 80000;
+      const measuredHeightMicrons = Math.ceil(Math.max(1, Number(receiptMetrics?.heightPx || 0)) * 264.583333);
+      const heightMicrons = Math.max(50000, Math.min(3000000, measuredHeightMicrons + 8000));
+      receiptPageSize = { width: widthMicrons, height: heightMicrons };
+
+      await win.webContents.insertCSS(`
+        @page { margin: 0 !important; size: ${widthMicrons / 1000}mm ${heightMicrons / 1000}mm !important; }
+        html, body { min-height: 0 !important; height: auto !important; overflow: visible !important; }
+      `);
+    }
+
     const printResult = await new Promise((resolve) => {
       win.webContents.print(
         {
@@ -787,16 +833,12 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
           deviceName: deviceName || undefined,
           printBackground: true,
           margins: { marginType: isA4 ? 'default' : 'none' },
-          pageSize: isA4 ? 'A4' : undefined,
+          pageSize: isA4 ? 'A4' : receiptPageSize,
           scaleFactor: 100
         },
         (success, failureReason) => resolve({ success, failureReason })
       );
     });
-
-    try {
-      win.close();
-    } catch {}
 
     if (!printResult.success) {
       return { success: false, error: String(printResult.failureReason || 'Falha ao imprimir') };
@@ -806,6 +848,10 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
   } catch (error) {
     console.error('Erro ao imprimir via sistema:', error);
     return { success: false, error: error.message };
+  } finally {
+    try {
+      if (win && !win.isDestroyed()) win.close();
+    } catch {}
   }
 });
 
