@@ -28,6 +28,7 @@ const printedAcceptedOrderIds =
 type PrintOrderOptions = {
   onlyIfAuto?: boolean;
   openCashDrawer?: boolean;
+  rasterizeSystemReceipt?: boolean;
 };
 
 type NormalizedPrintConfig = {
@@ -1441,7 +1442,7 @@ async function printRawReportElectron(text: string) {
   return { success: true };
 }
 
-async function printElectron(order: any, config: any) {
+async function printElectron(order: any, config: any, options: PrintOrderOptions = {}) {
   const api = (window as any)?.electronAPI;
   if (!api?.printSystem || !api?.printReceipt) return { success: false, error: 'API do Desktop indisponível' };
 
@@ -1453,7 +1454,13 @@ async function printElectron(order: any, config: any) {
   if (target.type === 'system') {
     const html = buildOrderHtml(order, config, order.store);
     for (let i = 0; i < copies; i++) {
-      const resp = await api.printSystem(target.printerName, html, true);
+      let resp = options.rasterizeSystemReceipt && api?.printSystemRaster
+        ? await api.printSystemRaster(target.printerName, html)
+        : await api.printSystem(target.printerName, html, true);
+      if (!resp?.success && options.rasterizeSystemReceipt) {
+        console.warn('Impressão térmica RAW indisponível; usando impressão do sistema:', resp?.error || resp);
+        resp = await api.printSystem(target.printerName, html, true);
+      }
       if (!resp?.success) return { success: false, error: resp?.error || 'Falha ao imprimir' };
     }
 
@@ -1726,7 +1733,7 @@ export const PrinterService = {
     }
 
     if (isElectron) {
-      const resp = await printElectron(enrichedOrder, config);
+      const resp = await printElectron(enrichedOrder, config, options);
       if (!resp.success) {
         toast.error(resp.error || 'Falha ao imprimir');
         return;

@@ -67,6 +67,8 @@ export interface ElectronAPI {
   openCashDrawer: (deviceId: string) => Promise<DeviceResponse>;
   printProductLabel: (deviceId: string, productData: any) => Promise<DeviceResponse>;
   printSystem: (deviceName: string, html: string, silent?: boolean) => Promise<DeviceResponse>;
+  printSystemRaster: (deviceName: string, html: string) => Promise<DeviceResponse>;
+  printRawSystem: (deviceName: string, text: string) => Promise<DeviceResponse>;
   previewPdf: (html: string, fileName?: string) => Promise<DeviceResponse & { path?: string }>;
   previewPdfBuffer: (pdfBytes: Uint8Array, fileName?: string) => Promise<DeviceResponse & { path?: string }>;
   selectFirebirdDatabase: () => Promise<{ success: boolean; canceled?: boolean; path?: string; name?: string; error?: string }>;

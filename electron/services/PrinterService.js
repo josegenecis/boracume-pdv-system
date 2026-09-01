@@ -4,6 +4,8 @@ const EventEmitter = require('events');
 const { execFile } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
@@ -1048,6 +1050,98 @@ exit 1
         }
       );
     });
+  }
+
+  async printRawBytesSystem(printerName, bytes, documentName = 'POPSYSTEM Receipt') {
+    if (process.platform !== 'win32') {
+      return { success: false, message: 'Impressão RAW via impressora do sistema está disponível apenas no Windows' };
+    }
+
+    const payload = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes || []);
+    if (!payload.length) {
+      return { success: false, message: 'Dados de impressão vazios' };
+    }
+
+    const tempPath = path.join(os.tmpdir(), `popsystem-print-${crypto.randomUUID()}.raw`);
+    await fs.writeFile(tempPath, payload);
+
+    const script = `
+$printerName = $env:RAW_PRINTER_NAME
+$rawFile = $env:RAW_PRINTER_FILE
+$documentName = $env:RAW_DOCUMENT_NAME
+$bytes = [System.IO.File]::ReadAllBytes($rawFile)
+$signature = @"
+using System;
+using System.Runtime.InteropServices;
+public class PopSystemRawPrinter {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public class DOCINFOA {
+    [MarshalAs(UnmanagedType.LPWStr)] public string pDocName;
+    [MarshalAs(UnmanagedType.LPWStr)] public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPWStr)] public string pDataType;
+  }
+  [DllImport("winspool.Drv", EntryPoint="OpenPrinterW", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern bool OpenPrinter(string name, out IntPtr handle, IntPtr defaults);
+  [DllImport("winspool.Drv", SetLastError=true)] public static extern bool ClosePrinter(IntPtr handle);
+  [DllImport("winspool.Drv", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern bool StartDocPrinter(IntPtr handle, Int32 level, DOCINFOA info);
+  [DllImport("winspool.Drv", SetLastError=true)] public static extern bool EndDocPrinter(IntPtr handle);
+  [DllImport("winspool.Drv", SetLastError=true)] public static extern bool StartPagePrinter(IntPtr handle);
+  [DllImport("winspool.Drv", SetLastError=true)] public static extern bool EndPagePrinter(IntPtr handle);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool WritePrinter(IntPtr handle, byte[] bytes, Int32 count, out Int32 written);
+
+  public static bool Send(string printerName, string documentName, byte[] bytes) {
+    IntPtr handle = IntPtr.Zero;
+    int written = 0;
+    DOCINFOA info = new DOCINFOA();
+    info.pDocName = documentName;
+    info.pDataType = "RAW";
+    if (!OpenPrinter(printerName, out handle, IntPtr.Zero)) return false;
+    try {
+      if (!StartDocPrinter(handle, 1, info)) return false;
+      try {
+        if (!StartPagePrinter(handle)) return false;
+        try { return WritePrinter(handle, bytes, bytes.Length, out written) && written == bytes.Length; }
+        finally { EndPagePrinter(handle); }
+      } finally { EndDocPrinter(handle); }
+    } finally { ClosePrinter(handle); }
+  }
+}
+"@
+Add-Type -TypeDefinition $signature -Language CSharp
+if ([PopSystemRawPrinter]::Send($printerName, $documentName, $bytes)) { exit 0 }
+exit 1
+`;
+
+    try {
+      return await new Promise((resolve) => {
+        execFile(
+          'powershell.exe',
+          ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+          {
+            windowsHide: true,
+            maxBuffer: 1024 * 1024,
+            env: {
+              ...process.env,
+              RAW_PRINTER_NAME: printerName,
+              RAW_PRINTER_FILE: tempPath,
+              RAW_DOCUMENT_NAME: String(documentName || 'POPSYSTEM Receipt'),
+            },
+          },
+          (error, stdout, stderr) => {
+            if (error) {
+              console.error('Erro ao imprimir bytes RAW via impressora do sistema:', stderr || error.message);
+              resolve({ success: false, message: stderr || error.message || 'Falha ao imprimir cupom em RAW' });
+              return;
+            }
+            resolve({ success: true, message: 'Cupom enviado para a impressora' });
+          }
+        );
+      });
+    } finally {
+      await fs.unlink(tempPath).catch(() => {});
+    }
   }
 
   getConnectedPrinters() {

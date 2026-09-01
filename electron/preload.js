@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openCashDrawer: (deviceId) => ipcRenderer.invoke('open-cash-drawer', deviceId),
   printProductLabel: (deviceId, productData) => ipcRenderer.invoke('print-product-label', deviceId, productData),
   printSystem: (deviceName, html, silent) => ipcRenderer.invoke('print-system', { deviceName, html, silent }),
+  printSystemRaster: (deviceName, html) => ipcRenderer.invoke('print-system-raster', { deviceName, html }),
   previewPdf: (html, fileName) => ipcRenderer.invoke('preview-pdf', { html, fileName }),
   previewPdfBuffer: (pdfBytes, fileName) => ipcRenderer.invoke('preview-pdf-buffer', { pdfBytes, fileName }),
   printRawSystem: (deviceName, text) => ipcRenderer.invoke('print-raw-system', { deviceName, text }),

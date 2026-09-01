@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { nativeBitmapToEscPos } = require('./utils/receiptRaster');
 const isDev = !app.isPackaged;
 let autoUpdater = null;
 try {
@@ -861,6 +862,77 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
     return { success: true };
   } catch (error) {
     console.error('Erro ao imprimir via sistema:', error);
+    return { success: false, error: error.message };
+  } finally {
+    try {
+      if (win && !win.isDestroyed()) win.close();
+    } catch {}
+  }
+});
+
+ipcMain.handle('print-system-raster', async (_event, { deviceName, html } = {}) => {
+  let win;
+  try {
+    if (!printerService || typeof printerService.printRawBytesSystem !== 'function') {
+      return { success: false, error: 'Serviço de impressão RAW indisponível' };
+    }
+    if (!deviceName || !html || typeof html !== 'string') {
+      return { success: false, error: 'Impressora ou recibo inválido' };
+    }
+
+    win = new BrowserWindow({
+      show: false,
+      width: 380,
+      height: 800,
+      backgroundColor: '#ffffff',
+      webPreferences: { nodeIntegration: false, contextIsolation: true }
+    });
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+    const metrics = await win.webContents.executeJavaScript(`
+      (async () => {
+        try {
+          if (document.fonts?.ready) await document.fonts.ready;
+          await Promise.all(Array.from(document.images || []).map((image) => {
+            if (image.complete) return Promise.resolve();
+            return new Promise((resolve) => {
+              image.addEventListener('load', resolve, { once: true });
+              image.addEventListener('error', resolve, { once: true });
+            });
+          }));
+        } catch {}
+        const root = document.documentElement;
+        const body = document.body;
+        const bodyRect = body.getBoundingClientRect();
+        return {
+          paperWidth: String(root.dataset.paperWidth || '80mm').toLowerCase(),
+          width: Math.ceil(Math.max(root.scrollWidth, bodyRect.right, 1)),
+          height: Math.ceil(Math.max(body.scrollHeight, bodyRect.bottom, 1))
+        };
+      })()
+    `, true);
+
+    const viewportWidth = Math.max(220, Math.min(1000, Number(metrics?.width) || 302));
+    const viewportHeight = Math.max(120, Math.min(12000, Number(metrics?.height) || 600));
+    win.setContentSize(viewportWidth, viewportHeight);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const image = await win.webContents.capturePage({
+      x: 0,
+      y: 0,
+      width: viewportWidth,
+      height: viewportHeight
+    });
+    const targetWidth = metrics?.paperWidth === '58mm' ? 384 : 576;
+    const resized = image.resize({ width: targetWidth, quality: 'best' });
+    const size = resized.getSize();
+    const rawBytes = nativeBitmapToEscPos(resized.toBitmap(), size.width, size.height);
+    const result = await printerService.printRawBytesSystem(deviceName, rawBytes, 'POPSYSTEM Receipt');
+    return result?.success
+      ? { success: true }
+      : { success: false, error: result?.error || result?.message || 'Falha ao imprimir cupom em RAW' };
+  } catch (error) {
+    console.error('Erro ao renderizar cupom térmico em RAW:', error);
     return { success: false, error: error.message };
   } finally {
     try {

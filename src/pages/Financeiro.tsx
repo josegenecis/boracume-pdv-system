@@ -500,7 +500,10 @@ const Financeiro = () => {
       if (error) throw error;
       if (!fullOrder) throw new Error('Venda não encontrada.');
 
-      await PrinterService.printOrder(fullOrder, { openCashDrawer: false });
+      await PrinterService.printOrder(fullOrder, {
+        openCashDrawer: false,
+        rasterizeSystemReceipt: true,
+      });
       toast({
         title: 'Reimpressão enviada',
         description: `O cupom da venda #${fullOrder.order_number || orderId.slice(0, 8)} foi enviado à impressora.`,
