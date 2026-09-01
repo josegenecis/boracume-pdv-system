@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # node-printer ainda depende do toolchain MSVC 2022; o runner "latest"
+    # já aponta para o Visual Studio 2026, que o node-gyp usado pelo módulo não reconhece.
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
