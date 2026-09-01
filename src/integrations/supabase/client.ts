@@ -7,6 +7,15 @@ import type { Database } from './types';
 export const SUPABASE_URL = "https://auth.popsystem.com.br";
 export const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjZnlyY3B1Z21kdWNwdGt0amljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5MzAwNjUsImV4cCI6MjA2MzUwNjA2NX0.G9l2LEE6DtnSGChmGx5sTCQhC7yVHZJtq6rTTsti2aE";
 
+// Electron runs a single renderer window (the main process also enforces a
+// single application instance). Using the browser LockManager there can leave
+// an orphaned Supabase auth lock after a forced shutdown and make the next
+// valid login wait forever. The lock is useful for multiple browser tabs, so
+// keep the default implementation in the PWA and bypass it only on Desktop.
+const desktopAuthLock = typeof window !== 'undefined' && window.electronAPI?.isElectron
+  ? async <T,>(_name: string, _acquireTimeout: number, operation: () => Promise<T>): Promise<T> => operation()
+  : undefined;
+
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -16,7 +25,8 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
     persistSession: true,
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    ...(desktopAuthLock ? { lock: desktopAuthLock } : {})
 
   },
   realtime: {
