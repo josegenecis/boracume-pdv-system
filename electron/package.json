@@ -52,6 +52,7 @@
       "!dist/electron-dist/**",
       "!dist/**/electron-dist/**",
       "services/**/*",
+      "utils/**/*",
       "config/**/*",
       "main.js",
       "preload.js",
