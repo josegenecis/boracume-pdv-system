@@ -26,6 +26,7 @@
     "test:menu-perf": "playwright test tests/menu-cart-perf.spec.ts",
     "test:checkout": "playwright test tests/checkout-pix.spec.ts tests/menu-addons-perf.spec.ts",
     "test:cmv": "esbuild src/utils/cmvCalculations.test.ts --bundle --platform=node --format=esm --outfile=/tmp/popsystem-cmv-test.mjs && node --test /tmp/popsystem-cmv-test.mjs",
+    "test:finance": "esbuild tests/finance-module.unit.test.ts --bundle --platform=node --format=esm --outfile=/tmp/popsystem-finance-test.mjs && node --test /tmp/popsystem-finance-test.mjs",
     "test:fiscal": "deno test --no-check --allow-env --allow-run supabase/functions/nfce-operations/icms-engine.test.ts supabase/functions/nfce-operations/rtc-engine.test.ts supabase/functions/nfce-operations/index.test.ts supabase/functions/nfce-operations/schema-matrix.test.ts",
     "dist:bridge": "node scripts/build-bridge.cjs",
     "pack:bridge": "node scripts/build-bridge.cjs --dir",

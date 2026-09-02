@@ -122,7 +122,7 @@ const CollapsibleSidebar = () => {
       label: 'Financeiro',
       items: [
         { to: '/financeiro', label: 'Visão Geral', feature: 'finance', area: 'finance' },
-        { to: '/financeiro?section=receivables', label: 'Contas a Receber', feature: 'finance', area: 'finance' },
+        { to: '/financeiro/receber', label: 'Contas a Receber', feature: 'finance', area: 'finance' },
         { to: '/despesas', label: 'Contas a Pagar', feature: 'finance', area: 'expenses' },
         { to: '/pagamentos', label: 'Formas de Pagamento', feature: 'pix', area: 'pix' },
         { to: '/pix', label: 'PIX / Mercado Pago', feature: 'pix', area: 'pix' },

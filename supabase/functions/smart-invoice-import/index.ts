@@ -41,15 +41,39 @@ function cleanName(value: unknown) {
 
 function normalizeUnit(value: unknown) {
   const unit = String(value || "un").toLowerCase().trim();
+  if (["un", "und", "unidade", "unidades"].includes(unit)) return "un";
   if (["kg", "quilo", "quilograma", "quilogramas"].includes(unit)) return "kg";
   if (["g", "gr", "grama", "gramas"].includes(unit)) return "g";
   if (["l", "lt", "litro", "litros"].includes(unit)) return "l";
   if (["ml", "mililitro", "mililitros"].includes(unit)) return "ml";
+  if (["cx", "caixa", "caixas"].includes(unit)) return "cx";
+  if (["pct", "pacote", "pacotes"].includes(unit)) return "pct";
+  if (["fd", "fardo", "fardos"].includes(unit)) return "fd";
+  if (["bd", "balde", "baldes"].includes(unit)) return "bd";
+  if (["dz", "duzia", "dúzia", "duzias", "dúzias"].includes(unit)) return "dz";
   return "un";
+}
+
+function recognizedUnit(value: unknown) {
+  const unit = String(value || "").toLowerCase().trim().replace(/\./g, "");
+  return [
+    "un", "und", "unidade", "unidades", "kg", "quilo", "quilograma", "quilogramas",
+    "g", "gr", "grama", "gramas", "l", "lt", "litro", "litros", "ml", "mililitro",
+    "mililitros", "cx", "caixa", "caixas", "pct", "pacote", "pacotes", "fd", "fardo",
+    "fardos", "bd", "balde", "baldes", "dz", "duzia", "dúzia", "duzias", "dúzias",
+  ].includes(unit);
 }
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function nfePaymentMethod(code: string) {
+  const methods: Record<string, string> = {
+    "01": "dinheiro", "03": "credito", "04": "debito", "15": "boleto",
+    "16": "deposito", "17": "pix", "18": "transferencia", "99": "outros",
+  };
+  return methods[String(code || "").padStart(2, "0")] || null;
 }
 
 async function uploadReceipt(supabase: any, userId: string, fileBase64: string, mimeType: string, fileName: string) {
@@ -106,6 +130,9 @@ function parseNfeXml(fileBase64: string) {
       quantity: Math.max(quantity, 0.001),
       unit: normalizeUnit(xmlTag(product, "uCom")),
       stock_unit: normalizeUnit(xmlTag(product, "uCom")),
+      conversion_factor: 1,
+      unit_source: recognizedUnit(xmlTag(product, "uCom")) ? "xml" : "unknown",
+      unit_confirmed: recognizedUnit(xmlTag(product, "uCom")),
       unit_price: unitPrice,
       total_price: total,
       confidence: 1,
@@ -120,6 +147,8 @@ function parseNfeXml(fileBase64: string) {
     supplier_document: xmlTag(emitBlock, "CNPJ") || xmlTag(emitBlock, "CPF"),
     invoice_number: xmlTag(xml, "nNF"),
     invoice_date: (xmlTag(xml, "dhEmi") || xmlTag(xml, "dEmi") || todayIso()).slice(0, 10),
+    due_date: (xmlTag(xml, "dVenc") || "").slice(0, 10) || null,
+    payment_method: nfePaymentMethod(xmlTag(xml, "tPag")),
     document_key: onlyDigits(infId).slice(0, 44) || null,
     total_amount: numberValue(xmlTag(totalBlock, "vNF"), items.reduce((sum, item) => sum + item.total_price, 0)),
     expense_category: "insumos",
@@ -347,6 +376,8 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
   "invoice_number": "numero se houver",
   "document_key": "chave de acesso com 44 digitos se houver",
   "invoice_date": "YYYY-MM-DD ou vazio",
+  "due_date": "YYYY-MM-DD ou vazio",
+  "payment_method": "pix|dinheiro|debito|credito|boleto|transferencia|outros ou vazio",
   "total_amount": 0,
   "expense_category": "insumos",
   "items": [
@@ -356,10 +387,13 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
       "category": "Categoria",
       "subcategory": "Subcategoria",
       "quantity": 1,
-      "unit": "un|kg|g|l|ml",
+      "unit": "un|kg|g|l|ml|cx|pct|fd|bd|dz",
       "unit_price": 0,
       "total_price": 0,
-      "stock_unit": "un|kg|g|l|ml",
+      "stock_unit": "un|kg|g|l|ml|cx|pct|fd|bd|dz",
+      "conversion_factor": 1,
+      "unit_source": "invoice|catalog|inferred|unknown",
+      "unit_confirmed": true,
       "control_stock": true,
       "similar_to": "nome de item parecido do catalogo se houver",
       "confidence": 0.90
@@ -370,7 +404,9 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
     "Regras:",
     "- Para compras de ingredientes/complementos, expense_category deve ser insumos.",
     "- Quantidade e total devem bater com a nota sempre que legivel.",
-    "- Se a nota trouxer pacote/fardo/caixa e a unidade real nao for clara, use un.",
+    "- Preserve CX, PCT, FD, BD e DZ quando estiverem escritos na nota.",
+    "- conversion_factor informa quanto entra na unidade de estoque (ex.: 1 CX = 12 UN => 12). Use 1 se a nota nao informar.",
+    "- Nunca invente unidade silenciosamente: se houver duvida, use unit_source unknown, unit_confirmed false e confidence baixo.",
     "- control_stock deve ser true para insumos, embalagens e mercadorias controlaveis; false para servicos/taxas/frete.",
   ].join("\n");
 
@@ -435,6 +471,9 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
       confidence: Math.max(0, Math.min(1, numberValue(item.confidence, 0.7))),
       similar_to: String(item.similar_to || "").trim() || null,
       control_stock: item.control_stock !== false,
+      conversion_factor: Math.max(0.000001, numberValue(item.conversion_factor, 1)),
+      unit_source: String(item.unit_source || (recognizedUnit(item.unit) ? "invoice" : "unknown")),
+      unit_confirmed: item.unit_confirmed === true && recognizedUnit(item.unit),
     };
   }).filter((item: any) => item.normalized_name);
 
@@ -450,6 +489,8 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
       invoice_number: String(parsed.invoice_number || "").trim() || null,
       document_key: onlyDigits(parsed.document_key || parsed.access_key).slice(0, 44) || null,
       invoice_date: String(parsed.invoice_date || "").slice(0, 10) || todayIso(),
+      due_date: String(parsed.due_date || "").slice(0, 10) || null,
+      payment_method: String(parsed.payment_method || "").trim() || null,
       total_amount: totalAmount,
       expense_category: String(parsed.expense_category || "insumos").trim() || "insumos",
       receipt_url: null,
@@ -490,6 +531,25 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
   const launchExpense = body.launchExpense !== false;
   const launchStock = body.launchStock !== false;
   const reviewedItems = Array.isArray(body.items) ? body.items : [];
+  const purchase = body.purchase && typeof body.purchase === "object" ? body.purchase : null;
+  if (purchase) {
+    const { error: metadataError } = await supabase
+      .from("smart_invoice_imports")
+      .update({
+        supplier_name: String(purchase.supplier_name || "").trim() || null,
+        supplier_document: onlyDigits(purchase.supplier_document) || null,
+        invoice_number: String(purchase.invoice_number || "").trim() || null,
+        invoice_date: String(purchase.invoice_date || "").slice(0, 10) || todayIso(),
+        due_date: String(purchase.due_date || "").slice(0, 10) || null,
+        payment_method: String(purchase.payment_method || "").trim() || null,
+        expense_category: String(purchase.expense_category || "insumos").trim() || "insumos",
+        total_amount: Math.max(0, numberValue(purchase.total_amount, 0)),
+      })
+      .eq("id", importId)
+      .eq("user_id", userId)
+      .eq("status", "draft");
+    if (metadataError) throw metadataError;
+  }
 
   const items = reviewedItems.map((merged: any) => {
     const quantity = Math.max(0.001, numberValue(merged.quantity, 1));
@@ -506,6 +566,11 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
       unit_price: numberValue(merged.unit_price, total / quantity),
       total_price: total,
       control_stock: merged.control_stock !== false,
+      conversion_factor: Math.max(0.000001, numberValue(merged.conversion_factor, 1)),
+      unit_source: String(merged.unit_source || "confirmed"),
+      unit_confirmed: merged.control_stock === false
+        ? true
+        : merged.unit_confirmed === true || (merged.unit_confirmed === undefined && recognizedUnit(merged.unit)),
       create_sale_product: looksLikeSaleProduct(merged),
     };
   }).filter((item: any) => item.normalized_name);

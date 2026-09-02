@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter, ReceiptText, Download, Eye, Paperclip } from 'lucide-react';
+import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter, ReceiptText, Download, Eye, Paperclip, XCircle, AlertTriangle } from 'lucide-react';
 import { addMonths, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
@@ -22,6 +22,8 @@ import { ReverseExpenseDialog } from '@/components/finance/ReverseExpenseDialog'
 import { PageHero } from '@/components/layout/PageHero';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PayablesTable } from '@/components/finance/PayablesTable';
+import { Checkbox } from '@/components/ui/checkbox';
+import { PURCHASE_UNITS, invoiceItemNeedsUnitConfirmation } from '@/lib/finance/purchaseInvoice';
 
 interface Expense {
   id: string;
@@ -73,11 +75,15 @@ interface SmartInvoiceItem {
   product_id?: string | null;
   stock_quantity_added?: number;
   product_quantity_added?: number;
+  conversion_factor?: number;
+  unit_source?: 'xml' | 'invoice' | 'catalog' | 'inferred' | 'unknown' | 'confirmed' | string;
+  unit_confirmed?: boolean;
 }
 
 interface SmartInvoiceImport {
   id: string;
   supplier_name?: string | null;
+  supplier_document?: string | null;
   invoice_number?: string | null;
   invoice_date?: string | null;
   total_amount: number;
@@ -96,6 +102,8 @@ interface SmartInvoiceImport {
   reversed_by_name?: string | null;
   launch_expense?: boolean;
   launch_stock?: boolean;
+  due_date?: string | null;
+  payment_method?: string | null;
 }
 
 const getExpenseDateKey = (exp: any) => {
@@ -103,19 +111,7 @@ const getExpenseDateKey = (exp: any) => {
   return String(raw || '').slice(0, 10);
 };
 
-const EXPENSE_CATEGORIES = [
-  'alimentação',
-  'transporte',
-  'insumos',
-  'outros',
-  'aluguel',
-  'água',
-  'luz',
-  'gás',
-  'manutenção',
-  'marketing',
-  'equipamentos'
-];
+const FALLBACK_EXPENSE_CATEGORIES = ['Ingredientes', 'Bebidas', 'Embalagens', 'Aluguel', 'Energia', 'Água', 'Internet', 'Funcionários', 'Marketing', 'Manutenção', 'Impostos', 'Taxas', 'Outros'];
 
 export default function Despesas() {
   const { user } = useAuth();
@@ -153,6 +149,15 @@ export default function Despesas() {
   const [purchaseDetails, setPurchaseDetails] = useState<{ invoice: SmartInvoiceImport; items: SmartInvoiceItem[] } | null>(null);
   const [purchaseDetailsLoading, setPurchaseDetailsLoading] = useState(false);
   const [purchaseToReverse, setPurchaseToReverse] = useState<SmartInvoiceImport | null>(null);
+  const [financialCategories, setFinancialCategories] = useState<string[]>(FALLBACK_EXPENSE_CATEGORIES);
+  const [financialCategoryRows, setFinancialCategoryRows] = useState<Array<{ id: string; name: string }>>([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [supplierName, setSupplierName] = useState('');
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('');
+  const [competenceDate, setCompetenceDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [expenseNotes, setExpenseNotes] = useState('');
+  const [costCenter, setCostCenter] = useState('');
 
   useEffect(() => {
     if (!user) {
@@ -160,8 +165,55 @@ export default function Despesas() {
       setLoading(false);
       return;
     }
-    void Promise.all([loadExpenses(), loadPurchaseInvoices()]);
+    void Promise.all([loadExpenses(), loadPurchaseInvoices(), loadFinancialCategories()]);
   }, [user]);
+
+  const loadFinancialCategories = async () => {
+    if (!user?.id) return;
+    const { data, error } = await (supabase as any).rpc('ensure_default_financial_categories', { p_store_user_id: user.id });
+    if (error) {
+      console.error('Error loading financial categories:', error);
+      return;
+    }
+    const names = (data || []).map((row: any) => String(row.name || '').trim()).filter(Boolean);
+    setFinancialCategoryRows((data || []).map((row: any) => ({ id: String(row.id), name: String(row.name || '').trim() })).filter((row: any) => row.id && row.name));
+    if (names.length > 0) setFinancialCategories(names);
+  };
+
+  const renameFinancialCategory = async (row: { id: string; name: string }) => {
+    const nextName = window.prompt('Novo nome da categoria:', row.name)?.trim();
+    if (!nextName || nextName === row.name) return;
+    try {
+      const { error } = await (supabase as any).rpc('rename_financial_category', { p_category_id: row.id, p_new_name: nextName });
+      if (error) throw error;
+      await Promise.all([loadFinancialCategories(), loadExpenses()]);
+      toast({ title: 'Categoria atualizada', description: 'Os lançamentos vinculados também foram atualizados.' });
+    } catch (error: any) {
+      toast({ title: 'Não foi possível editar a categoria', description: friendlyErrorMessage(error, 'Tente novamente.'), variant: 'destructive' });
+    }
+  };
+
+  const addFinancialCategory = async () => {
+    if (!user?.id || !newCategoryName.trim()) return;
+    setSavingCategory(true);
+    try {
+      const { error } = await (supabase as any).from('financial_categories').insert({
+        user_id: user.id,
+        name: newCategoryName.trim(),
+        category_type: 'payable',
+        created_by: user.id,
+        updated_by: user.id,
+      });
+      if (error) throw error;
+      setNewCategoryName('');
+      await loadFinancialCategories();
+      toast({ title: 'Categoria criada', description: 'A nova categoria já pode ser usada nas contas a pagar.' });
+    } catch (error: any) {
+      toast({ title: 'Não foi possível criar a categoria', description: friendlyErrorMessage(error, 'Confira o nome e tente novamente.'), variant: 'destructive' });
+    } finally {
+      setSavingCategory(false);
+    }
+  };
 
   useEffect(() => {
     filterExpenses();
@@ -207,7 +259,7 @@ export default function Despesas() {
     if (!user?.id) return;
     const { data, error } = await supabase
       .from('smart_invoice_imports' as any)
-      .select('id,supplier_name,invoice_number,invoice_date,total_amount,expense_category,status,expense_id,attachment_path,attachment_name,attachment_mime_type,attachment_size_bytes,receipt_url,created_at,committed_at,reversed_at,reversal_reason,reversed_by_name,launch_expense,launch_stock')
+      .select('id,supplier_name,supplier_document,invoice_number,invoice_date,due_date,payment_method,total_amount,expense_category,status,expense_id,attachment_path,attachment_name,attachment_mime_type,attachment_size_bytes,receipt_url,created_at,committed_at,reversed_at,reversal_reason,reversed_by_name,launch_expense,launch_stock')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -317,9 +369,15 @@ export default function Despesas() {
           user_id: user.id,
           expense_date: count > 1 ? occurrenceDueDate : expenseDate,
           due_date: occurrenceDueDate,
-          competence_date: occurrenceDueDate,
+          competence_date: count > 1 ? occurrenceDueDate : competenceDate,
           status: occurrenceDueDate < format(new Date(), 'yyyy-MM-dd') ? 'overdue' : 'open',
           paid_amount: 0,
+          supplier_name: supplierName.trim() || null,
+          payment_method: defaultPaymentMethod || null,
+          notes: expenseNotes.trim() || null,
+          cost_center: costCenter.trim() || null,
+          created_by: user.id,
+          updated_by: user.id,
           payable_group_id: groupId,
           payable_origin_type: payableType,
           installment_number: count > 1 ? index + 1 : null,
@@ -361,9 +419,14 @@ export default function Despesas() {
       setCategory('');
       setExpenseDate(format(new Date(), 'yyyy-MM-dd'));
       setDueDate(format(new Date(), 'yyyy-MM-dd'));
+      setCompetenceDate(format(new Date(), 'yyyy-MM-dd'));
       setPayableType('single');
       setOccurrenceCount('2');
       setReceiptFile(null);
+      setSupplierName('');
+      setDefaultPaymentMethod('');
+      setExpenseNotes('');
+      setCostCenter('');
       
       // Reload expenses
       loadExpenses();
@@ -468,14 +531,23 @@ export default function Despesas() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error(String((data as any).error));
 
-      setSmartInvoiceImport((data as any).import);
+      const analyzedImport = (data as any).import as SmartInvoiceImport;
+      setSmartInvoiceImport({
+        ...analyzedImport,
+        expense_category: String(analyzedImport?.expense_category || '').toLowerCase() === 'insumos'
+          ? 'Ingredientes'
+          : analyzedImport?.expense_category || 'Outros',
+      });
       setSmartInvoiceItems(((data as any).items || []).map((item: any) => ({
         ...item,
         quantity: Number(item.quantity || 1),
         unit_price: Number(item.unit_price || 0),
         total_price: Number(item.total_price || 0),
         confidence: Number(item.confidence || 0),
-        control_stock: item.control_stock !== false
+        control_stock: item.control_stock !== false,
+        conversion_factor: Number(item.conversion_factor || 1),
+        unit_source: item.unit_source || 'unknown',
+        unit_confirmed: item.unit_confirmed === true,
       })));
       toast({
         title: 'Nota processada',
@@ -517,6 +589,11 @@ export default function Despesas() {
       toast({ title: 'Revise os itens', description: 'Todos os itens precisam de nome, quantidade positiva e custo válido.', variant: 'destructive' });
       return;
     }
+    const uncertainUnit = smartInvoiceItems.find((item) => smartLaunchStock && invoiceItemNeedsUnitConfirmation(item));
+    if (uncertainUnit) {
+      toast({ title: 'Confirme as unidades', description: `Revise a unidade de ${uncertainUnit.normalized_name} antes de movimentar o estoque.`, variant: 'destructive' });
+      return;
+    }
     setSmartInvoiceCommitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('smart-invoice-import', {
@@ -526,7 +603,8 @@ export default function Despesas() {
           userId: user?.id,
           launchExpense: smartLaunchExpense,
           launchStock: smartLaunchStock,
-          items: smartInvoiceItems
+          items: smartInvoiceItems,
+          purchase: smartInvoiceImport,
         }
       });
       if (error) throw error;
@@ -550,6 +628,28 @@ export default function Despesas() {
     }
   };
 
+  const cancelDraftPurchaseInvoice = async () => {
+    if (!smartInvoiceImport?.id) {
+      setSmartInvoiceFile(null);
+      setSmartInvoiceItems([]);
+      return;
+    }
+    setSmartInvoiceCommitting(true);
+    try {
+      const { error } = await (supabase as any).rpc('cancel_purchase_invoice_draft', { p_import_id: smartInvoiceImport.id });
+      if (error) throw error;
+      setSmartInvoiceFile(null);
+      setSmartInvoiceImport(null);
+      setSmartInvoiceItems([]);
+      await loadPurchaseInvoices();
+      toast({ title: 'Operação cancelada', description: 'Nenhuma conta ou movimentação de estoque foi criada.' });
+    } catch (error: any) {
+      toast({ title: 'Não foi possível cancelar', description: friendlyErrorMessage(error, 'Tente novamente.'), variant: 'destructive' });
+    } finally {
+      setSmartInvoiceCommitting(false);
+    }
+  };
+
   const loadPurchaseDetails = async (purchase: SmartInvoiceImport, openEditor = false) => {
     if (!user?.id) return;
     setPurchaseDetailsLoading(true);
@@ -567,9 +667,15 @@ export default function Despesas() {
         total_price: Number(item.total_price || 0), confidence: Number(item.confidence || 0),
         stock_quantity_added: Number(item.stock_quantity_added || 0),
         product_quantity_added: Number(item.product_quantity_added || 0),
+        conversion_factor: Number(item.conversion_factor || 1),
+        unit_source: item.unit_source || 'unknown',
+        unit_confirmed: item.unit_confirmed === true,
       }));
       if (openEditor) {
-        setSmartInvoiceImport(purchase);
+        setSmartInvoiceImport({
+          ...purchase,
+          expense_category: String(purchase.expense_category || '').toLowerCase() === 'insumos' ? 'Ingredientes' : purchase.expense_category,
+        });
         setSmartInvoiceItems(items);
         setSmartLaunchExpense(purchase.launch_expense !== false);
         setSmartLaunchStock(purchase.launch_stock !== false);
@@ -781,7 +887,7 @@ export default function Despesas() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto]">
             <Input
               type="file"
               accept=".jpg,.jpeg,.png,.pdf,.xml,application/xml,text/xml"
@@ -811,6 +917,15 @@ export default function Despesas() {
               <PackageCheck className="mr-2 h-4 w-4" />
               {smartInvoiceCommitting ? 'Lançando...' : 'Lançar nota'}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+              onClick={() => void cancelDraftPurchaseInvoice()}
+              disabled={smartInvoiceCommitting || (!smartInvoiceFile && !smartInvoiceImport)}
+            >
+              <XCircle className="mr-2 h-4 w-4" />Cancelar operação
+            </Button>
           </div>
 
           {smartInvoiceFile && (
@@ -820,23 +935,15 @@ export default function Despesas() {
           )}
 
           {smartInvoiceImport && (
-            <div className="grid gap-3 rounded-2xl border border-emerald-100 bg-white p-4 md:grid-cols-4">
-              <div>
-                <div className="text-xs uppercase text-slate-500">Fornecedor</div>
-                <div className="font-semibold">{smartInvoiceImport.supplier_name || 'Não identificado'}</div>
-              </div>
-              <div>
-                <div className="text-xs uppercase text-slate-500">Nota</div>
-                <div className="font-semibold">{smartInvoiceImport.invoice_number || '-'}</div>
-              </div>
-              <div>
-                <div className="text-xs uppercase text-slate-500">Data</div>
-                <div className="font-semibold">{smartInvoiceImport.invoice_date ? formatDate(smartInvoiceImport.invoice_date) : '-'}</div>
-              </div>
-              <div>
-                <div className="text-xs uppercase text-slate-500">Total lido</div>
-                <div className="font-semibold">{formatCurrency(smartInvoiceTotal || Number(smartInvoiceImport.total_amount || 0))}</div>
-              </div>
+            <div className="grid gap-3 rounded-2xl border border-emerald-100 bg-white p-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-1"><Label>Fornecedor</Label><Input value={smartInvoiceImport.supplier_name || ''} onChange={(event) => setSmartInvoiceImport((current) => current ? { ...current, supplier_name: event.target.value } : current)} /></div>
+              <div className="space-y-1"><Label>CNPJ / CPF</Label><Input value={smartInvoiceImport.supplier_document || ''} onChange={(event) => setSmartInvoiceImport((current) => current ? { ...current, supplier_document: event.target.value } : current)} /></div>
+              <div className="space-y-1"><Label>Número da nota</Label><Input value={smartInvoiceImport.invoice_number || ''} onChange={(event) => setSmartInvoiceImport((current) => current ? { ...current, invoice_number: event.target.value } : current)} /></div>
+              <div className="space-y-1"><Label>Data da compra / emissão</Label><Input type="date" value={smartInvoiceImport.invoice_date || ''} onChange={(event) => setSmartInvoiceImport((current) => current ? { ...current, invoice_date: event.target.value } : current)} /></div>
+              <div className="space-y-1"><Label>Vencimento</Label><Input type="date" value={smartInvoiceImport.due_date || ''} onChange={(event) => setSmartInvoiceImport((current) => current ? { ...current, due_date: event.target.value } : current)} /></div>
+              <div className="space-y-1"><Label>Forma de pagamento</Label><Select value={smartInvoiceImport.payment_method || 'not_informed'} onValueChange={(value) => setSmartInvoiceImport((current) => current ? { ...current, payment_method: value === 'not_informed' ? null : value } : current)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="not_informed">Não informada</SelectItem><SelectItem value="pix">PIX</SelectItem><SelectItem value="dinheiro">Dinheiro</SelectItem><SelectItem value="debito">Débito</SelectItem><SelectItem value="credito">Crédito</SelectItem><SelectItem value="boleto">Boleto</SelectItem><SelectItem value="transferencia">Transferência</SelectItem><SelectItem value="outros">Outros</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1"><Label>Categoria financeira</Label><Select value={smartInvoiceImport.expense_category || ''} onValueChange={(value) => setSmartInvoiceImport((current) => current ? { ...current, expense_category: value } : current)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{financialCategories.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1"><Label>Valor total da nota</Label><Input type="number" min="0.01" step="0.01" value={smartInvoiceImport.total_amount || smartInvoiceTotal} onChange={(event) => setSmartInvoiceImport((current) => current ? { ...current, total_amount: Number(event.target.value || 0) } : current)} /><p className="text-[11px] text-slate-500">A seleção de estoque não altera este total.</p></div>
             </div>
           )}
 
@@ -859,6 +966,10 @@ export default function Despesas() {
                 </div>
               </div>
 
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div><p className="font-semibold text-emerald-950">Produtos encontrados</p><p className="text-xs text-slate-500">Somente os itens marcados movimentam estoque; todos continuam no total financeiro.</p></div>
+                <div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setSmartInvoiceItems((items) => items.map((item) => ({ ...item, control_stock: true })))}>Selecionar todos</Button><Button type="button" size="sm" variant="outline" onClick={() => setSmartInvoiceItems((items) => items.map((item) => ({ ...item, control_stock: false })))}>Desmarcar todos</Button></div>
+              </div>
               <div className="overflow-x-auto rounded-2xl border bg-white">
                 <Table>
                   <TableHeader>
@@ -867,7 +978,9 @@ export default function Despesas() {
                       <TableHead>Categoria</TableHead>
                       <TableHead>Subcategoria</TableHead>
                       <TableHead>Qtd</TableHead>
-                      <TableHead>Un</TableHead>
+                      <TableHead>Un. compra</TableHead>
+                      <TableHead>Conversão</TableHead>
+                      <TableHead>Un. estoque</TableHead>
                       <TableHead>Custo un.</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Estoque</TableHead>
@@ -902,13 +1015,24 @@ export default function Despesas() {
                           />
                         </TableCell>
                         <TableCell className="min-w-[100px]">
-                          <Select value={item.stock_unit || item.unit || 'un'} onValueChange={(value) => updateSmartInvoiceItem(index, { stock_unit: value, unit: value })}>
+                          <Select value={item.unit || 'un'} onValueChange={(value) => updateSmartInvoiceItem(index, { unit: value, unit_confirmed: true, unit_source: 'confirmed' })}>
                             <SelectTrigger className="h-9">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {['un', 'kg', 'g', 'l', 'ml'].map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+                              {PURCHASE_UNITS.map(unit => <SelectItem key={unit} value={unit}>{unit.toUpperCase()}</SelectItem>)}
                             </SelectContent>
+                          </Select>
+                          {invoiceItemNeedsUnitConfirmation(item) && <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-700"><AlertTriangle className="h-3 w-3" />Confirmar unidade</div>}
+                        </TableCell>
+                        <TableCell className="min-w-[125px]">
+                          <Input type="number" min="0.000001" step="0.001" value={item.conversion_factor || 1} onChange={(event) => updateSmartInvoiceItem(index, { conversion_factor: Number(event.target.value || 1), unit_confirmed: true, unit_source: 'confirmed' })} className="h-9" />
+                          <div className="mt-1 text-[11px] text-slate-500">1 {String(item.unit || 'un').toUpperCase()} = {Number(item.conversion_factor || 1)} {String(item.stock_unit || item.unit || 'un').toUpperCase()}</div>
+                        </TableCell>
+                        <TableCell className="min-w-[110px]">
+                          <Select value={item.stock_unit || item.unit || 'un'} onValueChange={(value) => updateSmartInvoiceItem(index, { stock_unit: value, unit_confirmed: true, unit_source: 'confirmed' })}>
+                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                            <SelectContent>{PURCHASE_UNITS.map(unit => <SelectItem key={unit} value={unit}>{unit.toUpperCase()}</SelectItem>)}</SelectContent>
                           </Select>
                         </TableCell>
                         <TableCell className="min-w-[120px]">
@@ -922,7 +1046,7 @@ export default function Despesas() {
                         </TableCell>
                         <TableCell className="font-semibold">{formatCurrency(Number(item.total_price || 0))}</TableCell>
                         <TableCell>
-                          <Switch checked={item.control_stock} onCheckedChange={(checked) => updateSmartInvoiceItem(index, { control_stock: checked })} />
+                          <div className="flex items-center gap-2"><Checkbox checked={item.control_stock} onCheckedChange={(checked) => updateSmartInvoiceItem(index, { control_stock: checked === true })} /><span className="text-xs">Movimentar</span></div>
                         </TableCell>
                         <TableCell>
                           <Badge variant={item.confidence >= 0.8 ? 'default' : 'secondary'}>
@@ -1049,10 +1173,10 @@ export default function Despesas() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5" />
-              Nova Despesa
+              Nova conta / despesa
             </CardTitle>
             <CardDescription>
-              Preencha os dados da despesa abaixo
+              Informe o essencial agora; os dados complementares ficam em Mais opções.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1067,6 +1191,17 @@ export default function Despesas() {
                   required
                 />
               </div>
+
+              <details className="rounded-xl border bg-slate-50 p-3">
+                <summary className="cursor-pointer text-sm font-bold text-emerald-950">Mais opções</summary>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2"><Label>Fornecedor</Label><Input value={supplierName} onChange={(event) => setSupplierName(event.target.value)} placeholder="Nome do fornecedor" /></div>
+                  <div className="space-y-2"><Label>Forma prevista de pagamento</Label><Select value={defaultPaymentMethod || 'not_informed'} onValueChange={(value) => setDefaultPaymentMethod(value === 'not_informed' ? '' : value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="not_informed">Não informada</SelectItem><SelectItem value="pix">PIX</SelectItem><SelectItem value="dinheiro">Dinheiro</SelectItem><SelectItem value="debito">Débito</SelectItem><SelectItem value="credito">Crédito</SelectItem><SelectItem value="boleto">Boleto</SelectItem><SelectItem value="transferencia">Transferência</SelectItem><SelectItem value="outros">Outros</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-2"><Label>Competência</Label><Input type="date" value={competenceDate} onChange={(event) => setCompetenceDate(event.target.value)} /></div>
+                  <div className="space-y-2"><Label>Centro de custo</Label><Input value={costCenter} onChange={(event) => setCostCenter(event.target.value)} placeholder="Opcional" /></div>
+                  <div className="space-y-2 md:col-span-2"><Label>Observação</Label><Input value={expenseNotes} onChange={(event) => setExpenseNotes(event.target.value)} placeholder="Opcional" /></div>
+                </div>
+              </details>
 
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
@@ -1135,7 +1270,7 @@ export default function Despesas() {
                     <SelectValue placeholder="Selecione uma categoria" />
                   </SelectTrigger>
                   <SelectContent>
-                    {EXPENSE_CATEGORIES.map(cat => (
+                    {financialCategories.map(cat => (
                       <SelectItem key={cat} value={cat}>
                         {cat.charAt(0).toUpperCase() + cat.slice(1)}
                       </SelectItem>
@@ -1174,7 +1309,7 @@ export default function Despesas() {
                 ) : (
                   <>
                     <Plus className="h-4 w-4 mr-2" />
-                    Registrar Despesa
+                    Registrar conta
                   </>
                 )}
               </Button>
@@ -1197,7 +1332,7 @@ export default function Despesas() {
             </div>
             
             <div className="grid gap-2">
-              {EXPENSE_CATEGORIES.map(cat => {
+              {financialCategories.map(cat => {
                 const categoryTotal = filteredExpenses
                   .filter(exp => exp.category === cat && exp.status !== 'cancelled')
                   .reduce((sum, exp) => sum + exp.amount, 0);
@@ -1245,7 +1380,7 @@ export default function Despesas() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas categorias</SelectItem>
-                  {EXPENSE_CATEGORIES.map(cat => (
+                  {financialCategories.map(cat => (
                     <SelectItem key={cat} value={cat}>
                       {cat.charAt(0).toUpperCase() + cat.slice(1)}
                     </SelectItem>
@@ -1312,7 +1447,7 @@ export default function Despesas() {
                 <PayablesTable
                   expenses={filteredExpenses}
                   userId={user.id}
-                  categories={EXPENSE_CATEGORIES}
+                  categories={financialCategories}
                   onReload={loadExpenses}
                   onOpenAttachment={openAttachment}
                   attachmentBusyId={attachmentBusyId}
@@ -1334,6 +1469,13 @@ export default function Despesas() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-5 flex flex-col gap-2 rounded-xl border bg-slate-50 p-3 sm:flex-row">
+                <Input value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Nova categoria financeira" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void addFinancialCategory(); } }} />
+                <Button type="button" disabled={savingCategory || !newCategoryName.trim()} onClick={() => void addFinancialCategory()}><Plus className="mr-2 h-4 w-4" />Adicionar categoria</Button>
+              </div>
+              <div className="mb-5 flex flex-wrap gap-2">
+                {financialCategoryRows.map((row) => <Button key={row.id} type="button" size="sm" variant="outline" onClick={() => void renameFinancialCategory(row)}>{row.name}<span className="ml-2 text-[10px] text-muted-foreground">editar</span></Button>)}
+              </div>
               {categorySummary.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Tags className="h-12 w-12 mx-auto mb-2 opacity-50" />

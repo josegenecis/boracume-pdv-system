@@ -39,7 +39,6 @@ import {
   ReceiptText,
   ChevronRight,
   XCircle,
-  PackageCheck,
   CalendarDays,
   ShoppingBag,
   Ban,
@@ -73,7 +72,6 @@ import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { formatBRL, parseBRL } from '@/lib/currency';
 import { CancelSaleDialog } from '@/components/finance/CancelSaleDialog';
 import { friendlyErrorMessage } from '@/lib/friendly-error';
-import StaffConsumptionManager from '@/components/tables/StaffConsumptionManager';
 import { Checkbox } from '@/components/ui/checkbox';
 import { getOpenTableCount } from '@/services/openTables';
 import { cn } from '@/lib/utils';
@@ -177,10 +175,6 @@ const Financeiro = () => {
   const [orderToCancel, setOrderToCancel] = useState<any | null>(null);
   const fetchSequenceRef = useRef(0);
   
-  // States for new expense
-  const [newExpense, setNewExpense] = useState({ description: '', amount: '', category: 'Geral' });
-  const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false);
-
   // States for Cash Register
   const [cashAmount, setCashAmount] = useState('');
   const [isCashDialogOpen, setIsCashDialogOpen] = useState(false);
@@ -940,32 +934,6 @@ const Financeiro = () => {
     ];
   };
 
-  const handleAddExpense = async () => {
-    if (!newExpense.description || !newExpense.amount) return;
-    try {
-      const amountValue = parseBRL(newExpense.amount);
-      if (!Number.isFinite(amountValue) || amountValue <= 0) {
-        toast({ title: 'Valor inválido', description: 'A despesa deve ser maior que zero.', variant: 'destructive' });
-        return;
-      }
-      const { error } = await (supabase as any).from('expenses').insert({
-        user_id: user?.id,
-        description: newExpense.description,
-        amount: amountValue,
-        category: newExpense.category,
-        expense_date: new Date().toISOString().slice(0, 10)
-      });
-      if (error) throw error;
-      
-      toast({ title: 'Despesa registrada' });
-      setIsExpenseDialogOpen(false);
-      setNewExpense({ description: '', amount: '', category: 'Geral' });
-      fetchData();
-    } catch (e: any) {
-      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
-    }
-  };
-
   const handleReprintCashCloseReport = async () => {
     if (!user?.id || !selectedSession) return;
     if (selectedSession.status !== 'closed') {
@@ -1495,7 +1463,6 @@ const Financeiro = () => {
   ];
   const topExpenseCards = expenseByCategory.slice(0, 4);
   const isCashRoute = location.pathname.startsWith('/caixa');
-  const openReceivablesFromNavigation = new URLSearchParams(location.search).get('section') === 'receivables';
   const headerTitle = isCashRoute ? 'Caixa geral' : 'Financeiro';
   const headerSubtitle = isCashRoute
     ? 'Abertura, suprimento, sangria e conferência do caixa em uma visão operacional.'
@@ -1570,6 +1537,10 @@ const Financeiro = () => {
   };
 
   useEffect(() => {
+    if (new URLSearchParams(location.search).get('section') === 'receivables') {
+      navigate('/financeiro/receber', { replace: true });
+      return;
+    }
     const action = new URLSearchParams(location.search).get('cashAction');
     if (!action || !['open', 'close', 'in', 'out'].includes(action)) return;
     void (async () => {
@@ -1609,20 +1580,6 @@ const Financeiro = () => {
       icon: ArrowDown,
       onClick: () => openCashActionDialog('out'),
       className: 'border-[#FF6400]/18 bg-white text-[#C45E00]',
-    },
-    {
-      key: 'expense',
-      label: 'Despesa',
-      icon: ReceiptText,
-      onClick: () => setIsExpenseDialogOpen(true),
-      className: 'border-[#003223]/10 bg-white text-[#003223]',
-    },
-    {
-      key: 'invoice-stock',
-      label: 'Nota + estoque',
-      icon: PackageCheck,
-      onClick: () => navigate('/despesas?smartInvoice=1'),
-      className: 'border-[#8CC850]/20 bg-[#F5FBED] text-[#245B2B]',
     },
     {
       key: 'refresh',
@@ -1667,9 +1624,9 @@ const Financeiro = () => {
 
             <div className="flex flex-wrap gap-2">
               {!isCashRoute && (
-                <div className="[&>button]:border-white/20 [&>button]:bg-white/15 [&>button]:text-white [&>button]:hover:bg-white/25">
-                  <StaffConsumptionManager initialOpen={openReceivablesFromNavigation} />
-                </div>
+                <Button className="border border-white/20 bg-white/15 text-white hover:bg-white/25" variant="outline" onClick={() => navigate('/financeiro/receber')}>
+                  <WalletCards className="mr-2 h-4 w-4" />Contas a receber
+                </Button>
               )}
               <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
               <Button className="border border-white/20 bg-white/15 text-white hover:bg-white/25" variant="outline" onClick={() => {
@@ -1814,54 +1771,6 @@ const Financeiro = () => {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-boracume-orange text-white hover:bg-boracume-orange/90">
-                <ArrowDown className="mr-2 h-4 w-4" />
-                Nova Despesa
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Registrar Despesa</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Descrição</Label>
-                  <Input value={newExpense.description} onChange={(e) => setNewExpense({...newExpense, description: e.target.value})} />
-                </div>
-                <div>
-                  <Label>Valor (R$)</Label>
-                  <CurrencyTextInput value={newExpense.amount} onValueChange={(value) => setNewExpense({...newExpense, amount: value})} placeholder="R$ 0,00" />
-                </div>
-                <div>
-                  <Label>Categoria</Label>
-                  <Select value={newExpense.category} onValueChange={(v) => setNewExpense({...newExpense, category: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Geral">Geral</SelectItem>
-                      <SelectItem value="Insumos">Insumos/Compras</SelectItem>
-                      <SelectItem value="Aluguel">Aluguel</SelectItem>
-                      <SelectItem value="Funcionários">Funcionários</SelectItem>
-                      <SelectItem value="Manutenção">Manutenção</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={handleAddExpense}>Salvar</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <Button
-            type="button"
-            variant="outline"
-            className="border-white/20 bg-white/15 text-white hover:bg-white/25"
-            onClick={() => navigate('/despesas?smartInvoice=1')}
-          >
-            <PackageCheck className="mr-2 h-4 w-4" />
-            Nota + estoque
-          </Button>
           {!isCashRoute && (
             <Button
               type="button"
@@ -2153,7 +2062,9 @@ const Financeiro = () => {
 
         {!isCashRoute && (
           <section className="[&>button]:h-10 [&>button]:w-full [&>button]:justify-center [&>button]:rounded-[14px] [&>button]:border-[#003223]/10 [&>button]:bg-white [&>button]:text-[#003223] [&>button]:shadow-sm">
-            <StaffConsumptionManager />
+            <Button variant="outline" onClick={() => navigate('/financeiro/receber')}>
+              <WalletCards className="mr-2 h-4 w-4" />Contas a receber
+            </Button>
           </section>
         )}
 

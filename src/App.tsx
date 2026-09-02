@@ -50,6 +50,7 @@ const InteligenciaCMV = lazy(() => import('@/pages/InteligenciaCMV'));
 const Fiscal = lazy(() => import('@/pages/Fiscal'));
 const Financeiro = lazy(() => import('@/pages/Financeiro'));
 const Despesas = lazy(() => import('@/pages/Despesas'));
+const ContasReceber = lazy(() => import('@/pages/ContasReceber'));
 const SecurityDashboard = lazy(() => import('@/pages/SecurityDashboard'));
 const WhatsAppBot = lazy(() => import('@/pages/WhatsAppBot'));
 const Downloads = lazy(() => import('@/pages/Downloads'));
@@ -208,6 +209,7 @@ function AppContent() {
           <Route path="/nfce" element={<Navigate to="/fiscal" replace />} />
           <Route path="/caixa" element={<OperatorRoute area="cash"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />
           <Route path="/financeiro" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />
+          <Route path="/financeiro/receber" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><ContasReceber /></FeatureRoute></OperatorRoute>} />
           <Route path="/financeiro/despesas" element={<Navigate to="/despesas" replace />} />
           <Route path="/despesas" element={<OperatorRoute area="expenses"><FeatureRoute feature="finance"><Despesas /></FeatureRoute></OperatorRoute>} />
           <Route path="/pagamentos" element={<OperatorRoute area="pix"><FeatureRoute feature="pix"><div className="space-y-4"><h1 className="text-2xl font-bold tracking-tight">Formas de Pagamento</h1><PaymentMethodsSettings /></div></FeatureRoute></OperatorRoute>} />
