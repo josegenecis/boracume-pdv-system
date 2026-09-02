@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter, ReceiptText, Download, Eye, Paperclip } from 'lucide-react';
-import { format } from 'date-fns';
+import { addMonths, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { parseBRL } from '@/lib/currency';
@@ -21,6 +21,7 @@ import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { ReverseExpenseDialog } from '@/components/finance/ReverseExpenseDialog';
 import { PageHero } from '@/components/layout/PageHero';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { PayablesTable } from '@/components/finance/PayablesTable';
 
 interface Expense {
   id: string;
@@ -40,6 +41,18 @@ interface Expense {
   reversed_by?: string | null;
   reversed_by_waiter_id?: string | null;
   reversed_by_name?: string | null;
+  due_date?: string | null;
+  paid_at?: string | null;
+  paid_amount?: number | null;
+  status?: string | null;
+  payable_group_id?: string | null;
+  payable_origin_type?: 'single' | 'installment' | 'recurring' | 'purchase_invoice' | null;
+  installment_number?: number | null;
+  installment_count?: number | null;
+  competence_date?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  cancelled_by_name?: string | null;
 }
 
 interface SmartInvoiceItem {
@@ -116,13 +129,15 @@ export default function Despesas() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [expenseToReverse, setExpenseToReverse] = useState<Expense | null>(null);
-  
+
   // Form states
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
   const [expenseDate, setExpenseDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [dueDate, setDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [payableType, setPayableType] = useState<'single' | 'installment' | 'recurring'>('single');
+  const [occurrenceCount, setOccurrenceCount] = useState('2');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [smartInvoiceFile, setSmartInvoiceFile] = useState<File | null>(null);
@@ -165,6 +180,7 @@ export default function Despesas() {
     try {
       if (!user?.id) return;
       setLoading(true);
+      await (supabase as any).rpc('refresh_my_payable_statuses');
       const base = () => supabase.from('expenses').select('*').eq('user_id', user.id);
       const first = await base().order('expense_date', { ascending: false });
       if (first.error) {
@@ -203,7 +219,7 @@ export default function Despesas() {
   };
 
   const filterExpenses = () => {
-    let filtered = expenses.filter((exp) => exp.is_active !== false);
+    let filtered = expenses.filter((exp) => exp.is_active !== false || exp.status === 'cancelled');
 
     if (searchTerm) {
       filtered = filtered.filter(exp => 
@@ -226,47 +242,11 @@ export default function Despesas() {
     setFilteredExpenses(filtered);
   };
 
-  const reverseExpense = async (pin: string, reason: string) => {
-    if (!expenseToReverse) return false;
-    try {
-      if (!user?.id) return false;
-      const { error } = await (supabase as any).rpc('reverse_expense_authorized', {
-        p_expense_id: expenseToReverse.id,
-        p_reason: reason,
-        p_admin_pin: pin,
-      });
-
-      if (error) {
-        toast({
-          title: 'Erro ao estornar',
-          description: friendlyErrorMessage(error, 'Não foi possível estornar esta despesa.'),
-          variant: 'destructive'
-        });
-        return false;
-      }
-
-      toast({
-        title: 'Despesa estornada',
-        description: 'O lançamento saiu dos totais e foi preservado no histórico de estornos.'
-      });
-      setExpenseToReverse(null);
-      await loadExpenses();
-      return true;
-    } catch (err: any) {
-      toast({
-        title: 'Erro ao estornar',
-        description: friendlyErrorMessage(err, 'Não foi possível estornar esta despesa.'),
-        variant: 'destructive'
-      });
-      return false;
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!user?.id) return;
-    if (!description.trim() || !amount || !category || !expenseDate) {
+    if (!description.trim() || !amount || !category || !expenseDate || !dueDate) {
       toast({
         title: 'Campos obrigatórios',
         description: 'Por favor, preencha todos os campos obrigatórios.',
@@ -281,6 +261,11 @@ export default function Despesas() {
         description: 'A despesa deve ser maior que zero.',
         variant: 'destructive'
       });
+      return;
+    }
+    const count = payableType === 'single' ? 1 : Math.max(2, Math.min(120, Number.parseInt(occurrenceCount, 10) || 0));
+    if (payableType !== 'single' && (!Number.isInteger(count) || count < 2)) {
+      toast({ title: 'Quantidade inválida', description: 'Informe ao menos 2 parcelas ou recorrências.', variant: 'destructive' });
       return;
     }
 
@@ -311,21 +296,44 @@ export default function Despesas() {
         }
       }
 
-      // Create expense
+      // Cada parcela/competência é uma obrigação independente. Assim, a baixa de
+      // uma nunca altera as demais ocorrências da mesma compra ou recorrência.
+      const groupId = count > 1 ? crypto.randomUUID() : null;
+      const baseDueDate = new Date(`${dueDate}T12:00:00`);
+      const totalInCents = Math.round(amountValue * 100);
+      const rows = Array.from({ length: count }, (_, index) => {
+        const installmentCents = payableType === 'installment'
+          ? Math.floor(totalInCents / count) + (index < totalInCents % count ? 1 : 0)
+          : totalInCents;
+        const occurrenceDueDate = format(addMonths(baseDueDate, index), 'yyyy-MM-dd');
+        return {
+          description: payableType === 'installment' ? `${description.trim()} · ${index + 1}/${count}` : description.trim(),
+          amount: installmentCents / 100,
+          category,
+          receipt_url: receiptUrl,
+          receipt_path: receiptPath,
+          receipt_name: receiptName,
+          receipt_mime_type: receiptMimeType,
+          user_id: user.id,
+          expense_date: count > 1 ? occurrenceDueDate : expenseDate,
+          due_date: occurrenceDueDate,
+          competence_date: occurrenceDueDate,
+          status: occurrenceDueDate < format(new Date(), 'yyyy-MM-dd') ? 'overdue' : 'open',
+          paid_amount: 0,
+          payable_group_id: groupId,
+          payable_origin_type: payableType,
+          installment_number: count > 1 ? index + 1 : null,
+          installment_count: count > 1 ? count : null,
+        };
+      });
+
       const payloadBase: any = {
-        description: description.trim(),
-        amount: amountValue,
-        category,
-        receipt_url: receiptUrl,
-        receipt_path: receiptPath,
-        receipt_name: receiptName,
-        receipt_mime_type: receiptMimeType,
-        user_id: user.id
+        ...rows[0],
       };
 
       const firstInsert = await supabase
         .from('expenses')
-        .insert({ ...payloadBase, expense_date: expenseDate } as any);
+        .insert(rows as any);
 
       if (firstInsert.error) {
         const msg = String(firstInsert.error.message || '').toLowerCase();
@@ -342,7 +350,9 @@ export default function Despesas() {
 
       toast({
         title: 'Sucesso',
-        description: 'Despesa registrada com sucesso.'
+        description: count > 1
+          ? `${count} ${payableType === 'installment' ? 'parcelas' : 'competências'} criadas separadamente.`
+          : 'Conta a pagar registrada com sucesso.'
       });
 
       // Reset form
@@ -350,6 +360,9 @@ export default function Despesas() {
       setAmount('');
       setCategory('');
       setExpenseDate(format(new Date(), 'yyyy-MM-dd'));
+      setDueDate(format(new Date(), 'yyyy-MM-dd'));
+      setPayableType('single');
+      setOccurrenceCount('2');
       setReceiptFile(null);
       
       // Reload expenses
@@ -697,11 +710,13 @@ export default function Despesas() {
   };
 
   const getTotalExpenses = () => {
-    return filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+    return filteredExpenses
+      .filter((expense) => expense.status !== 'cancelled')
+      .reduce((sum, exp) => sum + exp.amount, 0);
   };
 
   const categorySummary = Object.values(
-    filteredExpenses.reduce((acc, expense) => {
+    filteredExpenses.filter((expense) => expense.status !== 'cancelled').reduce((acc, expense) => {
       const key = expense.category || 'outros';
       if (!acc[key]) {
         acc[key] = {
@@ -725,7 +740,7 @@ export default function Despesas() {
   const smartInvoiceTotal = smartInvoiceItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
   const filteredPurchaseInvoices = purchaseInvoices.filter((purchase) => purchaseStatusFilter === 'all' || purchase.status === purchaseStatusFilter);
   const reversedExpenses = expenses
-    .filter((expense) => expense.is_active === false)
+    .filter((expense) => expense.is_active === false && expense.status !== 'cancelled')
     .filter((expense) => !searchTerm || expense.description.toLowerCase().includes(searchTerm.toLowerCase()))
     .filter((expense) => !selectedCategory || expense.category === selectedCategory)
     .filter((expense) => !dateFrom || getExpenseDateKey(expense) >= dateFrom)
@@ -1053,7 +1068,7 @@ export default function Despesas() {
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="amount">Valor (R$) *</Label>
                     <CurrencyTextInput
@@ -1066,7 +1081,7 @@ export default function Despesas() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="expenseDate">Data *</Label>
+                  <Label htmlFor="expenseDate">Data da despesa *</Label>
                   <Input
                     id="expenseDate"
                     type="date"
@@ -1075,6 +1090,42 @@ export default function Despesas() {
                     required
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dueDate">Vencimento *</Label>
+                  <Input
+                    id="dueDate"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-[1fr_160px]">
+                <div className="space-y-2">
+                  <Label>Tipo de lançamento</Label>
+                  <Select value={payableType} onValueChange={(value) => setPayableType(value as typeof payableType)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single">Conta avulsa</SelectItem>
+                      <SelectItem value="installment">Compra parcelada</SelectItem>
+                      <SelectItem value="recurring">Conta recorrente mensal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {payableType === 'installment' && 'O valor total será dividido em parcelas mensais independentes.'}
+                    {payableType === 'recurring' && 'O valor informado será repetido em competências mensais independentes.'}
+                    {payableType === 'single' && 'Uma única conta será criada.'}
+                  </p>
+                </div>
+                {payableType !== 'single' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="occurrenceCount">{payableType === 'installment' ? 'Parcelas' : 'Meses'}</Label>
+                    <Input id="occurrenceCount" type="number" min={2} max={120} value={occurrenceCount} onChange={(event) => setOccurrenceCount(event.target.value)} />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -1148,7 +1199,7 @@ export default function Despesas() {
             <div className="grid gap-2">
               {EXPENSE_CATEGORIES.map(cat => {
                 const categoryTotal = filteredExpenses
-                  .filter(exp => exp.category === cat)
+                  .filter(exp => exp.category === cat && exp.status !== 'cancelled')
                   .reduce((sum, exp) => sum + exp.amount, 0);
                 
                 if (categoryTotal === 0) return null;
@@ -1257,54 +1308,16 @@ export default function Despesas() {
                   <p>Nenhuma despesa encontrada</p>
                   <p className="text-sm mt-1">Tente ajustar os filtros ou registrar uma nova despesa</p>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Categoria</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Comprovante</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredExpenses.map((expense) => (
-                        <TableRow key={expense.id}>
-                          <TableCell className="font-medium">{expense.description}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="capitalize">
-                              {expense.category}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-medium">{formatCurrency(expense.amount)}</TableCell>
-                          <TableCell>
-                            {expense.receipt_path || expense.receipt_url ? (
-                              <div className="flex flex-wrap gap-2">
-                                <Button type="button" variant="outline" size="sm" disabled={attachmentBusyId === expense.id} onClick={() => void openAttachment({ id: expense.id, path: expense.receipt_path, legacyUrl: expense.receipt_url, name: expense.receipt_name })}>
-                                  <Eye className="mr-1 h-3 w-3" />Ver
-                                </Button>
-                                <Button type="button" variant="outline" size="sm" disabled={attachmentBusyId === expense.id} onClick={() => void openAttachment({ id: expense.id, path: expense.receipt_path, legacyUrl: expense.receipt_url, name: expense.receipt_name, download: true })}>
-                                  <Download className="mr-1 h-3 w-3" />Baixar
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="outline" size="sm" onClick={() => setExpenseToReverse(expense)}>
-                              <Undo2 className="h-3 w-3 mr-1" />
-                              Estornar
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+              ) : user?.id ? (
+                <PayablesTable
+                  expenses={filteredExpenses}
+                  userId={user.id}
+                  categories={EXPENSE_CATEGORIES}
+                  onReload={loadExpenses}
+                  onOpenAttachment={openAttachment}
+                  attachmentBusyId={attachmentBusyId}
+                />
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1430,14 +1443,6 @@ export default function Despesas() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      <ReverseExpenseDialog
-        open={Boolean(expenseToReverse)}
-        description={expenseToReverse?.description}
-        amountLabel={expenseToReverse ? formatCurrency(expenseToReverse.amount) : undefined}
-        onCancel={() => setExpenseToReverse(null)}
-        onConfirm={reverseExpense}
-      />
 
       <ReverseExpenseDialog
         open={Boolean(purchaseToReverse)}

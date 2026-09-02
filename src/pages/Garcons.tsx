@@ -85,6 +85,8 @@ const PERMISSIONS_GROUPS = [
     permissions: [
       { id: 'financial_view', label: 'Ver Financeiro', description: 'Acessar visão financeira e contas a receber' },
       { id: 'expenses_manage', label: 'Gerenciar Despesas', description: 'Cadastrar e editar contas a pagar' },
+      { id: 'expense_payments_manage', label: 'Baixar Contas a Pagar', description: 'Informar pagamentos parciais, totais e em lote' },
+      { id: 'expense_payments_reverse', label: 'Estornar Pagamentos', description: 'Autorizar estornos de baixas financeiras com o próprio PIN' },
       { id: 'reports_view', label: 'Ver Relatórios', description: 'Acessar relatórios gerais e históricos' },
       { id: 'payments_manage', label: 'Formas de Pagamento e PIX', description: 'Configurar pagamentos, PIX e integrações financeiras' },
     ]
