@@ -136,13 +136,13 @@ export default function ContasReceber() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {[
-          ['Total do período', summary.total, WalletCards, 'text-slate-800'],
+          ['Total a receber', summary.pending + summary.overdue, WalletCards, 'text-slate-800'],
           ['Recebido', summary.received, TrendingUp, 'text-emerald-700'],
           ['Pendente', summary.pending, CalendarDays, 'text-amber-700'],
           ['Vencido', summary.overdue, TrendingDown, 'text-red-700'],
-          ['Lançamentos', filtered.length, WalletCards, 'text-blue-700'],
+          ['Total do período', summary.total, WalletCards, 'text-blue-700'],
         ].map(([label, value, Icon, color]) => (
-          <Card key={String(label)}><CardContent className="flex items-center justify-between p-4"><div><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label as string}</p><p className={`mt-2 text-xl font-black ${color}`}>{label === 'Lançamentos' ? String(value) : money.format(Number(value))}</p></div><Icon className={`h-5 w-5 ${color}`} /></CardContent></Card>
+          <Card key={String(label)}><CardContent className="flex items-center justify-between p-4"><div><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label as string}</p><p className={`mt-2 text-xl font-black ${color}`}>{money.format(Number(value))}</p></div><Icon className={`h-5 w-5 ${color}`} /></CardContent></Card>
         ))}
       </div>
 
