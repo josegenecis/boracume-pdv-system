@@ -896,6 +896,13 @@ ipcMain.handle('print-system-raster', async (_event, { deviceName, html } = {}) 
         } catch {}
         const root = document.documentElement;
         const body = document.body;
+        const paperWidth = String(root.dataset.paperWidth || '80mm').toLowerCase();
+        const paperWidthMm = paperWidth === '58mm' ? 58 : 80;
+        // O scrollWidth do documentElement nunca fica menor que a viewport da
+        // BrowserWindow. Como essa janela nasce com 380 px, usar scrollWidth
+        // capturava uma faixa vazia à direita e encolhia o cupom inteiro ao
+        // redimensionar para 384/576 pontos. A largura deve vir do papel.
+        const paperWidthPx = Math.ceil((paperWidthMm / 25.4) * 96);
         const bodyRect = body.getBoundingClientRect();
         const bodyTop = Number(bodyRect.top || 0);
         const childBottom = Math.max(
@@ -905,8 +912,8 @@ ipcMain.handle('print-system-raster', async (_event, { deviceName, html } = {}) 
           )
         );
         return {
-          paperWidth: String(root.dataset.paperWidth || '80mm').toLowerCase(),
-          width: Math.ceil(Math.max(root.scrollWidth, bodyRect.right, 1)),
+          paperWidth,
+          width: paperWidthPx,
           height: Math.ceil(Math.max(bodyRect.height, childBottom - bodyTop, 1))
         };
       })()

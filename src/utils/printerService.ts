@@ -798,8 +798,8 @@ function resolveElectronTarget(): ElectronTarget | null {
 
 function buildOrderHtml(order: any, config: any, store?: any) {
   const width = config.paper_width === '58mm' ? '58mm' : '80mm';
-  const bodyWidth = config.paper_width === '58mm' ? '46mm' : '68mm';
-  const fontSize = config.font_size === 'small' ? '11px' : config.font_size === 'large' ? '15px' : '13px';
+  const bodyWidth = config.paper_width === '58mm' ? '54mm' : '76mm';
+  const fontSize = config.font_size === 'small' ? '12px' : config.font_size === 'large' ? '16px' : '14px';
   const storeName = escapeHtml(store?.restaurant_name || store?.name || config.print_header || 'RESTAURANTE');
   const storeDesc = escapeHtml(store?.description || '');
   const storeLogo = resolveReceiptLogoUrl(store, config);
@@ -828,7 +828,8 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           body {
             font-family: 'Courier New', Courier, monospace;
             width: ${bodyWidth};
-            margin: 0;
+            max-width: ${bodyWidth};
+            margin: 0 auto;
             padding: 2mm 1mm 3mm 1mm;
             font-size: ${fontSize};
             color: #000;
@@ -1142,8 +1143,8 @@ function buildNfeDanfeA4Html(order: any, store?: any) {
 
 function buildKitchenTicketHtml(order: any, config: any) {
   const width = config.paper_width === '58mm' ? '58mm' : '80mm';
-  const bodyWidth = config.paper_width === '58mm' ? '46mm' : '68mm';
-  const fontSize = config.font_size === 'small' ? '11px' : config.font_size === 'large' ? '15px' : '13px';
+  const bodyWidth = config.paper_width === '58mm' ? '54mm' : '76mm';
+  const fontSize = config.font_size === 'small' ? '12px' : config.font_size === 'large' ? '16px' : '14px';
   const customerName = escapeHtml(getKitchenCustomerLabel(order));
   const orderTypeLabel = escapeHtml(getOrderTypeLabel(order));
   const orderNumber = escapeHtml(order?.order_number || '----');
@@ -1168,7 +1169,8 @@ function buildKitchenTicketHtml(order: any, config: any) {
           body {
             font-family: 'Courier New', Courier, monospace;
             width: ${bodyWidth};
-            margin: 0;
+            max-width: ${bodyWidth};
+            margin: 0 auto;
             padding: 2mm 1mm 3mm 1mm;
             font-size: ${fontSize};
             color: #000;
