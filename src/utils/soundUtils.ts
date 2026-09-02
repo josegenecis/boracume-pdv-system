@@ -1,5 +1,7 @@
 // Utility functions for sound notifications using HTML5 Audio
-export const POPSYSTEM_ORDER_SOUND_PATH = '/sounds/Toque%20PopSystem.mp3?v=20260901';
+// O build web usa base "/" e o build desktop usa "./". Respeitar BASE_URL
+// evita que o Electron procure o toque em file:///sounds, fora do app.asar.
+export const POPSYSTEM_ORDER_SOUND_PATH = `${import.meta.env.BASE_URL}sounds/Toque%20PopSystem.mp3?v=20260902`;
 export const POPSYSTEM_ORDER_SOUND_TYPE = 'bell';
 export const POPSYSTEM_AUDIO_UNLOCKED_EVENT = 'popsystem:audio-unlocked';
 export const POPSYSTEM_AUDIO_BLOCKED_EVENT = 'popsystem:audio-blocked';
@@ -137,7 +139,9 @@ export class SoundNotifications {
       oscillator.start(audioContext.currentTime)
       oscillator.stop(audioContext.currentTime + 0.02)
       await new Promise<void>((resolve) => window.setTimeout(resolve, 30))
-    } catch {}
+    } catch {
+      // O oscilador silencioso é apenas um reforço de desbloqueio.
+    }
 
     try {
       const audio = this.audioFiles.get('bell')
@@ -176,7 +180,9 @@ export class SoundNotifications {
       if (!this.unlocked) {
         try {
           await this.enableSound()
-        } catch {}
+        } catch {
+          // A reprodução abaixo fará a tentativa efetiva e registrará bloqueio.
+        }
       }
       const audio = this.audioFiles.get(soundType);
       
@@ -245,7 +251,9 @@ export class SoundNotifications {
       if (!this.unlocked) {
         try {
           await this.enableSound();
-        } catch {}
+        } catch {
+          // A reprodução persistente abaixo fará a tentativa efetiva.
+        }
       }
 
       const audio = this.persistentAlertAudio || new Audio();

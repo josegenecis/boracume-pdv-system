@@ -9,11 +9,22 @@ import {
 } from '@/utils/soundUtils';
 
 const SoundPermissionHelper: React.FC = () => {
+  const isDesktopRuntime = Boolean(window.electronAPI?.isElectron);
   const [needsPermission, setNeedsPermission] = useState(
-    () => soundNotifications.isAudioSupported() && !soundNotifications.isAudioUnlocked(),
+    () => !isDesktopRuntime && soundNotifications.isAudioSupported() && !soundNotifications.isAudioUnlocked(),
   );
 
   useEffect(() => {
+    if (isDesktopRuntime) {
+      // O processo principal libera autoplay no app desktop. Inicializamos aqui
+      // sem mostrar um aviso que possa cobrir ações operacionais do PDV.
+      setNeedsPermission(false);
+      void soundNotifications.enableSound().catch((error) => {
+        console.error('❌ Erro ao inicializar áudio no app desktop:', error);
+      });
+      return;
+    }
+
     const handleUnlocked = () => setNeedsPermission(false);
     const handleBlocked = () => setNeedsPermission(true);
 
@@ -25,7 +36,7 @@ const SoundPermissionHelper: React.FC = () => {
       window.removeEventListener(POPSYSTEM_AUDIO_UNLOCKED_EVENT, handleUnlocked);
       window.removeEventListener(POPSYSTEM_AUDIO_BLOCKED_EVENT, handleBlocked);
     };
-  }, []);
+  }, [isDesktopRuntime]);
 
   const enableAudio = async () => {
     try {
@@ -36,7 +47,7 @@ const SoundPermissionHelper: React.FC = () => {
     }
   };
 
-  if (!needsPermission) {
+  if (isDesktopRuntime || !needsPermission) {
     return null;
   }
 

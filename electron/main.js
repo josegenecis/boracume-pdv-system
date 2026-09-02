@@ -2,6 +2,10 @@ const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, shell } =
 const path = require('path');
 const fs = require('fs');
 
+// O PopSystem precisa alertar novos pedidos mesmo antes de um clique e quando
+// está em segundo plano. Esta política vale somente para o aplicativo desktop.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 // Mantido no processo principal para que a inicialização do Desktop não dependa
 // de um arquivo auxiliar estar presente no app.asar.
 function nativeBitmapToEscPos(bitmap, width, height) {
@@ -163,7 +167,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: false
     },
     icon: path.join(__dirname, '../public/LOGOMARCA/ICONE DESKTOP.png'),
     show: false,
