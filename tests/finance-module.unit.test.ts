@@ -13,6 +13,10 @@ import {
   invoiceItemNeedsUnitConfirmation,
   normalizePurchaseUnit,
 } from '../src/lib/finance/purchaseInvoice';
+import {
+  catalogSimilarity,
+  findBestCatalogMatch,
+} from '../supabase/functions/_shared/catalogMatching';
 
 const sale = (patch: Record<string, unknown> = {}) => ({
   id: 'sale-1', order_number: 'PED123', created_at: '2026-09-02T10:00:00Z',
@@ -134,4 +138,26 @@ test('cancelados e reembolsados não inflam valores recebidos', () => {
   const cancelled = expandOrderReceivables(sale({ total: 40, status: 'cancelled' }))[0];
   const refunded = expandOrderReceivables(sale({ total: 60, status: 'cancelled', financial_cancellation: { refund_status: 'completed' } }))[0];
   assert.deepEqual(summarizeReceivables([cancelled, refunded]), { total: 100, received: 0, pending: 0, overdue: 0 });
+});
+
+test('catálogo reconhece abreviação segura do mesmo produto', () => {
+  const match = findBestCatalogMatch('Coca Cola lata 350ml', [
+    { id: '1', name: 'Coca-Cola Lata 350 ml', track_stock: true },
+    { id: '2', name: 'Coca-Cola 2 litros', track_stock: true },
+  ]);
+  assert.equal(match?.candidate.id, '1');
+  assert.equal(match?.score, 1);
+});
+
+test('catálogo não mistura embalagens com volumes diferentes', () => {
+  assert.ok(catalogSimilarity('Coca-Cola lata 350 ml', 'Coca-Cola 2 litros') < 0.72);
+  assert.equal(findBestCatalogMatch('Coca Cola 350ml', [{ id: '2', name: 'Coca-Cola 2 litros' }]), null);
+});
+
+test('catálogo rejeita correspondência genérica ambígua', () => {
+  const match = findBestCatalogMatch('Leite integral', [
+    { id: '1', name: 'Leite integral marca A' },
+    { id: '2', name: 'Leite integral marca B' },
+  ]);
+  assert.equal(match, null);
 });

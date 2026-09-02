@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter, ReceiptText, Download, Eye, Paperclip, XCircle, AlertTriangle } from 'lucide-react';
+import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter, ReceiptText, Download, Eye, Paperclip, XCircle, AlertTriangle, Trash2, ScanSearch, PencilLine } from 'lucide-react';
 import { addMonths, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
@@ -58,6 +58,7 @@ interface Expense {
 }
 
 interface SmartInvoiceItem {
+  local_id?: string;
   id?: string;
   description: string;
   normalized_name: string;
@@ -78,6 +79,10 @@ interface SmartInvoiceItem {
   conversion_factor?: number;
   unit_source?: 'xml' | 'invoice' | 'catalog' | 'inferred' | 'unknown' | 'confirmed' | string;
   unit_confirmed?: boolean;
+  inventory_kind?: 'ingredient' | 'resale_product' | 'packaging' | 'cleaning' | 'service' | 'other' | string;
+  match_confidence?: number;
+  matched_product_tracks_stock?: boolean;
+  create_sale_product?: boolean;
 }
 
 interface SmartInvoiceImport {
@@ -113,11 +118,32 @@ const getExpenseDateKey = (exp: any) => {
 
 const FALLBACK_EXPENSE_CATEGORIES = ['Ingredientes', 'Bebidas', 'Embalagens', 'Aluguel', 'Energia', 'Água', 'Internet', 'Funcionários', 'Marketing', 'Manutenção', 'Impostos', 'Taxas', 'Outros'];
 
+const newManualStockItem = (): SmartInvoiceItem => ({
+  local_id: crypto.randomUUID(),
+  description: '',
+  normalized_name: '',
+  category: 'Insumos',
+  subcategory: '',
+  quantity: 1,
+  unit: 'un',
+  stock_unit: 'un',
+  conversion_factor: 1,
+  unit_price: 0,
+  total_price: 0,
+  confidence: 0,
+  match_confidence: 0,
+  control_stock: true,
+  unit_source: 'confirmed',
+  unit_confirmed: true,
+  inventory_kind: 'ingredient',
+});
+
 export default function Despesas() {
   const { user } = useAuth();
   const { toast } = useToast();
   const location = useLocation();
   const smartInvoiceRef = useRef<HTMLDivElement | null>(null);
+  const manualFormRef = useRef<HTMLDivElement | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [filteredExpenses, setFilteredExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,6 +184,9 @@ export default function Despesas() {
   const [competenceDate, setCompetenceDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [expenseNotes, setExpenseNotes] = useState('');
   const [costCenter, setCostCenter] = useState('');
+  const [manualMovesStock, setManualMovesStock] = useState(false);
+  const [manualStockItems, setManualStockItems] = useState<SmartInvoiceItem[]>([]);
+  const [manualClassifying, setManualClassifying] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -294,6 +323,52 @@ export default function Despesas() {
     setFilteredExpenses(filtered);
   };
 
+  const updateManualStockItem = (index: number, patch: Partial<SmartInvoiceItem>) => {
+    setManualStockItems((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const next = { ...item, ...patch };
+      if (patch.description !== undefined && !item.normalized_name.trim()) {
+        next.normalized_name = patch.description;
+      }
+      if (patch.quantity !== undefined || patch.unit_price !== undefined) {
+        next.total_price = Number(next.quantity || 0) * Number(next.unit_price || 0);
+      }
+      return next;
+    }));
+  };
+
+  const classifyManualStockItems = async () => {
+    if (!user?.id || manualStockItems.length === 0) return;
+    const invalidItem = manualStockItems.find((item) => !String(item.normalized_name || item.description).trim());
+    if (invalidItem) {
+      toast({ title: 'Informe os produtos', description: 'Preencha o nome de cada item antes da identificação.', variant: 'destructive' });
+      return;
+    }
+    setManualClassifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('smart-invoice-import', {
+        body: { operation: 'classify-manual', userId: user.id, items: manualStockItems },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error(String((data as any).error));
+      setManualStockItems(((data as any)?.items || []).map((item: SmartInvoiceItem) => ({
+        ...item,
+        quantity: Number(item.quantity || 0),
+        unit_price: Number(item.unit_price || 0),
+        total_price: Number(item.total_price || 0),
+        conversion_factor: Number(item.conversion_factor || 1),
+        confidence: Number(item.confidence || 0),
+        match_confidence: Number(item.match_confidence || 0),
+        unit_confirmed: item.unit_confirmed !== false,
+      })));
+      toast({ title: 'Itens identificados', description: 'Tipo, categoria e produtos semelhantes foram conferidos pela IA.' });
+    } catch (error: any) {
+      toast({ title: 'Não foi possível identificar', description: friendlyErrorMessage(error, 'Revise os itens manualmente.'), variant: 'destructive' });
+    } finally {
+      setManualClassifying(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -319,6 +394,22 @@ export default function Despesas() {
     if (payableType !== 'single' && (!Number.isInteger(count) || count < 2)) {
       toast({ title: 'Quantidade inválida', description: 'Informe ao menos 2 parcelas ou recorrências.', variant: 'destructive' });
       return;
+    }
+    if (manualMovesStock) {
+      if (payableType !== 'single') {
+        toast({ title: 'Compra com estoque deve ser avulsa', description: 'Registre os itens agora e parcele depois a obrigação financeira, se necessário.', variant: 'destructive' });
+        return;
+      }
+      const invalidStockItem = manualStockItems.find((item) => (
+        !String(item.normalized_name || item.description).trim()
+        || Number(item.quantity) <= 0
+        || Number(item.unit_price) < 0
+        || Number(item.conversion_factor || 0) <= 0
+      ));
+      if (manualStockItems.length === 0 || invalidStockItem) {
+        toast({ title: 'Revise os itens do estoque', description: 'Adicione ao menos um produto com nome, quantidade, unidade e custo válidos.', variant: 'destructive' });
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -347,6 +438,45 @@ export default function Despesas() {
           receiptMimeType = receiptFile.type;
         }
       }
+
+      if (manualMovesStock) {
+        const { data, error } = await supabase.functions.invoke('smart-invoice-import', {
+          body: {
+            operation: 'commit-manual',
+            userId: user.id,
+            launchExpense: true,
+            launchStock: true,
+            purchase: {
+              description: description.trim(),
+              total_amount: amountValue,
+              expense_category: category,
+              invoice_date: expenseDate,
+              due_date: dueDate,
+              competence_date: competenceDate,
+              supplier_name: supplierName.trim() || null,
+              payment_method: defaultPaymentMethod || null,
+              notes: expenseNotes.trim() || null,
+              cost_center: costCenter.trim() || null,
+              attachment_path: receiptPath || null,
+              attachment_name: receiptName || null,
+              attachment_mime_type: receiptMimeType || null,
+              attachment_size_bytes: receiptFile?.size || 0,
+            },
+            items: manualStockItems,
+          },
+        });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error(String((data as any).error));
+
+        const stockEntries = Array.isArray((data as any)?.stock) ? (data as any).stock : [];
+        const updatedProducts = stockEntries.filter((entry: any) => entry.product_updated === true).length;
+        toast({
+          title: 'Compra lançada com estoque',
+          description: `${stockEntries.length} entrada(s) registrada(s)${updatedProducts ? ` e ${updatedProducts} produto(s) de venda atualizado(s)` : ''}.`,
+        });
+        setManualMovesStock(false);
+        setManualStockItems([]);
+      } else {
 
       // Cada parcela/competência é uma obrigação independente. Assim, a baixa de
       // uma nunca altera as demais ocorrências da mesma compra ou recorrência.
@@ -412,6 +542,7 @@ export default function Despesas() {
           ? `${count} ${payableType === 'installment' ? 'parcelas' : 'competências'} criadas separadamente.`
           : 'Conta a pagar registrada com sucesso.'
       });
+      }
 
       // Reset form
       setDescription('');
@@ -429,12 +560,12 @@ export default function Despesas() {
       setCostCenter('');
       
       // Reload expenses
-      loadExpenses();
-    } catch (error) {
+      await Promise.all([loadExpenses(), loadPurchaseInvoices()]);
+    } catch (error: any) {
       console.error('Error registering expense:', error);
       toast({
         title: 'Erro',
-        description: 'Não foi possível registrar a despesa.',
+        description: friendlyErrorMessage(error, 'Não foi possível registrar a despesa.'),
         variant: 'destructive'
       });
     } finally {
@@ -876,6 +1007,29 @@ export default function Despesas() {
         )}
       />
 
+      <div className="grid gap-4 md:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => smartInvoiceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="group rounded-2xl border border-emerald-200 bg-emerald-950 p-5 text-left text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+        >
+          <div className="flex items-start gap-4">
+            <span className="rounded-xl bg-white/10 p-3"><Sparkles className="h-6 w-6 text-orange-400" /></span>
+            <span><strong className="block text-lg">Importar nota, cupom ou XML</strong><span className="mt-1 block text-sm text-emerald-100">A IA lê o documento, classifica os itens e prepara financeiro e estoque.</span></span>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => manualFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="group rounded-2xl border border-orange-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-lg"
+        >
+          <div className="flex items-start gap-4">
+            <span className="rounded-xl bg-orange-100 p-3"><PencilLine className="h-6 w-6 text-orange-700" /></span>
+            <span><strong className="block text-lg text-emerald-950">Lançar compra manualmente</strong><span className="mt-1 block text-sm text-slate-600">Cadastre só a conta ou inclua os produtos para também dar entrada no estoque.</span></span>
+          </div>
+        </button>
+      </div>
+
       <Card ref={smartInvoiceRef} className="border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/40">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-emerald-950">
@@ -997,7 +1151,8 @@ export default function Despesas() {
                             className="h-9"
                           />
                           <div className="mt-1 text-xs text-slate-500">{item.description}</div>
-                          {item.similar_to && <div className="text-xs text-emerald-700">Parecido com: {item.similar_to}</div>}
+                          {item.similar_to && <div className="text-xs font-semibold text-emerald-700">Encontrado no catálogo: {item.similar_to} ({Math.round(Number(item.match_confidence || 0) * 100)}%)</div>}
+                          {item.matched_product_tracks_stock && <div className="text-xs text-blue-700">Produto de venda com estoque será atualizado.</div>}
                         </TableCell>
                         <TableCell className="min-w-[160px]">
                           <Input value={item.category} onChange={(event) => updateSmartInvoiceItem(index, { category: event.target.value })} className="h-9" />
@@ -1169,7 +1324,7 @@ export default function Despesas() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Expense Form */}
-        <Card>
+        <Card ref={manualFormRef}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5" />
@@ -1181,6 +1336,20 @@ export default function Despesas() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div>
+                  <p className="font-bold text-emerald-950">Esta compra deve entrar no estoque?</p>
+                  <p className="text-xs text-emerald-800">Ao ativar, informe os itens. A IA procura produtos semelhantes e evita cadastro duplicado.</p>
+                </div>
+                <Switch checked={manualMovesStock} onCheckedChange={(checked) => {
+                  setManualMovesStock(checked);
+                  if (checked) {
+                    setPayableType('single');
+                    setManualStockItems((items) => items.length ? items : [newManualStockItem()]);
+                  }
+                }} />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="description">Descrição *</Label>
                 <Input
@@ -1279,6 +1448,58 @@ export default function Despesas() {
                 </Select>
               </div>
 
+              {manualMovesStock && (
+                <div className="space-y-4 rounded-2xl border border-emerald-200 bg-slate-50 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="font-bold text-emerald-950">Itens da entrada de estoque</h3>
+                      <p className="text-xs text-slate-600">A correspondência é conferida com o catálogo desta loja antes de qualquer alteração.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline" onClick={() => setManualStockItems((items) => [...items, newManualStockItem()])}>
+                        <Plus className="mr-1.5 h-4 w-4" />Adicionar item
+                      </Button>
+                      <Button type="button" size="sm" className="bg-emerald-800 hover:bg-emerald-900" disabled={manualClassifying || manualStockItems.length === 0} onClick={() => void classifyManualStockItems()}>
+                        <ScanSearch className="mr-1.5 h-4 w-4" />{manualClassifying ? 'Identificando...' : 'Identificar com IA'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {manualStockItems.map((item, index) => (
+                      <div key={item.local_id || item.id || index} className="rounded-xl border bg-white p-3">
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
+                          <div className="space-y-1 xl:col-span-4">
+                            <Label>Produto / insumo *</Label>
+                            <Input value={item.description} placeholder="Ex.: Coca-Cola lata 350 ml" onChange={(event) => updateManualStockItem(index, { description: event.target.value, normalized_name: event.target.value, ingredient_id: null, product_id: null, similar_to: null })} />
+                            {item.similar_to && (
+                              <p className="text-xs font-semibold text-emerald-700">Encontrado no estoque: {item.similar_to} ({Math.round(Number(item.match_confidence || 0) * 100)}%)</p>
+                            )}
+                            {item.matched_product_tracks_stock && <p className="text-xs text-blue-700">O estoque do produto de venda também será atualizado.</p>}
+                          </div>
+                          <div className="space-y-1 xl:col-span-2"><Label>Categoria</Label><Input value={item.category} onChange={(event) => updateManualStockItem(index, { category: event.target.value })} /></div>
+                          <div className="space-y-1 xl:col-span-1"><Label>Qtd.</Label><Input type="number" min="0.001" step="0.001" value={item.quantity} onChange={(event) => updateManualStockItem(index, { quantity: Number(event.target.value || 0) })} /></div>
+                          <div className="space-y-1 xl:col-span-1"><Label>Compra</Label><Select value={item.unit} onValueChange={(value) => updateManualStockItem(index, { unit: value, unit_confirmed: true, unit_source: 'confirmed' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PURCHASE_UNITS.map((unit) => <SelectItem key={unit} value={unit}>{unit.toUpperCase()}</SelectItem>)}</SelectContent></Select></div>
+                          <div className="space-y-1 xl:col-span-1"><Label>Conversão</Label><Input type="number" min="0.000001" step="0.001" value={item.conversion_factor || 1} onChange={(event) => updateManualStockItem(index, { conversion_factor: Number(event.target.value || 1) })} /></div>
+                          <div className="space-y-1 xl:col-span-1"><Label>Estoque</Label><Select value={item.stock_unit} onValueChange={(value) => updateManualStockItem(index, { stock_unit: value, unit_confirmed: true, unit_source: 'confirmed' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PURCHASE_UNITS.map((unit) => <SelectItem key={unit} value={unit}>{unit.toUpperCase()}</SelectItem>)}</SelectContent></Select></div>
+                          <div className="space-y-1 xl:col-span-1"><Label>Custo un.</Label><Input type="number" min="0" step="0.01" value={item.unit_price} onChange={(event) => updateManualStockItem(index, { unit_price: Number(event.target.value || 0) })} /></div>
+                          <div className="flex items-end xl:col-span-1"><Button type="button" variant="ghost" size="icon" className="text-red-700" aria-label={`Remover ${item.description || `item ${index + 1}`}`} onClick={() => setManualStockItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button></div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-slate-600">
+                          <span>Tipo: <strong>{item.inventory_kind === 'resale_product' ? 'Produto para revenda' : item.inventory_kind === 'packaging' ? 'Embalagem' : item.inventory_kind === 'cleaning' ? 'Limpeza' : item.inventory_kind === 'service' ? 'Serviço (não movimenta)' : 'Insumo'}</strong></span>
+                          <span>Entrada: {Number(item.quantity || 0)} {String(item.unit).toUpperCase()} × {Number(item.conversion_factor || 1)} = <strong>{Number(item.quantity || 0) * Number(item.conversion_factor || 1)} {String(item.stock_unit).toUpperCase()}</strong> · Total {formatCurrency(Number(item.total_price || 0))}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3">
+                    <span className="font-semibold text-emerald-950">Total dos itens: {formatCurrency(manualStockItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0))}</span>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setAmount(manualStockItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0).toFixed(2).replace('.', ','))}>Usar no valor da conta</Button>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="receipt">Comprovante (opcional)</Label>
                 <div className="flex items-center gap-2">
@@ -1309,7 +1530,7 @@ export default function Despesas() {
                 ) : (
                   <>
                     <Plus className="h-4 w-4 mr-2" />
-                    Registrar conta
+                    {manualMovesStock ? 'Registrar compra e dar entrada' : 'Registrar conta'}
                   </>
                 )}
               </Button>

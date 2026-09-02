@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { geminiGenerateContent, safeParseJson } from "../_shared/gemini.ts";
+import { findBestCatalogMatch } from "../_shared/catalogMatching.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -229,6 +230,48 @@ function looksLikeSaleProduct(item: any) {
   return false;
 }
 
+function inferInventoryKind(item: any) {
+  const explicit = String(item?.inventory_kind || "").toLowerCase().trim();
+  if (["ingredient", "resale_product", "packaging", "cleaning", "service", "other"].includes(explicit)) return explicit;
+  const value = cleanName(`${item?.category || ""} ${item?.subcategory || ""} ${item?.normalized_name || item?.description || ""}`).toLowerCase();
+  if (/servico|taxa|frete|mao de obra/.test(value)) return "service";
+  if (/limpeza|higiene|detergente|desinfetante/.test(value)) return "cleaning";
+  if (/embalagem|descartavel|copo|tampa|sacola|guardanapo/.test(value)) return "packaging";
+  if (looksLikeSaleProduct(item)) return "resale_product";
+  return "ingredient";
+}
+
+function enrichCatalogMatches(items: any[], ingredients: any[], products: any[]) {
+  return items.map((item) => {
+    const { similar_ingredient: _similarIngredient, similar_product: _similarProduct, ...baseItem } = item;
+    const ingredientMatch = findBestCatalogMatch(item.normalized_name || item.description, ingredients, item.similar_ingredient || item.similar_to);
+    const productMatch = findBestCatalogMatch(item.normalized_name || item.description, products, item.similar_product || item.similar_to);
+    const inventoryKind = inferInventoryKind(item);
+    const preferred = inventoryKind === "resale_product"
+      ? productMatch?.candidate || ingredientMatch?.candidate
+      : ingredientMatch?.candidate || productMatch?.candidate;
+    const unitFromCatalog = preferred?.unit ? normalizeUnit(preferred.unit) : null;
+    const shouldUseCatalogUnit = !item.unit_confirmed && unitFromCatalog;
+    return {
+      ...baseItem,
+      normalized_name: preferred?.name || item.normalized_name,
+      category: preferred?.category || item.category || "Insumos",
+      subcategory: preferred?.subcategory || item.subcategory || "",
+      unit: shouldUseCatalogUnit ? unitFromCatalog : normalizeUnit(item.unit),
+      stock_unit: shouldUseCatalogUnit ? unitFromCatalog : normalizeUnit(item.stock_unit || item.unit),
+      unit_source: shouldUseCatalogUnit ? "catalog" : item.unit_source,
+      unit_confirmed: Boolean(item.unit_confirmed || shouldUseCatalogUnit),
+      inventory_kind: inventoryKind,
+      ingredient_id: ingredientMatch?.candidate.id || null,
+      product_id: productMatch?.candidate.id || null,
+      matched_product_tracks_stock: productMatch?.candidate.track_stock === true,
+      create_sale_product: inventoryKind === "resale_product" && !productMatch,
+      similar_to: preferred?.name || item.similar_to || null,
+      match_confidence: Math.max(ingredientMatch?.score || 0, productMatch?.score || 0),
+    };
+  });
+}
+
 async function ensureCategory(supabase: any, userId: string, name: string) {
   const categoryName = String(name || "Mercadorias").trim() || "Mercadorias";
   const { data: existing } = await supabase
@@ -344,18 +387,19 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
   const isXml = mimeType.includes("xml") || fileName.toLowerCase().endsWith(".xml");
   if (!isXml && !geminiKey && !openAiKey) throw new Error("Configure GEMINI_API_KEY ou OPENAI_API_KEY para processar notas com IA.");
 
-  const { data: ingredients } = await supabase
-    .from("ingredients")
-    .select("id, name, category, subcategory, unit, cost_price, price, current_stock")
-    .eq("user_id", userId)
-    .limit(300);
+  const [{ data: ingredients }, { data: products }] = await Promise.all([
+    supabase.from("ingredients")
+      .select("id, name, category, subcategory, unit, cost_price, price, current_stock")
+      .eq("user_id", userId).limit(500),
+    supabase.from("products")
+      .select("id, name, category, unit, track_stock, stock_quantity")
+      .eq("user_id", userId).limit(500),
+  ]);
 
-  const knownCatalog = (ingredients || []).map((item: any) => ({
-    name: item.name,
-    category: item.category || "Insumos",
-    subcategory: item.subcategory || "",
-    unit: item.unit || "un",
-  }));
+  const knownCatalog = [
+    ...(ingredients || []).map((item: any) => ({ kind: "ingredient", name: item.name, category: item.category || "Insumos", subcategory: item.subcategory || "", unit: item.unit || "un" })),
+    ...(products || []).map((item: any) => ({ kind: "product", name: item.name, category: item.category || "Mercadorias", unit: item.unit || "un", track_stock: item.track_stock === true })),
+  ];
 
   const system = [
     "Voce e um especialista em compras, estoque e restaurantes no Brasil.",
@@ -391,11 +435,14 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
       "unit_price": 0,
       "total_price": 0,
       "stock_unit": "un|kg|g|l|ml|cx|pct|fd|bd|dz",
+      "inventory_kind": "ingredient|resale_product|packaging|cleaning|service|other",
       "conversion_factor": 1,
       "unit_source": "invoice|catalog|inferred|unknown",
       "unit_confirmed": true,
       "control_stock": true,
       "similar_to": "nome de item parecido do catalogo se houver",
+      "similar_ingredient": "nome EXATO do insumo correspondente no catalogo ou vazio",
+      "similar_product": "nome EXATO do produto de venda correspondente no catalogo ou vazio",
       "confidence": 0.90
     }
   ]
@@ -408,6 +455,8 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
     "- conversion_factor informa quanto entra na unidade de estoque (ex.: 1 CX = 12 UN => 12). Use 1 se a nota nao informar.",
     "- Nunca invente unidade silenciosamente: se houver duvida, use unit_source unknown, unit_confirmed false e confidence baixo.",
     "- control_stock deve ser true para insumos, embalagens e mercadorias controlaveis; false para servicos/taxas/frete.",
+    "- Identifique inventory_kind e reutilize itens do catalogo quando forem realmente o mesmo produto, mesmo com abreviacoes de marca/volume.",
+    "- Nunca associe produtos apenas por uma palavra generica. Em caso de duvida, deixe similar_ingredient e similar_product vazios.",
   ].join("\n");
 
   let parsed: any = isXml ? parseNfeXml(fileBase64) : null;
@@ -455,7 +504,7 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
   }
   if (!parsed || !Array.isArray(parsed.items)) throw new Error("A IA nao conseguiu ler itens validos da nota.");
 
-  const aiItems = parsed.items.map((item: any) => {
+  const parsedItems = parsed.items.map((item: any) => {
     const total = numberValue(item.total_price);
     const quantity = Math.max(0.001, numberValue(item.quantity, 1));
     return {
@@ -474,8 +523,12 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
       conversion_factor: Math.max(0.000001, numberValue(item.conversion_factor, 1)),
       unit_source: String(item.unit_source || (recognizedUnit(item.unit) ? "invoice" : "unknown")),
       unit_confirmed: item.unit_confirmed === true && recognizedUnit(item.unit),
+      inventory_kind: inferInventoryKind(item),
+      similar_ingredient: String(item.similar_ingredient || "").trim() || null,
+      similar_product: String(item.similar_product || "").trim() || null,
     };
   }).filter((item: any) => item.normalized_name);
+  const aiItems = enrichCatalogMatches(parsedItems, ingredients || [], products || []);
 
   const totalAmount = numberValue(parsed.total_amount, aiItems.reduce((sum: number, item: any) => sum + Number(item.total_price || 0), 0));
   const attachment = await uploadReceipt(supabase, userId, fileBase64, mimeType, fileName);
@@ -525,6 +578,77 @@ async function analyzeInvoice(supabase: any, userId: string, body: any) {
   return json({ ok: true, import: importRow, items: insertedItems || [] });
 }
 
+async function classifyManualItems(supabase: any, userId: string, rawItems: any[]) {
+  const [{ data: ingredients }, { data: products }] = await Promise.all([
+    supabase.from("ingredients").select("id,name,category,subcategory,unit,current_stock").eq("user_id", userId).limit(500),
+    supabase.from("products").select("id,name,category,unit,track_stock,stock_quantity").eq("user_id", userId).limit(500),
+  ]);
+  let classified = rawItems.map((item, index) => ({
+    ...item,
+    local_id: String(item.local_id || item.id || index),
+    description: String(item.description || item.normalized_name || `Item ${index + 1}`).trim(),
+    normalized_name: cleanName(item.normalized_name || item.description || `Item ${index + 1}`),
+    category: String(item.category || "Insumos").trim(),
+    inventory_kind: inferInventoryKind(item),
+  }));
+
+  const geminiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_API_KEY");
+  if (geminiKey && classified.length > 0) {
+    try {
+      const catalog = [
+        ...(ingredients || []).map((item: any) => ({ kind: "ingredient", name: item.name, category: item.category, subcategory: item.subcategory, unit: item.unit })),
+        ...(products || []).map((item: any) => ({ kind: "product", name: item.name, category: item.category, unit: item.unit, track_stock: item.track_stock === true })),
+      ];
+      const ai = await geminiGenerateContent({
+        apiKey: geminiKey,
+        model: Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash",
+        system: "Classifique itens de compra de restaurante. Nao invente correspondencias. Retorne somente JSON valido.",
+        user: [
+          `Itens: ${JSON.stringify(classified).slice(0, 12000)}`,
+          `Catalogo desta loja: ${JSON.stringify(catalog).slice(0, 18000)}`,
+          'Retorne {"items":[{"local_id":"...","normalized_name":"...","category":"...","subcategory":"...","inventory_kind":"ingredient|resale_product|packaging|cleaning|service|other","control_stock":true,"similar_ingredient":"nome exato ou vazio","similar_product":"nome exato ou vazio","confidence":0.9}]}',
+        ].join("\n"),
+        temperature: 0.1,
+        responseMimeType: "application/json",
+      });
+      const parsed = safeParseJson(ai.text);
+      if (Array.isArray(parsed?.items)) {
+        const byId = new Map(parsed.items.map((item: any) => [String(item.local_id || ""), item]));
+        classified = classified.map((item) => ({ ...item, ...(byId.get(item.local_id) || {}) }));
+      }
+    } catch (error) {
+      console.warn("manual item AI classification fallback:", error);
+    }
+  }
+
+  return enrichCatalogMatches(classified, ingredients || [], products || []).map((item) => ({
+    ...item,
+    quantity: Math.max(0.000001, numberValue(item.quantity, 1)),
+    unit: normalizeUnit(item.unit),
+    stock_unit: normalizeUnit(item.stock_unit || item.unit),
+    conversion_factor: Math.max(0.000001, numberValue(item.conversion_factor, 1)),
+    unit_price: Math.max(0, numberValue(item.unit_price, 0)),
+    total_price: Math.max(0, numberValue(item.total_price, numberValue(item.quantity, 1) * numberValue(item.unit_price, 0))),
+    control_stock: item.control_stock !== false && item.inventory_kind !== "service",
+    unit_confirmed: item.unit_confirmed !== false && recognizedUnit(item.unit),
+  }));
+}
+
+async function commitManualPurchase(supabase: any, userId: string, body: any) {
+  const rawItems = Array.isArray(body.items) ? body.items : [];
+  if (rawItems.length === 0) throw new Error("Adicione ao menos um item à compra manual.");
+  const items = await classifyManualItems(supabase, userId, rawItems);
+  const { data, error } = await supabase.rpc("commit_manual_purchase_import", {
+    p_store_user_id: userId,
+    p_purchase: body.purchase || {},
+    p_items: items,
+    p_launch_expense: body.launchExpense !== false,
+    p_launch_stock: body.launchStock !== false,
+  });
+  if (error) throw error;
+  return json({ ...(data || { ok: true }), items });
+}
+
 async function commitInvoice(supabase: any, userId: string, body: any) {
   const importId = String(body.importId || body.import_id || "");
   if (!importId) throw new Error("Importacao nao informada.");
@@ -571,7 +695,8 @@ async function commitInvoice(supabase: any, userId: string, body: any) {
       unit_confirmed: merged.control_stock === false
         ? true
         : merged.unit_confirmed === true || (merged.unit_confirmed === undefined && recognizedUnit(merged.unit)),
-      create_sale_product: looksLikeSaleProduct(merged),
+      create_sale_product: merged.create_sale_product === true
+        || (!merged.product_id && looksLikeSaleProduct(merged)),
     };
   }).filter((item: any) => item.normalized_name);
   const { data, error } = await supabase.rpc("commit_purchase_invoice_import", {
@@ -620,6 +745,8 @@ serve(async (req) => {
     }
     const operation = String(body.operation || "analyze");
     if (operation === "analyze") return await analyzeInvoice(supabase, requestedUserId, body);
+    if (operation === "classify-manual") return json({ ok: true, items: await classifyManualItems(supabase, requestedUserId, Array.isArray(body.items) ? body.items : []) });
+    if (operation === "commit-manual") return await commitManualPurchase(supabase, requestedUserId, body);
     if (operation === "commit") return await commitInvoice(supabase, requestedUserId, body);
     throw new Error("Operacao nao suportada.");
   } catch (error: any) {
