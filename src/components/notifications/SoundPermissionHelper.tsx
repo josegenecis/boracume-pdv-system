@@ -2,38 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Volume2 } from 'lucide-react';
-import { soundNotifications } from '@/utils/soundUtils';
+import {
+  POPSYSTEM_AUDIO_BLOCKED_EVENT,
+  POPSYSTEM_AUDIO_UNLOCKED_EVENT,
+  soundNotifications,
+} from '@/utils/soundUtils';
 
 const SoundPermissionHelper: React.FC = () => {
-  const [needsPermission, setNeedsPermission] = useState(false);
+  const [needsPermission, setNeedsPermission] = useState(
+    () => soundNotifications.isAudioSupported() && !soundNotifications.isAudioUnlocked(),
+  );
 
   useEffect(() => {
-    // Verificar se o áudio está suspenso ou bloqueado
-    const checkAudioContext = () => {
-      // @ts-ignore
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (AudioContext) {
-        const ctx = new AudioContext();
-        if (ctx.state === 'suspended') {
-          setNeedsPermission(true);
-        }
-        ctx.close(); // Clean up temp context
-      }
-    };
+    const handleUnlocked = () => setNeedsPermission(false);
+    const handleBlocked = () => setNeedsPermission(true);
 
-    checkAudioContext();
-    
-    // Fallback: Verificar localStorage também
-    const soundAlreadyUnlocked = localStorage.getItem('sound_unlocked') === 'true';
-    if (!soundAlreadyUnlocked && soundNotifications.isAudioSupported()) {
-      setNeedsPermission(true);
-    }
+    setNeedsPermission(soundNotifications.isAudioSupported() && !soundNotifications.isAudioUnlocked());
+    window.addEventListener(POPSYSTEM_AUDIO_UNLOCKED_EVENT, handleUnlocked);
+    window.addEventListener(POPSYSTEM_AUDIO_BLOCKED_EVENT, handleBlocked);
+
+    return () => {
+      window.removeEventListener(POPSYSTEM_AUDIO_UNLOCKED_EVENT, handleUnlocked);
+      window.removeEventListener(POPSYSTEM_AUDIO_BLOCKED_EVENT, handleBlocked);
+    };
   }, []);
 
   const enableAudio = async () => {
     try {
       await soundNotifications.enableSound();
-      localStorage.setItem('sound_unlocked', 'true');
       setNeedsPermission(false);
     } catch (error) {
       console.error('❌ Erro ao habilitar áudio:', error);

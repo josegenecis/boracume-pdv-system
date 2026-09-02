@@ -164,37 +164,6 @@ const GlobalNotificationSystem: React.FC = () => {
   };
 
   useEffect(() => {
-    try {
-      if (localStorage.getItem('sound_unlocked') === 'true') return;
-    } catch {}
-
-    const unlock = async () => {
-      try {
-        await soundNotifications.enableSound();
-        try {
-          localStorage.setItem('sound_unlocked', 'true');
-        } catch {}
-      } catch {}
-      try {
-        if ('Notification' in window && Notification.permission === 'default') {
-          await Notification.requestPermission();
-        }
-      } catch {}
-    };
-
-    const onFirstInteraction = () => {
-      unlock().catch(() => {});
-    };
-
-    window.addEventListener('pointerdown', onFirstInteraction, { passive: true, once: true });
-    window.addEventListener('touchstart', onFirstInteraction, { passive: true, once: true });
-    return () => {
-      window.removeEventListener('pointerdown', onFirstInteraction as any);
-      window.removeEventListener('touchstart', onFirstInteraction as any);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!user) return;
     if (isStandaloneOrderingScreen) return;
 

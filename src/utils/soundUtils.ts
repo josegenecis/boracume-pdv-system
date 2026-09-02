@@ -1,6 +1,8 @@
 // Utility functions for sound notifications using HTML5 Audio
 export const POPSYSTEM_ORDER_SOUND_PATH = '/sounds/Toque%20PopSystem.mp3?v=20260901';
 export const POPSYSTEM_ORDER_SOUND_TYPE = 'bell';
+export const POPSYSTEM_AUDIO_UNLOCKED_EVENT = 'popsystem:audio-unlocked';
+export const POPSYSTEM_AUDIO_BLOCKED_EVENT = 'popsystem:audio-blocked';
 
 export class SoundNotifications {
   private isEnabled: boolean = true;
@@ -12,9 +14,53 @@ export class SoundNotifications {
   private persistentAlertActive: boolean = false;
   private persistentAlertRestartTimer: number | null = null;
   private persistentAlertAudio: HTMLAudioElement | null = null;
+  private autoUnlockInstalled: boolean = false;
+  private autoUnlockInProgress: boolean = false;
 
   constructor() {
     this.preloadSounds();
+    this.installAutoUnlock();
+  }
+
+  private dispatchAudioState(eventName: string) {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(eventName));
+  }
+
+  private markAudioBlocked() {
+    this.unlocked = false;
+    this.dispatchAudioState(POPSYSTEM_AUDIO_BLOCKED_EVENT);
+    this.installAutoUnlock();
+  }
+
+  private installAutoUnlock() {
+    if (typeof window === 'undefined' || this.autoUnlockInstalled || !this.isAudioSupported()) return;
+    this.autoUnlockInstalled = true;
+
+    const removeListeners = () => {
+      window.removeEventListener('pointerdown', unlockFromInteraction);
+      window.removeEventListener('touchstart', unlockFromInteraction);
+      window.removeEventListener('keydown', unlockFromInteraction);
+      this.autoUnlockInstalled = false;
+    };
+
+    const unlockFromInteraction = () => {
+      if (this.autoUnlockInProgress || this.unlocked) {
+        if (this.unlocked) removeListeners();
+        return;
+      }
+      this.autoUnlockInProgress = true;
+      void this.enableSound()
+        .then(removeListeners)
+        .catch(() => {})
+        .finally(() => {
+          this.autoUnlockInProgress = false;
+        });
+    };
+
+    window.addEventListener('pointerdown', unlockFromInteraction, { passive: true });
+    window.addEventListener('touchstart', unlockFromInteraction, { passive: true });
+    window.addEventListener('keydown', unlockFromInteraction);
   }
 
   private normalizeSoundType(_soundType: string) {
@@ -76,7 +122,7 @@ export class SoundNotifications {
         await audioContext.resume()
       }
     } catch (e) {
-      this.unlocked = false
+      this.markAudioBlocked()
       throw e
     }
 
@@ -98,22 +144,27 @@ export class SoundNotifications {
       if (audio) {
         const prevVolume = audio.volume
         audio.volume = 0
-        if (!audio.src) audio.src = this.getDefaultSoundPath('bell')
         try {
+          if (!audio.src) audio.src = this.getDefaultSoundPath('bell')
           await audio.play()
           audio.pause()
           audio.currentTime = 0
-        } catch {}
-        audio.volume = prevVolume
+        } finally {
+          audio.volume = prevVolume
+        }
       }
-    } catch {}
+    } catch (error) {
+      this.markAudioBlocked()
+      throw error
+    }
 
     if (audioContext.state !== 'running') {
-      this.unlocked = false
+      this.markAudioBlocked()
       throw new Error('Áudio bloqueado pelo navegador')
     }
 
     this.unlocked = true
+    this.dispatchAudioState(POPSYSTEM_AUDIO_UNLOCKED_EVENT)
   }
 
   async playSound(soundType: string = 'bell') {
@@ -149,6 +200,7 @@ export class SoundNotifications {
         try {
           await audio.play();
         } catch (err) {
+          if ((err as DOMException)?.name === 'NotAllowedError') this.markAudioBlocked();
           console.warn('⚠️ Reprodução do toque oficial bloqueada pelo navegador', err);
         }
       } else {
@@ -224,6 +276,7 @@ export class SoundNotifications {
 
       await audio.play();
     } catch (error) {
+      if ((error as DOMException)?.name === 'NotAllowedError') this.markAudioBlocked();
       console.warn('⚠️ Falha ao reproduzir alerta persistente oficial:', error);
       if (!this.persistentAlertActive || !this.isEnabled) return;
       this.persistentAlertRestartTimer = window.setTimeout(() => {
@@ -298,6 +351,10 @@ export class SoundNotifications {
 
   isAudioSupported(): boolean {
     return typeof Audio !== 'undefined';
+  }
+
+  isAudioUnlocked(): boolean {
+    return this.unlocked;
   }
 
   // Helper específico para cozinha (Sino alto)
