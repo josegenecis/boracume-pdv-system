@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildPayrollPreview, calculateAttendance } from '../src/lib/team/attendanceEngine';
+import { formatCpfInput, formatPhoneInput, formatVehiclePlateInput, onlyDigits } from '../src/lib/team/fieldMasks';
 
 const rules = {
   overtimeToleranceMinutes: 10,
@@ -57,4 +58,12 @@ test('prévia desconta adiantamento sem criar conta a receber', () => {
   });
   assert.equal(preview.overtimeAmount, 15);
   assert.equal(preview.netAmount, 2065);
+});
+
+test('padroniza CPF, telefone e placa sem persistir pontuação indevida', () => {
+  assert.equal(formatCpfInput('12345678901'), '123.456.789-01');
+  assert.equal(formatPhoneInput('85994283885'), '(85) 99428-3885');
+  assert.equal(formatPhoneInput('8533334444'), '(85) 3333-4444');
+  assert.equal(formatVehiclePlateInput('abc-1d23'), 'ABC1D23');
+  assert.equal(onlyDigits('(85) 99428-3885'), '85994283885');
 });
