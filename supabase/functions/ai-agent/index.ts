@@ -1198,6 +1198,20 @@ Deno.serve(async (req) => {
         {
             type: "function",
             function: {
+                name: "get_team_summary",
+                description: "Consulta dados reais da Central da Equipe: funcionários, quem está trabalhando, ponto incompleto, fechamento, faltas, horas extras, comissões, adiantamentos e saldo previsto. Nunca estime valores ausentes.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        competence: { type: "string", description: "Competência YYYY-MM. Se omitida, usa o mês atual." },
+                        employee_name: { type: "string", description: "Nome do colaborador, quando a pergunta for individual." }
+                    }
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
                 name: "reverse_expense",
                 description: "Estorna uma despesa pelo id (mantém histórico).",
                 parameters: {
@@ -1258,6 +1272,7 @@ Deno.serve(async (req) => {
         if (deliveryMutationTools.has(name)) return canManageDelivery;
         if (financialMutationTools.has(name)) return canManageFinancial;
         if (name === 'list_expenses') return canViewFinancial;
+        if (name === 'get_team_summary') return operatorIsAdmin || operatorPermissions.payroll_view === true || operatorPermissions.payroll_manage === true || operatorPermissions.timeclock_manage === true;
         return true;
     });
 
@@ -2495,6 +2510,45 @@ Regras:
                     const { data: expenses, error } = await query;
                     if (error) throw error;
                     result = { success: true, expenses };
+                }
+
+                else if (fnName === "get_team_summary") {
+                    const competence = /^\d{4}-\d{2}$/.test(String(args.competence || ''))
+                        ? String(args.competence)
+                        : new Date().toISOString().slice(0, 7);
+                    const startDate = `${competence}-01`;
+                    const endDate = new Date(Number(competence.slice(0, 4)), Number(competence.slice(5, 7)), 0).toISOString().slice(0, 10);
+                    let employeeQuery = supabase.from('employees').select('id,full_name,display_name,cpf,job_title,department,employment_status').eq('restaurant_id', userId);
+                    if (args.employee_name) employeeQuery = employeeQuery.ilike('full_name', `%${String(args.employee_name).trim()}%`);
+                    const [{ data: employees, error: employeeError }, { data: closings, error: closingError }, { data: commissions, error: commissionError }, { data: advances, error: advanceError }, { data: todayEvents, error: eventError }] = await Promise.all([
+                        employeeQuery.order('full_name').limit(100),
+                        supabase.from('employee_payroll_closings').select('id,status,total_earnings,total_deductions,total_net,competence_date').eq('restaurant_id', userId).gte('competence_date', startDate).lte('competence_date', endDate).order('created_at', { ascending: false }).limit(1),
+                        supabase.from('employee_commissions').select('employee_id,amount,status,description').eq('restaurant_id', userId).gte('competence_date', startDate).lte('competence_date', endDate).neq('status', 'cancelled'),
+                        supabase.from('employee_advances').select('employee_id,amount,status,advance_date').eq('restaurant_id', userId).gte('advance_date', startDate).lte('advance_date', endDate).neq('status', 'reversed'),
+                        supabase.from('employee_time_clock_events').select('employee_id,event_type,occurred_at,status').eq('user_id', userId).gte('occurred_at', `${new Date().toISOString().slice(0,10)}T00:00:00`).neq('status', 'rejected').order('occurred_at'),
+                    ]);
+                    if (employeeError || closingError || commissionError || advanceError || eventError) throw employeeError || closingError || commissionError || advanceError || eventError;
+                    const closing = closings?.[0] || null;
+                    const { data: payrollItems, error: itemsError } = closing
+                        ? await supabase.from('employee_payroll_items').select('employee_id,base_salary,worked_minutes,overtime_minutes,late_minutes,absence_days,commissions,bonuses,advances,total_earnings,total_deductions,net_amount,status').eq('closing_id', closing.id)
+                        : { data: [], error: null };
+                    if (itemsError) throw itemsError;
+                    const lastEventByEmployee = new Map<string, any>();
+                    for (const event of todayEvents || []) if (event.employee_id) lastEventByEmployee.set(event.employee_id, event);
+                    result = {
+                        success: true,
+                        competence,
+                        source_notice: closing ? 'Valores provenientes do fechamento salvo.' : 'Não existe fechamento salvo; não invente valores de pagamento.',
+                        closing,
+                        employees: (employees || []).map((employee: any) => ({
+                            ...employee,
+                            working_now: ['clock_in','break_end'].includes(lastEventByEmployee.get(employee.id)?.event_type),
+                            point_incomplete: Boolean(lastEventByEmployee.get(employee.id)) && lastEventByEmployee.get(employee.id)?.event_type !== 'clock_out',
+                            payroll: (payrollItems || []).find((item: any) => item.employee_id === employee.id) || null,
+                            commissions: (commissions || []).filter((item: any) => item.employee_id === employee.id).reduce((sum: number,item: any) => sum + Number(item.amount || 0), 0),
+                            advances: (advances || []).filter((item: any) => item.employee_id === employee.id).reduce((sum: number,item: any) => sum + Number(item.amount || 0), 0),
+                        })),
+                    };
                 }
 
                 else if (fnName === "delete_expense") {

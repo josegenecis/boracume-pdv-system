@@ -2,7 +2,7 @@ export type OperatorSession = {
   id: string
   name: string
   role?: 'admin' | 'cashier' | string
-  permissions?: Record<string, any>
+  permissions?: Record<string, unknown>
   user_id?: string
 }
 
@@ -36,7 +36,9 @@ export const clearLocalOperatorSession = () => {
     localStorage.removeItem('waiter_session')
     sessionStorage.removeItem('operator_session')
     sessionStorage.removeItem('waiter_session')
-  } catch {}
+  } catch {
+    return
+  }
 }
 
 export const isAdminOperator = (session: OperatorSession | null): boolean => {
@@ -161,7 +163,7 @@ export const OPERATOR_AREA_PERMISSIONS: Record<OperatorArea, string[]> = {
     'ifood_manage',
     'users_manage',
   ],
-  team: ['users_manage'],
+  team: ['users_manage', 'timeclock_manage', 'schedule_manage', 'payroll_view', 'payroll_manage', 'commission_manage'],
   timeclock: ['timeclock_manage', 'users_manage'],
   // `delivery_manage` e `settings_manage` preservam operadores já cadastrados.
   delivery: ['delivery_manage', 'delivery_areas_manage', 'delivery_drivers_manage', 'settings_manage'],
@@ -199,8 +201,8 @@ const defaultOperatorRoutes: Array<{ area: OperatorArea; path: string }> = [
   { area: 'reports', path: '/relatorios' },
   { area: 'marketing', path: '/marketing' },
   { area: 'whatsapp', path: '/whatsapp-bot' },
-  { area: 'team', path: '/garcons' },
-  { area: 'timeclock', path: '/ponto' },
+  { area: 'team', path: '/equipe' },
+  { area: 'timeclock', path: '/equipe?tab=timeclock' },
   { area: 'deliveryAreas', path: '/bairros-entrega' },
   { area: 'deliveryTeam', path: '/entregadores' },
   { area: 'settings', path: '/configuracoes' },
@@ -226,7 +228,7 @@ const pathOperatorAreas: Array<{ area: OperatorArea; paths: string[] }> = [
   { area: 'marketing', paths: ['/marketing', '/loyalty'] },
   { area: 'whatsapp', paths: ['/whatsapp-bot'] },
   { area: 'settings', paths: ['/configuracoes'] },
-  { area: 'team', paths: ['/garcons'] },
+  { area: 'team', paths: ['/equipe', '/garcons'] },
   { area: 'timeclock', paths: ['/ponto'] },
   { area: 'deliveryAreas', paths: ['/bairros-entrega'] },
   { area: 'deliveryTeam', paths: ['/entregadores', '/motoboys'] },

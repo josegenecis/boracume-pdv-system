@@ -70,7 +70,9 @@ test('permissões granulares liberam somente as áreas correspondentes', () => {
   assert.equal(canAccessOperatorArea(ifood, 'integrations'), true);
   assert.equal(canAccessOperatorArea(payments, 'pix'), true);
   assert.equal(canAccessOperatorArea(timeclock, 'timeclock'), true);
-  assert.equal(canAccessOperatorArea(timeclock, 'team'), false);
+  // O ponto agora vive dentro da Central de Equipe; a permissão de ponto
+  // precisa liberar o contêiner da central sem conceder as demais funções.
+  assert.equal(canAccessOperatorArea(timeclock, 'team'), true);
 });
 
 test('cancelamento de pedidos é independente da permissão de remover itens', () => {

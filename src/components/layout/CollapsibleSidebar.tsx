@@ -144,9 +144,7 @@ const CollapsibleSidebar = () => {
         { to: '/dashboard', label: 'Visão geral', feature: 'dashboard', area: 'dashboard' },
         { to: '/relatorios', label: 'Relatórios de vendas', feature: 'reports', area: 'reports' },
         { to: '/inteligencia/cmv', label: 'CMV e rentabilidade', feature: 'cmv', area: 'stock' },
-        { to: '/configuracoes?tab=users', label: 'Usuários e permissões', feature: 'team', area: 'team' },
-        { to: '/garcons', label: 'Equipe operacional', feature: 'team', area: 'team' },
-        { to: '/ponto', label: 'Controle de ponto', feature: 'team', area: 'timeclock' },
+        { to: '/equipe', label: 'Central da Equipe', feature: 'team', area: 'team' },
       ]
     },
     {

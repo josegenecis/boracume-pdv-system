@@ -1061,7 +1061,7 @@ const DeliverySettings = () => {
           <h3 className="font-semibold text-gray-900">Equipe de Entregadores</h3>
           <p className="text-sm text-gray-500">Gerencie sua equipe de entregadores e motoboys</p>
         </div>
-        <Button onClick={() => navigate('/entregadores')} variant="outline" className="gap-2">
+        <Button onClick={() => navigate('/equipe?tab=collaborators')} variant="outline" className="gap-2">
           <Users size={16} />
           Gerenciar Equipe
         </Button>

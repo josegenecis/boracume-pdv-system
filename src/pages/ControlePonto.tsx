@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { getLocalOperatorSession } from '@/services/operatorAuth';
 
 type TimeClockSettings = {
   enabled: boolean;
@@ -363,6 +364,32 @@ export default function ControlePonto() {
         description: error?.message || 'Nao foi possivel revisar este ponto.',
         variant: 'destructive',
       });
+    } finally {
+      setReviewingEventId(null);
+    }
+  };
+
+  const correctEvent = async (event: TimeClockEvent) => {
+    const current = new Date(event.occurred_at);
+    const localValue = new Date(current.getTime() - current.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+    const nextValue = window.prompt('Nova data e hora (AAAA-MM-DDTHH:mm):', localValue);
+    if (!nextValue) return;
+    const reason = window.prompt('Motivo da correção (obrigatório):', 'Correção solicitada pelo responsável');
+    if (!reason) return;
+    setReviewingEventId(event.id);
+    try {
+      const operator = getLocalOperatorSession();
+      const { error } = await (supabase.rpc as any)('correct_employee_time_entry', {
+        p_event_id: event.id,
+        p_occurred_at: new Date(nextValue).toISOString(),
+        p_reason: reason,
+        p_operator_id: operator?.id || null,
+      });
+      if (error) throw error;
+      toast({ title: 'Ponto corrigido com auditoria', description: 'O original foi preservado e vinculado ao novo registro.' });
+      await loadData();
+    } catch (error: any) {
+      toast({ title: 'Erro na correção', description: error?.message || 'Não foi possível corrigir o ponto.', variant: 'destructive' });
     } finally {
       setReviewingEventId(null);
     }
@@ -1078,9 +1105,9 @@ export default function ControlePonto() {
                               Aprovar
                             </Button>
                           </div>
-                        ) : (
-                          <span className="text-sm text-slate-400">Concluída</span>
-                        )}
+                        ) : event.status !== 'rejected' ? (
+                          <Button size="sm" variant="outline" disabled={reviewingEventId === event.id} onClick={() => void correctEvent(event)}>Corrigir</Button>
+                        ) : <span className="text-sm text-slate-400">Substituído/rejeitado</span>}
                       </TableCell>
                     </TableRow>
                   ))}

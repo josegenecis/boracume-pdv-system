@@ -43,8 +43,7 @@ const NotFound = lazy(() => import('@/pages/NotFound'));
 const Loyalty = lazy(() => import('@/pages/Loyalty'));
 const BairrosEntrega = lazy(() => import('@/pages/BairrosEntrega'));
 const Entregadores = lazy(() => import('@/pages/Entregadores'));
-const Garcons = lazy(() => import('@/pages/Garcons'));
-const ControlePonto = lazy(() => import('@/pages/ControlePonto'));
+const Equipe = lazy(() => import('@/pages/Equipe'));
 const Ingredientes = lazy(() => import('@/pages/Ingredientes'));
 const InteligenciaCMV = lazy(() => import('@/pages/InteligenciaCMV'));
 const Fiscal = lazy(() => import('@/pages/Fiscal'));
@@ -203,8 +202,9 @@ function AppContent() {
           <Route path="/bairros-entrega" element={<OperatorRoute area="deliveryAreas"><FeatureRoute feature="delivery"><BairrosEntrega /></FeatureRoute></OperatorRoute>} />
           <Route path="/entregadores" element={<OperatorRoute area="deliveryTeam"><FeatureRoute feature="deliveryTeam"><Entregadores /></FeatureRoute></OperatorRoute>} />
           <Route path="/motoboys" element={<Navigate to="/entregadores" replace />} />
-          <Route path="/garcons" element={<OperatorRoute area="team"><FeatureRoute feature="team"><Garcons /></FeatureRoute></OperatorRoute>} />
-          <Route path="/ponto" element={<OperatorRoute area="timeclock"><FeatureRoute feature="team"><ControlePonto /></FeatureRoute></OperatorRoute>} />
+          <Route path="/equipe" element={<OperatorRoute area="team"><FeatureRoute feature="team"><Equipe /></FeatureRoute></OperatorRoute>} />
+          <Route path="/garcons" element={<Navigate to="/equipe?tab=collaborators" replace />} />
+          <Route path="/ponto" element={<Navigate to="/equipe?tab=timeclock" replace />} />
           <Route path="/fiscal" element={<OperatorRoute area="fiscal"><FeatureRoute feature="fiscal"><Fiscal /></FeatureRoute></OperatorRoute>} />
           <Route path="/nfce" element={<Navigate to="/fiscal" replace />} />
           <Route path="/caixa" element={<OperatorRoute area="cash"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />

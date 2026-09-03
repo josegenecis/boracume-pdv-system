@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import ProfileSettings from '@/components/settings/ProfileSettings';
 import NotificationSettings from '@/components/settings/NotificationSettings';
 import AppearanceSettings from '@/components/settings/AppearanceSettings';
@@ -20,7 +21,7 @@ import PixSetup from '@/pages/PixSetup';
 import HardwareSettings from '@/components/settings/HardwareSettings';
 import SupportSettings from '@/components/settings/SupportSettings';
 import TotemSettings from '@/components/settings/TotemSettings';
-import Garcons from '@/pages/Garcons';
+import { UsersRound } from 'lucide-react';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -292,7 +293,12 @@ const Configuracoes: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="users">
-          <Garcons />
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6">
+            <UsersRound className="h-7 w-7 text-emerald-700" />
+            <h2 className="mt-3 text-xl font-bold text-emerald-950">Cadastros centralizados na Equipe</h2>
+            <p className="mt-2 max-w-2xl text-sm text-slate-600">Usuários, garçons, motoboys, acessos, permissões, ponto e remuneração agora pertencem ao mesmo cadastro de colaborador.</p>
+            <Button className="mt-5 bg-emerald-700 hover:bg-emerald-800" onClick={() => navigate('/equipe?tab=collaborators')}>Abrir Central da Equipe</Button>
+          </div>
         </TabsContent>
 
         <TabsContent value="support">

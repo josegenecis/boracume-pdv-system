@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Banknote, Copy, ExternalLink, History, KeyRound, Pencil, Plus, Smartphone, Trash2, Truck } from "lucide-react";
+import { Banknote, Copy, ExternalLink, History, KeyRound, Plus, Smartphone, Truck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +47,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { formatMotoboyCpf, isValidMotoboyCpf, normalizeMotoboyCpf } from "@/services/motoboyWebClient";
+import { useNavigate } from 'react-router-dom';
 
 // Define delivery personnel type
 interface DeliveryPerson {
@@ -104,6 +105,7 @@ const deliveryPersonSchema = z.object({
 type DeliveryPersonFormValues = z.infer<typeof deliveryPersonSchema>;
 
 const Entregadores: React.FC = () => {
+  const navigate = useNavigate();
   const [deliveryPersonnel, setDeliveryPersonnel] = useState<DeliveryPerson[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -702,8 +704,8 @@ const Entregadores: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Gestão de Entregadores</h1>
-        <Button onClick={handleAddNew}>
-          <Plus className="mr-2 h-4 w-4" /> Novo Entregador
+        <Button onClick={() => navigate('/equipe?tab=collaborators')}>
+          <Plus className="mr-2 h-4 w-4" /> Abrir cadastro da equipe
         </Button>
       </div>
 
@@ -856,9 +858,7 @@ const Entregadores: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle>Entregadores</CardTitle>
-          <CardDescription>
-            Gerencie a equipe de entregadores do seu restaurante
-          </CardDescription>
+          <CardDescription>Consulta operacional. Cadastro, acesso e desligamento ficam na Central da Equipe.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -912,23 +912,7 @@ const Entregadores: React.FC = () => {
                         >
                           <History className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => handleEdit(deliveryPerson)}
-                          aria-label={`Editar ${deliveryPerson.name}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="text-red-500 hover:text-red-500"
-                          onClick={() => handleDelete(deliveryPerson.id)}
-                          aria-label={`Excluir ${deliveryPerson.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => navigate('/equipe?tab=collaborators')}>Editar na Equipe</Button>
                       </div>
                     </TableCell>
                   </TableRow>
