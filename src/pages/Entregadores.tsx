@@ -1125,8 +1125,9 @@ const Entregadores: React.FC = () => {
                           inputMode="decimal"
                           min="0"
                           step="0.01"
-                          value={field.value ?? 0}
-                          onChange={(event) => field.onChange(Number(event.target.value || 0))}
+                          value={field.value === 0 ? '' : field.value ?? ''}
+                          placeholder="0,00"
+                          onChange={(event) => field.onChange(event.target.value === '' ? 0 : Number(event.target.value))}
                         />
                       </div>
                     </FormControl>

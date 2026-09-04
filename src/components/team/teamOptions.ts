@@ -13,6 +13,28 @@ export const ROLE_OPTIONS: Array<{ value: EmployeeRole; label: string }> = [
   { value: 'custom', label: 'Personalizado' },
 ];
 
+export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
+  monthly: 'Mensalista',
+  hourly: 'Horista',
+  daily: 'Diarista',
+  weekly: 'Semanal',
+  clt: 'CLT',
+  freelance: 'Freelancer',
+  partner: 'Sócio(a)',
+  intern: 'Estagiário(a)',
+  other: 'Outro',
+};
+
+export const REMUNERATION_TYPE_LABELS: Record<string, string> = {
+  fixed: 'Fixa',
+  hourly: 'Por hora',
+  daily: 'Por diária',
+  weekly: 'Semanal',
+  commission: 'Comissão',
+  mixed: 'Fixa + comissão',
+  other: 'Outra',
+};
+
 export const APP_OPTIONS: Array<{
   value: EmployeeApp;
   label: string;

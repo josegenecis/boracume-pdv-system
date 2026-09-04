@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { formatCpfInput, formatPhoneInput, formatVehiclePlateInput } from '@/lib/team/fieldMasks';
 import type { EmployeeApp, EmployeeFormValue, EmployeeRole, TeamEmployee } from '@/lib/team/types';
-import { APP_OPTIONS, PERMISSION_GROUPS, ROLE_OPTIONS, TIME_CLOCK_PUNCH_PERMISSIONS, WEEKDAYS } from './teamOptions';
+import { APP_OPTIONS, EMPLOYMENT_TYPE_LABELS, PERMISSION_GROUPS, REMUNERATION_TYPE_LABELS, ROLE_OPTIONS, TIME_CLOCK_PUNCH_PERMISSIONS, WEEKDAYS } from './teamOptions';
 
 const emptyForm: EmployeeFormValue = {
   full_name: '',
@@ -198,9 +198,9 @@ export function EmployeeDialog(props: { open: boolean; employee: TeamEmployee | 
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {['monthly', 'hourly', 'daily', 'weekly', 'clt', 'freelance', 'partner', 'intern', 'other'].map((value) => (
+                    {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([value, label]) => (
                       <SelectItem key={value} value={value}>
-                        {value}
+                        {label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -232,6 +232,18 @@ export function EmployeeDialog(props: { open: boolean; employee: TeamEmployee | 
                   <CheckTile key={role.value} checked={form.roles.includes(role.value)} label={role.label} onChange={() => toggleRole(role.value)} />
                 ))}
               </div>
+              {form.roles.includes('custom') && (
+                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+                  <Field label="Cargo personalizado *">
+                    <Input
+                      value={form.job_title}
+                      onChange={(event) => update('job_title', event.target.value)}
+                      placeholder="Ex.: Líder de atendimento"
+                    />
+                  </Field>
+                  <p className="mt-2 text-xs text-emerald-800">Esse cargo aparecerá no cadastro e nos relatórios do colaborador.</p>
+                </div>
+              )}
             </section>
           </TabsContent>
           <TabsContent value="access" className="space-y-5 pt-4">
@@ -327,9 +339,9 @@ export function EmployeeDialog(props: { open: boolean; employee: TeamEmployee | 
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {['fixed', 'hourly', 'daily', 'weekly', 'commission', 'mixed', 'other'].map((value) => (
+                      {Object.entries(REMUNERATION_TYPE_LABELS).map(([value, label]) => (
                         <SelectItem key={value} value={value}>
-                          {value}
+                          {label}
                         </SelectItem>
                       ))}
                     </SelectContent>
