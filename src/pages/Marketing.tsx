@@ -2,7 +2,6 @@ import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import BannerManager from '@/components/banners/BannerManager';
-import MarketingSettings from '@/components/marketing/MarketingSettings';
 import MarketingBanners from '@/components/marketing/MarketingBanners';
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager';
 import HighlightsManager from '@/components/marketing/HighlightsManager';
@@ -19,10 +18,9 @@ const TABS: Array<{ value: string; label: string; feature: FeatureKey }> = [
   { value: 'coupons', label: 'Cupons de Desconto', feature: 'marketingEssential' },
   { value: 'highlights', label: 'Produtos em Destaque', feature: 'marketing' },
   { value: 'upsells', label: 'Venda Mais', feature: 'marketing' },
-  { value: 'pop-ai', label: 'Anúncios Automáticos', feature: 'marketing' },
+  { value: 'pop-ai', label: 'Tráfego pago', feature: 'marketing' },
   { value: 'whatsapp', label: 'Envio em massa', feature: 'whatsapp' },
-  { value: 'loyalty', label: 'Clientes Fiéis', feature: 'marketingEssential' },
-  { value: 'pixels', label: 'Facebook e Instagram', feature: 'marketing' }
+  { value: 'loyalty', label: 'Clientes Fiéis', feature: 'marketingEssential' }
 ];
 
 export default function Marketing() {
@@ -38,7 +36,8 @@ export default function Marketing() {
   const requestedTab = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const value = String(params.get('tab') || '').trim();
-    return TABS.find((item) => item.value === value) || TABS[0];
+    const normalizedValue = value === 'pixels' ? 'pop-ai' : value;
+    return TABS.find((item) => item.value === normalizedValue) || TABS[0];
   }, [location.search]);
 
   const tab = useMemo(() => {
@@ -113,9 +112,6 @@ export default function Marketing() {
         </TabsContent>
         <TabsContent value="loyalty" className="mt-5">
           <LoyaltyManager />
-        </TabsContent>
-        <TabsContent value="pixels" className="mt-5">
-          <MarketingSettings />
         </TabsContent>
       </Tabs>
     </div>
