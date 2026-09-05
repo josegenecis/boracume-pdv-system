@@ -13,6 +13,13 @@ function nativeBitmapToEscPos(bitmap, width, height) {
   const safeHeight = Math.max(1, Number(height) || 1);
   const bytesPerLine = Math.ceil(safeWidth / 8);
   const raster = Buffer.alloc(bytesPerLine * safeHeight);
+  // Há firmwares ESC/POS que aceitam o tamanho de 16 bits declarado por
+  // GS v 0, mas rejeitam imagens altas bem antes desse limite. Quando isso
+  // acontece, os bytes da imagem passam a ser impressos como texto ilegível.
+  // Enviar faixas curtas mantém cada comando muito abaixo até dos limites das
+  // impressoras genéricas mais restritivas e permite cupons longos sem alterar
+  // o tamanho ou a nitidez do conteúdo.
+  const rasterBandHeight = 128;
   const bayer4x4 = [
     [0, 8, 2, 10],
     [12, 4, 14, 6],
@@ -37,21 +44,27 @@ function nativeBitmapToEscPos(bitmap, width, height) {
     }
   }
 
-  const header = Buffer.from([
-    0x1d,
-    0x76,
-    0x30,
-    0x00,
-    bytesPerLine & 0xff,
-    (bytesPerLine >> 8) & 0xff,
-    safeHeight & 0xff,
-    (safeHeight >> 8) & 0xff,
-  ]);
+  const bands = [];
+  for (let startRow = 0; startRow < safeHeight; startRow += rasterBandHeight) {
+    const bandHeight = Math.min(rasterBandHeight, safeHeight - startRow);
+    const bandStart = startRow * bytesPerLine;
+    const bandEnd = bandStart + bandHeight * bytesPerLine;
+    const header = Buffer.from([
+      0x1d,
+      0x76,
+      0x30,
+      0x00,
+      bytesPerLine & 0xff,
+      (bytesPerLine >> 8) & 0xff,
+      bandHeight & 0xff,
+      (bandHeight >> 8) & 0xff,
+    ]);
+    bands.push(header, raster.subarray(bandStart, bandEnd));
+  }
 
   return Buffer.concat([
     Buffer.from([0x1b, 0x40, 0x1b, 0x61, 0x01]),
-    header,
-    raster,
+    ...bands,
     Buffer.from([0x1b, 0x61, 0x00, 0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x41, 0x00]),
   ]);
 }
